@@ -4,8 +4,8 @@
   const pricingTable = window.LUNY_PRICING_TABLE || {};
   const FULLCUT_QUANTITY_OPTIONS = window.LUNY_FULLCUT_QUANTITY_OPTIONS || [20, 50, 100, 200];
   const FULLCUT_MATERIALS = window.LUNY_FULLCUT_MATERIALS || {
-    pearlescent: "珠光貼紙+上膜",
-    pvc: "PVC貼紙+上膜"
+    pearlescent: "全斷珠光貼紙(防水/冷凍)",
+    pvc: "全斷PVC貼紙(防水/不易殘膠/戶外)"
   };
 
   function getEl(id) {
@@ -111,9 +111,8 @@
 
   function getUrgentLabel(urgent) {
     const map = {
-      normal: "一般件(3~4工作天寄出)",
-      rush: "急件(1~2工作天寄出)",
-      superrush: "特急件(平日中午12點前下單，當天寄出)"
+      normal: "一般件(4~6工作天寄出)",
+      rush: "急件(2~3工作天寄出)",
     };
 
     return map[urgent] || "";
