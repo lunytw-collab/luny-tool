@@ -40,7 +40,7 @@
   window.LUNY_FULLCUT_QUANTITY_OPTIONS = [20, 50, 100, 200];
 
   window.LUNY_FULLCUT_MATERIALS = {
-    pearlescent: "珠光貼紙+上膜",
-    pvc: "PVC貼紙+上膜"
+    pearlescent: "全斷珠光貼紙(防水/冷凍)",
+    pvc: "全斷PVC貼紙(防水/不易殘膠/戶外)"
   };
 })();
