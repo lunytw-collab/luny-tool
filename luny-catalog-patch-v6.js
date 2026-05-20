@@ -1,12 +1,12 @@
 /*
   LUNY Catalog Patch v2
   GitHub filename:
-  luny-catalog-patch-v5.js
+  luny-catalog-patch-v6.js
 
   Required load order in 1SHOP:
   1) 原本標籤貼紙模板
   2) luny-catalog-pricing-v1.js
-  3) luny-catalog-patch-v5.js
+  3) luny-catalog-patch-v6.js
 
   This file:
   - Keeps the original label sticker UI/template
@@ -704,4 +704,198 @@
       try{ renderCheckoutSummary(); }catch(e){}
     });
   });
+})();
+
+
+
+
+/* LUNY Catalog Patch v6 override
+   強制重建：材質卡片含圖片、上膜只保留亮膜/霧膜、尺寸顯示實際尺寸。
+*/
+(function(){
+  "use strict";
+
+  var MATERIAL_IMG = "https://img.1shop.tw/yLd7jOJbP0DvggQRxo8kq1QB/Gr1Lb8a63ZLXBb7wNEAXx24D/original-2.jpg.avif";
+
+  function $(id){ return document.getElementById(id); }
+
+  function dispatchChange(el){
+    if(!el) return;
+    try{ el.dispatchEvent(new Event("change", { bubbles:true })); }catch(e){}
+  }
+
+  function runPriceUpdate(){
+    try{
+      if(typeof updateCatalogPrice === "function") updateCatalogPrice();
+    }catch(e){}
+    try{
+      if(typeof window.updateCatalogPrice === "function") window.updateCatalogPrice();
+    }catch(e){}
+    try{
+      if(typeof calculatePrice === "function") calculatePrice();
+    }catch(e){}
+  }
+
+  function setSelectOptions(select, options, fallback){
+    if(!select) return;
+    var current = String(select.value || fallback || "");
+    select.innerHTML = options.map(function(opt){
+      return '<option value="' + opt.value + '">' + opt.label + '</option>';
+    }).join("");
+    if(options.some(function(opt){ return opt.value === current; })){
+      select.value = current;
+    }else{
+      select.value = fallback || options[0].value;
+    }
+  }
+
+  function forceMaterialCardsV6(){
+    var select = $("material");
+    if(!select) return;
+
+    setSelectOptions(select, [
+      { value:"pearlescent", label:"珠光貼紙" },
+      { value:"artpaper", label:"銅板貼紙" }
+    ], "pearlescent");
+
+    var wrap = document.querySelector(".material-card-wrap");
+    if(!wrap) return;
+
+    var section = wrap.querySelector(".material-section");
+    if(!section){
+      section = document.createElement("div");
+      section.className = "material-section material-nested-section";
+      wrap.appendChild(section);
+    }
+
+    var current = select.value || "pearlescent";
+
+    section.innerHTML = `
+      <div class="material-card-group material-card-group-inner" data-material-group="catalog" style="display:grid;grid-template-columns:1fr;gap:10px;">
+        <button type="button" class="material-card ${current === "pearlescent" ? "is-active" : ""}" data-value="pearlescent">
+          <img src="${MATERIAL_IMG}" class="material-card-img luny-catalog-material-img" alt="珠光貼紙示意圖" loading="lazy">
+          <div class="material-card-title">珠光貼紙</div>
+          <div class="material-card-subtitle">防水質感｜適合圖鑑貼紙</div>
+          <div class="material-card-desc">表面帶有柔霧質感，適合插畫、角色、收藏型貼紙。</div>
+        </button>
+
+        <button type="button" class="material-card ${current === "artpaper" ? "is-active" : ""}" data-value="artpaper">
+          <img src="${MATERIAL_IMG}" class="material-card-img luny-catalog-material-img" alt="銅板貼紙示意圖" loading="lazy">
+          <div class="material-card-title">銅板貼紙</div>
+          <div class="material-card-subtitle">經濟實惠｜適合大量製作</div>
+          <div class="material-card-desc">紙感較明顯，適合活動、包裝、一般插畫圖鑑貼紙。</div>
+        </button>
+      </div>
+    `;
+
+    section.querySelectorAll(".material-card").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var val = btn.getAttribute("data-value") || "pearlescent";
+        select.value = val;
+        section.querySelectorAll(".material-card").forEach(function(b){ b.classList.remove("is-active"); });
+        btn.classList.add("is-active");
+
+        forceLaminateCardsV6();
+        dispatchChange(select);
+        runPriceUpdate();
+      });
+    });
+  }
+
+  function forceLaminateCardsV6(){
+    var select = $("laminate");
+    if(!select) return;
+
+    setSelectOptions(select, [
+      { value:"gloss", label:"亮膜" },
+      { value:"matte", label:"霧膜" }
+    ], "gloss");
+
+    var group = $("laminateCardGroup");
+    if(!group) return;
+
+    var current = select.value || "gloss";
+
+    group.innerHTML = `
+      <button type="button" class="laminate-card ${current === "gloss" ? "is-active" : ""}" data-value="gloss">
+        <div class="laminate-card-title">亮膜</div>
+        <div class="laminate-card-subtitle">顏色較鮮明</div>
+        <div class="laminate-card-desc">適合想讓圖案更亮、更有飽和感的設計。</div>
+      </button>
+
+      <button type="button" class="laminate-card ${current === "matte" ? "is-active" : ""}" data-value="matte">
+        <div class="laminate-card-title">霧膜</div>
+        <div class="laminate-card-subtitle">柔和低反光</div>
+        <div class="laminate-card-desc">適合溫柔插畫、手作品牌、收藏型貼紙。</div>
+      </button>
+    `;
+
+    group.querySelectorAll(".laminate-card").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var val = btn.getAttribute("data-value") || "gloss";
+        select.value = val;
+        group.querySelectorAll(".laminate-card").forEach(function(b){ b.classList.remove("is-active"); });
+        btn.classList.add("is-active");
+
+        dispatchChange(select);
+        runPriceUpdate();
+      });
+    });
+  }
+
+  function forceSizeLabelsV6(){
+    var size = $("catalogSize") || document.querySelector("#catalogSize");
+    if(!size) return;
+
+    var current = String(size.value || "A5").toUpperCase();
+    setSelectOptions(size, [
+      { value:"A5", label:"A5(14.8x21cm)" },
+      { value:"A6", label:"A6(10.5x14.8cm)" },
+      { value:"A7", label:"A7(7.4x10.5cm)" }
+    ], "A5");
+
+    if(["A5","A6","A7"].indexOf(current) >= 0) size.value = current;
+  }
+
+  function forceCatalogOptionsV6(){
+    forceMaterialCardsV6();
+    forceLaminateCardsV6();
+    forceSizeLabelsV6();
+
+    // 保險移除任何殘留的「無上膜」
+    document.querySelectorAll("#laminate option, #laminateCardGroup .laminate-card").forEach(function(el){
+      if((el.textContent || "").indexOf("無上膜") >= 0 || (el.textContent || "").trim() === "無"){
+        el.remove();
+      }
+    });
+
+    runPriceUpdate();
+  }
+
+  function scheduleV6(){
+    forceCatalogOptionsV6();
+    setTimeout(forceCatalogOptionsV6, 200);
+    setTimeout(forceCatalogOptionsV6, 600);
+    setTimeout(forceCatalogOptionsV6, 1200);
+    setTimeout(forceCatalogOptionsV6, 2200);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", scheduleV6);
+  }else{
+    scheduleV6();
+  }
+
+  window.addEventListener("load", scheduleV6);
+
+  // 如果原本標籤貼紙 JS 在切換材質後又重建上膜，用 capture 重新修正
+  document.addEventListener("change", function(e){
+    var id = e && e.target && e.target.id;
+    if(id === "material" || id === "laminate" || id === "catalogSize"){
+      setTimeout(forceCatalogOptionsV6, 0);
+      setTimeout(forceCatalogOptionsV6, 150);
+    }
+  }, true);
+
+  window.LUNY_FORCE_CATALOG_OPTIONS_V6 = forceCatalogOptionsV6;
 })();
