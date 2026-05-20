@@ -1,12 +1,12 @@
 /*
   LUNY Catalog Patch v2
   GitHub filename:
-  luny-catalog-patch-v3.js
+  luny-catalog-patch-v4.js
 
   Required load order in 1SHOP:
   1) 原本標籤貼紙模板
   2) luny-catalog-pricing-v1.js
-  3) luny-catalog-patch-v3.js
+  3) luny-catalog-patch-v4.js
 
   This file:
   - Keeps the original label sticker UI/template
@@ -38,7 +38,7 @@
 
 
 
-  const CATALOG_PRICING_SRC = "https://cdn.jsdelivr.net/gh/lunytw-collab/luny-tool/luny-catalog-pricing-v1.js?v=20260520-1";
+  const CATALOG_PRICING_SRC = "https://cdn.jsdelivr.net/gh/lunytw-collab/luny-tool/luny-catalog-pricing-v2.js?v=20260520-2";
   let __catalogPricingLoading = false;
 
   function ensureCatalogPricingLoaded(callback){
@@ -137,6 +137,36 @@
   function laminateText(v){
     return v === "matte" ? "霧膜" : "亮膜";
   }
+  function normalizeCatalogMaterialValue(v){
+    const raw = String(v || "").trim();
+    const lower = raw.toLowerCase();
+    if(lower === "pearlescent" || raw.indexOf("珠光") >= 0) return "pearlescent";
+    if(lower === "artpaper" || raw.indexOf("銅板") >= 0 || raw.indexOf("铜板") >= 0) return "artpaper";
+    return lower || "pearlescent";
+  }
+
+  function normalizeCatalogLaminateValue(v){
+    const raw = String(v || "").trim();
+    const lower = raw.toLowerCase();
+    if(lower === "gloss" || raw === "亮膜" || raw.indexOf("亮") >= 0) return "gloss";
+    if(lower === "matte" || raw === "霧膜" || raw === "雾膜" || raw.indexOf("霧") >= 0 || raw.indexOf("雾") >= 0) return "matte";
+    return lower || "gloss";
+  }
+
+  function normalizeCatalogUrgentValue(v){
+    const raw = String(v || "").trim();
+    const lower = raw.toLowerCase();
+    if(lower === "rush" || raw.indexOf("急件") >= 0) return "rush";
+    return "normal";
+  }
+
+  function normalizeCatalogCutlineValue(v){
+    const raw = String(v || "").trim();
+    const lower = raw.toLowerCase();
+    if(lower === "designer" || raw.indexOf("設計師") >= 0 || raw.indexOf("设计师") >= 0) return "designer";
+    return "self";
+  }
+
   function catalogPreviewDataUrl(){
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220"><rect width="220" height="220" rx="34" fill="#F8F9FA"/><rect x="18" y="18" width="184" height="184" rx="26" fill="#FFFFFF" stroke="#E5E7EB"/><text x="110" y="92" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#374151" font-weight="700">圖鑑貼紙</text><text x="110" y="128" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#667085">待人工檢查</text></svg>';
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
@@ -144,12 +174,12 @@
 
   function getCatalogQuote(){
     const size = $("catalogSize") ? $("catalogSize").value : "A6";
-    const material = $("material") ? $("material").value : "pearlescent";
-    const laminate = $("laminate") ? $("laminate").value : "gloss";
+    const material = normalizeCatalogMaterialValue($("material") ? $("material").value : "pearlescent");
+    const laminate = normalizeCatalogLaminateValue($("laminate") ? $("laminate").value : "gloss");
     forceCatalogQuantityOptions();
     const qty = parseInt($("quantity") ? $("quantity").value : "20",10) || 20;
-    const urgent = $("urgent") ? $("urgent").value : "normal";
-    const cutlineService = $("catalogCutlineService") ? $("catalogCutlineService").value : "self";
+    const urgent = normalizeCatalogUrgentValue($("urgent") ? $("urgent").value : "normal");
+    const cutlineService = normalizeCatalogCutlineValue($("catalogCutlineService") ? $("catalogCutlineService").value : "self");
     const sizeCm = CATALOG_SIZE_CM[size] || CATALOG_SIZE_CM.A6;
 
     const pricingApi = window.LUNY_CATALOG_PRICING;
@@ -241,7 +271,11 @@
     const summaryText = $("summaryText");
     if(summaryText){ summaryText.style.display = "block"; summaryText.textContent = q.summary || ""; }
     const hint = $("unitPriceHint");
-    if(hint) hint.textContent = `基本 $${q.basePrice || 0}｜急件 +$${q.urgentFee || 0}｜完稿刀線 +$${q.cutlineFee || 0}｜圖鑑貼紙需人工檢查檔案與切割線，暫不提供即時預覽。`;
+    if(hint){
+      hint.textContent = q.basePrice
+        ? `基本 $${q.basePrice || 0}｜急件 +$${q.urgentFee || 0}｜完稿刀線 +$${q.cutlineFee || 0}｜圖鑑貼紙需人工檢查檔案與切割線，暫不提供即時預覽。`
+        : `找不到此規格價格｜目前值：${q.material}/${q.laminate}/${q.catalogSize}/${q.quantity}`;
+    }
     const note = $("orderNote");
     if(note){
       note.style.display = "block";
