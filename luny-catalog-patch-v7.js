@@ -1,12 +1,12 @@
 /*
   LUNY Catalog Patch v2
   GitHub filename:
-  luny-catalog-patch-v6.js
+  luny-catalog-patch-v7.js
 
   Required load order in 1SHOP:
   1) 原本標籤貼紙模板
   2) luny-catalog-pricing-v1.js
-  3) luny-catalog-patch-v6.js
+  3) luny-catalog-patch-v7.js
 
   This file:
   - Keeps the original label sticker UI/template
@@ -433,7 +433,7 @@
     forceCatalogQuantityOptions();
     const urgent = $("urgent");
     if(urgent){
-      urgent.innerHTML = '<option value="normal" selected>一般件(審核稿可+6工作天)</option><option value="rush">急件(審核稿可+2工作天) +$300</option>';
+      urgent.innerHTML = '<option value="normal" selected>一般件(審核稿可+6工作天寄出)</option><option value="rush">急件(審核稿可+2工作天寄出) +$300</option>';
       const urgentWrap = urgent.closest('div');
       if(urgentWrap) urgentWrap.classList.remove('catalog-hidden-by-patch');
       const urgentLabel = document.querySelector('label[for="urgent"]');
@@ -709,8 +709,8 @@
 
 
 
-/* LUNY Catalog Patch v6 override
-   強制重建：材質卡片含圖片、上膜只保留亮膜/霧膜、尺寸顯示實際尺寸。
+/* LUNY Catalog Patch v7 override
+   強制重建：材質與上膜卡片含圖片、移除標籤貼紙 UI 閃現。
 */
 (function(){
   "use strict";
@@ -818,12 +818,14 @@
 
     group.innerHTML = `
       <button type="button" class="laminate-card ${current === "gloss" ? "is-active" : ""}" data-value="gloss">
+        <img src="${MATERIAL_IMG}" class="material-card-img luny-catalog-material-img" alt="亮膜示意圖" loading="lazy">
         <div class="laminate-card-title">亮膜</div>
         <div class="laminate-card-subtitle">顏色較鮮明</div>
         <div class="laminate-card-desc">適合想讓圖案更亮、更有飽和感的設計。</div>
       </button>
 
       <button type="button" class="laminate-card ${current === "matte" ? "is-active" : ""}" data-value="matte">
+        <img src="${MATERIAL_IMG}" class="material-card-img luny-catalog-material-img" alt="霧膜示意圖" loading="lazy">
         <div class="laminate-card-title">霧膜</div>
         <div class="laminate-card-subtitle">柔和低反光</div>
         <div class="laminate-card-desc">適合溫柔插畫、手作品牌、收藏型貼紙。</div>
@@ -870,9 +872,14 @@
     });
 
     runPriceUpdate();
+
+    try{
+      document.documentElement.classList.add("luny-catalog-ready");
+      document.body.classList.add("luny-catalog-ready");
+    }catch(e){}
   }
 
-  function scheduleV6(){
+  function scheduleV7(){
     forceCatalogOptionsV6();
     setTimeout(forceCatalogOptionsV6, 200);
     setTimeout(forceCatalogOptionsV6, 600);
@@ -881,12 +888,12 @@
   }
 
   if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", scheduleV6);
+    document.addEventListener("DOMContentLoaded", scheduleV7);
   }else{
-    scheduleV6();
+    scheduleV7();
   }
 
-  window.addEventListener("load", scheduleV6);
+  window.addEventListener("load", scheduleV7);
 
   // 如果原本標籤貼紙 JS 在切換材質後又重建上膜，用 capture 重新修正
   document.addEventListener("change", function(e){
@@ -897,5 +904,5 @@
     }
   }, true);
 
-  window.LUNY_FORCE_CATALOG_OPTIONS_V6 = forceCatalogOptionsV6;
+  window.LUNY_FORCE_CATALOG_OPTIONS_V7 = forceCatalogOptionsV6;
 })();
