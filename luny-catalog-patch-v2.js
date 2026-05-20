@@ -1,12 +1,12 @@
 /*
-  LUNY Catalog Patch v1
+  LUNY Catalog Patch v2
   GitHub filename:
-  luny-catalog-patch-v1.js
+  luny-catalog-patch-v2.js
 
   Required load order in 1SHOP:
   1) 原本標籤貼紙模板
   2) luny-catalog-pricing-v1.js
-  3) luny-catalog-patch-v1.js
+  3) luny-catalog-patch-v2.js
 
   This file:
   - Keeps the original label sticker UI/template
@@ -17,9 +17,9 @@
 */
 
 (function injectLunyCatalogPatchStyle(){
-  if(document.getElementById("lunyCatalogPatchV1Style")) return;
+  if(document.getElementById("lunyCatalogPatchV2Style")) return;
   var style = document.createElement("style");
-  style.id = "lunyCatalogPatchV1Style";
+  style.id = "lunyCatalogPatchV2Style";
   style.textContent = "body .catalog-hidden-by-patch{display:none !important;}\n  body .catalog-cloud-note{font-size:13px;color:#667085;line-height:1.65;margin-top:8px;}\n  body .catalog-check-row{display:flex;align-items:flex-start;gap:8px;font-size:14px;color:#344054;line-height:1.6;margin-top:10px;cursor:pointer;}\n  body .catalog-check-row input{width:16px;height:16px;margin-top:3px;flex:0 0 auto;}\n  body .catalog-file-link-input{width:100%;box-sizing:border-box;}\n  body .catalog-status-pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#f5f6f7;border:1px solid #e5e7eb;color:#4b5563;font-size:12px;margin-top:6px;}\n  body .catalog-card-preview{width:72px;height:72px;border-radius:14px;background:#f8f9fa;border:1px solid #e5e7eb;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;line-height:1.35;color:#667085;}";
   document.head.appendChild(style);
 })();
@@ -56,6 +56,31 @@
     if(!sel) return;
     sel.innerHTML = options.map(o=>'<option value="'+esc(o.value)+'">'+esc(o.text)+'</option>').join('');
   }
+  function forceCatalogQuantityOptions(){
+    const qty = $("quantity");
+    if(!qty) return;
+    const values = ["20","30","40","50","60","70","80","90","100"];
+    const current = Array.from(qty.options || []).map(o => String(o.value));
+    const isSame = current.length === values.length && current.every((v,i)=>v===values[i]);
+    const oldValue = String(qty.value || "20");
+    if(!isSame){
+      qty.innerHTML = values.map(v=>'<option value="'+v+'">'+v+'</option>').join('');
+    }
+    qty.value = values.includes(oldValue) ? oldValue : "20";
+  }
+
+  function scheduleForceCatalogQuantityOptions(){
+    let count = 0;
+    let timer = null;
+    const run = () => {
+      forceCatalogQuantityOptions();
+      try{ updateCatalogPrice(); }catch(e){}
+      count += 1;
+      if(count >= 20 && timer) clearInterval(timer);
+    };
+    run();
+    timer = setInterval(run, 300);
+  }
   function productNameByType(type, code){
     const t = String(type || "").toUpperCase();
     const c = String(code || "");
@@ -78,6 +103,7 @@
     const size = $("catalogSize") ? $("catalogSize").value : "A6";
     const material = $("material") ? $("material").value : "pearlescent";
     const laminate = $("laminate") ? $("laminate").value : "gloss";
+    forceCatalogQuantityOptions();
     const qty = parseInt($("quantity") ? $("quantity").value : "20",10) || 20;
     const urgent = $("urgent") ? $("urgent").value : "normal";
     const cutlineService = $("catalogCutlineService") ? $("catalogCutlineService").value : "self";
@@ -218,11 +244,7 @@
     }
 
     // 數量：20~100；急件可選，急件加價 +300
-    const qty = $("quantity");
-    if(qty){
-      qty.innerHTML = [20,30,40,50,60,70,80,90,100].map(n=>'<option value="'+n+'">'+n+'</option>').join('');
-      qty.value = "20";
-    }
+    forceCatalogQuantityOptions();
     const urgent = $("urgent");
     if(urgent){
       urgent.innerHTML = '<option value="normal" selected>一般件(審核稿可+6工作天)</option><option value="rush">急件(審核稿可+2工作天) +$300</option>';
@@ -475,7 +497,9 @@
   }else{
     buildCatalogUIFromLabelTemplate();
   }
+  scheduleForceCatalogQuantityOptions();
   window.addEventListener('load', function(){
+    forceCatalogQuantityOptions();
     updateCatalogPrice();
     try{ renderCheckoutSummary(); }catch(e){}
   });
