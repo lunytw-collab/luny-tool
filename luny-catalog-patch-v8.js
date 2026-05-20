@@ -1,12 +1,12 @@
 /*
   LUNY Catalog Patch v2
   GitHub filename:
-  luny-catalog-patch-v7.js
+  luny-catalog-patch-v8.js
 
   Required load order in 1SHOP:
   1) 原本標籤貼紙模板
   2) luny-catalog-pricing-v1.js
-  3) luny-catalog-patch-v7.js
+  3) luny-catalog-patch-v8.js
 
   This file:
   - Keeps the original label sticker UI/template
@@ -219,7 +219,7 @@
     const urgentFee = Number(priceResult && priceResult.urgentFee || (urgent === "rush" ? 300 : 0));
     const cutlineFee = Number(priceResult && priceResult.cutlineFee || (cutlineService === "designer" ? 600 : 0));
     const price = Number(priceResult && (priceResult.price || priceResult.total) || (basePrice + urgentFee + cutlineFee));
-    const urgentText = (priceResult && priceResult.urgentText) || (urgent === "rush" ? "急件(審核稿可+2工作天)" : "一般件(審核稿可+6工作天)");
+    const urgentText = (priceResult && priceResult.urgentText) || (urgent === "rush" ? "急件(審核稿可+2工作天寄出)" : "一般件(審核稿可+6工作天寄出)");
     const cutlineServiceText = (priceResult && priceResult.cutlineServiceText) || (cutlineService === "designer" ? "設計師協助" : "自行完稿");
     const materialLabel = (priceResult && priceResult.materialText) || materialText(material);
     const laminateLabel = (priceResult && priceResult.laminateText) || laminateText(laminate);
@@ -433,7 +433,7 @@
     forceCatalogQuantityOptions();
     const urgent = $("urgent");
     if(urgent){
-      urgent.innerHTML = '<option value="normal" selected>一般件(審核稿可+6工作天寄出)</option><option value="rush">急件(審核稿可+2工作天寄出) +$300</option>';
+      urgent.innerHTML = '<option value="normal" selected>一般件(審核稿可+6工作天)</option><option value="rush">急件(審核稿可+2工作天) +$300</option>';
       const urgentWrap = urgent.closest('div');
       if(urgentWrap) urgentWrap.classList.remove('catalog-hidden-by-patch');
       const urgentLabel = document.querySelector('label[for="urgent"]');
@@ -709,7 +709,7 @@
 
 
 
-/* LUNY Catalog Patch v7 override
+/* LUNY Catalog Patch v8 override
    強制重建：材質與上膜卡片含圖片、移除標籤貼紙 UI 閃現。
 */
 (function(){
@@ -818,14 +818,14 @@
 
     group.innerHTML = `
       <button type="button" class="laminate-card ${current === "gloss" ? "is-active" : ""}" data-value="gloss">
-        <img src="${MATERIAL_IMG}" class="material-card-img luny-catalog-material-img" alt="亮膜示意圖" loading="lazy">
+        <img src="https://img.1shop.tw/yLd7jOJbP0DvggQRxo8kq1QB/wAjo1QaDle48Ak87390xLGMJ/original-2.png.avif" class="material-card-img luny-catalog-material-img" alt="亮膜示意圖" loading="lazy">
         <div class="laminate-card-title">亮膜</div>
         <div class="laminate-card-subtitle">顏色較鮮明</div>
         <div class="laminate-card-desc">適合想讓圖案更亮、更有飽和感的設計。</div>
       </button>
 
       <button type="button" class="laminate-card ${current === "matte" ? "is-active" : ""}" data-value="matte">
-        <img src="${MATERIAL_IMG}" class="material-card-img luny-catalog-material-img" alt="霧膜示意圖" loading="lazy">
+        <img src="https://img.1shop.tw/yLd7jOJbP0DvggQRxo8kq1QB/zRo4LO6m3AmAP6AP3pr2d90e/original-2.png.avif" class="material-card-img luny-catalog-material-img" alt="霧膜示意圖" loading="lazy">
         <div class="laminate-card-title">霧膜</div>
         <div class="laminate-card-subtitle">柔和低反光</div>
         <div class="laminate-card-desc">適合溫柔插畫、手作品牌、收藏型貼紙。</div>
