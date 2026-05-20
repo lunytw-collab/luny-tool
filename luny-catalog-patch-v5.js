@@ -1,12 +1,12 @@
 /*
   LUNY Catalog Patch v2
   GitHub filename:
-  luny-catalog-patch-v4.js
+  luny-catalog-patch-v5.js
 
   Required load order in 1SHOP:
   1) 原本標籤貼紙模板
   2) luny-catalog-pricing-v1.js
-  3) luny-catalog-patch-v4.js
+  3) luny-catalog-patch-v5.js
 
   This file:
   - Keeps the original label sticker UI/template
@@ -23,6 +23,27 @@
   style.textContent = "body .catalog-hidden-by-patch{display:none !important;}\n  body .catalog-cloud-note{font-size:13px;color:#667085;line-height:1.65;margin-top:8px;}\n  body .catalog-check-row{display:flex;align-items:flex-start;gap:8px;font-size:14px;color:#344054;line-height:1.6;margin-top:10px;cursor:pointer;}\n  body .catalog-check-row input{width:16px;height:16px;margin-top:3px;flex:0 0 auto;}\n  body .catalog-file-link-input{width:100%;box-sizing:border-box;}\n  body .catalog-status-pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#f5f6f7;border:1px solid #e5e7eb;color:#4b5563;font-size:12px;margin-top:6px;}\n  body .catalog-card-preview{width:72px;height:72px;border-radius:14px;background:#f8f9fa;border:1px solid #e5e7eb;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;line-height:1.35;color:#667085;}";
   document.head.appendChild(style);
 })();
+
+
+(function injectLunyCatalogPatchV5Style(){
+  if(document.getElementById("lunyCatalogPatchV5Style")) return;
+  var style = document.createElement("style");
+  style.id = "lunyCatalogPatchV5Style";
+  style.textContent = `
+    .luny-catalog-material-img{
+      display:block;
+      width:100%;
+      max-height:150px;
+      object-fit:cover;
+      border-radius:12px;
+      margin:0 0 10px;
+      border:1px solid #e5e7eb;
+      background:#f8fafc;
+    }
+  `;
+  document.head.appendChild(style);
+})();
+
 
 (function LunyCatalogFromLabelTemplateV8(){
   if(window.__LUNY_CATALOG_FROM_LABEL_TEMPLATE_V8__) return;
@@ -287,6 +308,76 @@
     if($("heightCm")) $("heightCm").value = sizeCm.h;
     if($("shape")) $("shape").value = "roundrect";
     return q;
+  }
+
+
+  function forceCatalogLaminateOptions(){
+    const laminate = $("laminate");
+    if(!laminate) return;
+
+    laminate.innerHTML = `
+      <option value="gloss">亮膜</option>
+      <option value="matte">霧膜</option>
+    `;
+
+    if(!["gloss","matte"].includes(normalizeCatalogLaminateValue(laminate.value))){
+      laminate.value = "gloss";
+    }else{
+      laminate.value = normalizeCatalogLaminateValue(laminate.value);
+    }
+
+    const group = $("laminateCardGroup");
+    if(group){
+      group.innerHTML = `
+        <button type="button" class="laminate-card ${laminate.value === "gloss" ? "is-active" : ""}" data-value="gloss">
+          <div class="laminate-card-title">亮膜</div>
+          <div class="laminate-card-subtitle">顏色較鮮明</div>
+          <div class="laminate-card-desc">適合想讓圖案更亮、更有飽和感的設計。</div>
+        </button>
+        <button type="button" class="laminate-card ${laminate.value === "matte" ? "is-active" : ""}" data-value="matte">
+          <div class="laminate-card-title">霧膜</div>
+          <div class="laminate-card-subtitle">柔和低反光</div>
+          <div class="laminate-card-desc">適合溫柔插畫、手作品牌、收藏型貼紙。</div>
+        </button>
+      `;
+
+      group.querySelectorAll(".laminate-card").forEach(btn => {
+        btn.addEventListener("click", function(){
+          const val = btn.getAttribute("data-value") || "gloss";
+          laminate.value = val;
+          group.querySelectorAll(".laminate-card").forEach(b => b.classList.remove("is-active"));
+          btn.classList.add("is-active");
+          try{ laminate.dispatchEvent(new Event("change", { bubbles:true })); }catch(e){}
+          updateCatalogPrice();
+        });
+      });
+    }
+  }
+
+  function forceCatalogSizeOptions(){
+    const size = $("catalogSize") || $("catalogSizeSelect") || $("size");
+    const target = $("catalogSize") || document.querySelector("#catalogSize, #size");
+    if(!target) return;
+
+    const current = String(target.value || "A5").toUpperCase();
+    target.innerHTML = `
+      <option value="A5">A5(14.8x21cm)</option>
+      <option value="A6">A6(10.5x14.8cm)</option>
+      <option value="A7">A7(7.4x10.5cm)</option>
+    `;
+    target.value = ["A5","A6","A7"].includes(current) ? current : "A5";
+  }
+
+  function addCatalogMaterialImages(){
+    document.querySelectorAll(".material-card[data-value='pearlescent'], .material-card[data-value='artpaper']").forEach(card => {
+      if(card.querySelector(".luny-catalog-material-img")) return;
+      const img = document.createElement("img");
+      img.src = CATALOG_MATERIAL_IMAGE_URL;
+      img.alt = (card.getAttribute("data-value") === "pearlescent" ? "珠光貼紙" : "銅板貼紙") + "示意圖";
+      img.loading = "lazy";
+      img.className = "luny-catalog-material-img";
+      card.insertBefore(img, card.firstChild);
+    });
   }
 
   function buildCatalogUIFromLabelTemplate(){
@@ -591,6 +682,9 @@
     scheduleForceCatalogQuantityOptions();
     ensureCatalogPricingLoaded(function(){
       forceCatalogQuantityOptions();
+      forceCatalogLaminateOptions();
+      forceCatalogSizeOptions();
+      addCatalogMaterialImages();
       updateCatalogPrice();
       try{ renderCheckoutSummary(); }catch(e){}
     });
