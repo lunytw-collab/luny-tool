@@ -1,12 +1,12 @@
 /*
   LUNY Catalog Patch v2
   GitHub filename:
-  luny-catalog-patch-v2.js
+  luny-catalog-patch-v3.js
 
   Required load order in 1SHOP:
   1) 原本標籤貼紙模板
   2) luny-catalog-pricing-v1.js
-  3) luny-catalog-patch-v2.js
+  3) luny-catalog-patch-v3.js
 
   This file:
   - Keeps the original label sticker UI/template
@@ -35,6 +35,49 @@
 
   // ✅ 圖鑑貼紙價格表已拆到 GitHub：luny-catalog-pricing-v1.js
   // 本頁只透過 window.LUNY_CATALOG_PRICING.getPrice(...) 取得價格。
+
+
+
+  const CATALOG_PRICING_SRC = "https://cdn.jsdelivr.net/gh/lunytw-collab/luny-tool/luny-catalog-pricing-v1.js?v=20260520-1";
+  let __catalogPricingLoading = false;
+
+  function ensureCatalogPricingLoaded(callback){
+    if(window.LUNY_CATALOG_PRICING && typeof window.LUNY_CATALOG_PRICING.getPrice === "function"){
+      if(typeof callback === "function") callback(true);
+      return;
+    }
+
+    const existed = document.querySelector('script[src*="luny-catalog-pricing-v1.js"]');
+
+    if(!existed && !__catalogPricingLoading){
+      __catalogPricingLoading = true;
+      const s = document.createElement("script");
+      s.src = CATALOG_PRICING_SRC;
+      s.async = false;
+      s.onload = function(){
+        __catalogPricingLoading = false;
+        if(typeof callback === "function") callback(true);
+      };
+      s.onerror = function(){
+        __catalogPricingLoading = false;
+        console.warn("[LUNY CATALOG] pricing 載入失敗", CATALOG_PRICING_SRC);
+        if(typeof callback === "function") callback(false);
+      };
+      document.head.appendChild(s);
+    }
+
+    let count = 0;
+    const timer = setInterval(function(){
+      count += 1;
+      if(window.LUNY_CATALOG_PRICING && typeof window.LUNY_CATALOG_PRICING.getPrice === "function"){
+        clearInterval(timer);
+        if(typeof callback === "function") callback(true);
+      }else if(count >= 40){
+        clearInterval(timer);
+        if(typeof callback === "function") callback(false);
+      }
+    }, 150);
+  }
 
   const CATALOG_SIZE_CM = {
     A5: {w:14.8, h:21.0},
@@ -173,6 +216,24 @@
   }
 
   function updateCatalogPrice(){
+    if(!window.LUNY_CATALOG_PRICING || typeof window.LUNY_CATALOG_PRICING.getPrice !== "function"){
+      const priceEl = $("price");
+      const hint = $("unitPriceHint");
+      if(priceEl) priceEl.textContent = "載入中";
+      if(hint) hint.textContent = "圖鑑報價資料載入中，請稍候…";
+      ensureCatalogPricingLoaded(function(ok){
+        if(ok){
+          updateCatalogPrice();
+        }else{
+          const priceEl2 = $("price");
+          const hint2 = $("unitPriceHint");
+          if(priceEl2) priceEl2.textContent = "0";
+          if(hint2) hint2.textContent = "圖鑑報價資料載入失敗，請確認 luny-catalog-pricing-v1.js 已上傳 GitHub，且引用順序在 patch 前面。";
+        }
+      });
+      return null;
+    }
+
     const q = getCatalogQuote();
     const priceEl = $("price");
     if(priceEl) priceEl.textContent = String(q.price || 0);
@@ -491,16 +552,28 @@
     if(tokenNote) tokenNote.textContent = `本次對帳編號：${token}｜共 ${arr.length} 款設計`;
   };
 
+  function startCatalogPatchV3(){
+    buildCatalogUIFromLabelTemplate();
+    scheduleForceCatalogQuantityOptions();
+    ensureCatalogPricingLoaded(function(){
+      forceCatalogQuantityOptions();
+      updateCatalogPrice();
+      try{ renderCheckoutSummary(); }catch(e){}
+    });
+  }
+
   // 載入後才改 DOM，保留原標籤模板先完整初始化，避免 UI 壞掉
   if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', buildCatalogUIFromLabelTemplate);
+    document.addEventListener('DOMContentLoaded', startCatalogPatchV3);
   }else{
-    buildCatalogUIFromLabelTemplate();
+    startCatalogPatchV3();
   }
-  scheduleForceCatalogQuantityOptions();
+
   window.addEventListener('load', function(){
     forceCatalogQuantityOptions();
-    updateCatalogPrice();
-    try{ renderCheckoutSummary(); }catch(e){}
+    ensureCatalogPricingLoaded(function(){
+      updateCatalogPrice();
+      try{ renderCheckoutSummary(); }catch(e){}
+    });
   });
 })();
