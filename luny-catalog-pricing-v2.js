@@ -1,10 +1,10 @@
 /*
-  LUNY Catalog Pricing v1
+  LUNY Catalog Pricing v2
   GitHub filename:
-  luny-catalog-pricing-v1.js
+  luny-catalog-pricing-v2.js
 
   Usage:
-  <script src="https://cdn.jsdelivr.net/gh/lunytw-collab/luny-tool/luny-catalog-pricing-v1.js?v=20260520-1"></script>
+  <script src="https://cdn.jsdelivr.net/gh/lunytw-collab/luny-tool/luny-catalog-pricing-v2.js?v=20260520-1"></script>
 
   Provides:
   window.LUNY_CATALOG_PRICING
@@ -191,15 +191,91 @@
     designer: 600
   };
 
+  function normalizeMaterial(value){
+    const raw = String(value || "").trim();
+    const lower = raw.toLowerCase();
+
+    if(
+      lower === "pearlescent" ||
+      raw.indexOf("珠光") >= 0
+    ){
+      return "pearlescent";
+    }
+
+    if(
+      lower === "artpaper" ||
+      raw.indexOf("銅板") >= 0 ||
+      raw.indexOf("铜板") >= 0
+    ){
+      return "artpaper";
+    }
+
+    return lower || "pearlescent";
+  }
+
+  function normalizeLaminate(value){
+    const raw = String(value || "").trim();
+    const lower = raw.toLowerCase();
+
+    if(
+      lower === "gloss" ||
+      raw === "亮膜" ||
+      raw.indexOf("亮") >= 0
+    ){
+      return "gloss";
+    }
+
+    if(
+      lower === "matte" ||
+      raw === "霧膜" ||
+      raw === "雾膜" ||
+      raw.indexOf("霧") >= 0 ||
+      raw.indexOf("雾") >= 0
+    ){
+      return "matte";
+    }
+
+    return lower || "gloss";
+  }
+
+  function normalizeUrgent(value){
+    const raw = String(value || "").trim();
+    const lower = raw.toLowerCase();
+
+    if(
+      lower === "rush" ||
+      raw.indexOf("急件") >= 0
+    ){
+      return "rush";
+    }
+
+    return "normal";
+  }
+
+  function normalizeCutlineService(value){
+    const raw = String(value || "").trim();
+    const lower = raw.toLowerCase();
+
+    if(
+      lower === "designer" ||
+      raw.indexOf("設計師") >= 0 ||
+      raw.indexOf("设计师") >= 0
+    ){
+      return "designer";
+    }
+
+    return "self";
+  }
+
   function normalizeCatalogPayload(payload){
     payload = payload || {};
 
-    const material = String(payload.material || payload.catalogMaterial || "pearlescent").trim();
-    const laminate = String(payload.laminate || payload.catalogLaminate || "gloss").trim();
+    const material = normalizeMaterial(payload.material || payload.catalogMaterial || "pearlescent");
+    const laminate = normalizeLaminate(payload.laminate || payload.catalogLaminate || "gloss");
     const size = String(payload.size || payload.catalogSize || "A5").trim().toUpperCase();
     const quantity = Number(payload.quantity || payload.catalogQuantity || 20);
-    const urgent = String(payload.urgent || payload.catalogUrgent || "normal").trim();
-    const cutlineService = String(payload.cutlineService || payload.catalogCutlineService || "self").trim();
+    const urgent = normalizeUrgent(payload.urgent || payload.catalogUrgent || "normal");
+    const cutlineService = normalizeCutlineService(payload.cutlineService || payload.catalogCutlineService || "self");
 
     return {
       material,
@@ -286,7 +362,7 @@
   }
 
   window.LUNY_CATALOG_PRICING = {
-    version: "20260520-1",
+    version: "20260520-2",
     pricingTable,
     materialText,
     laminateText,
