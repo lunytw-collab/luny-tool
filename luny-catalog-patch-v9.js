@@ -1,12 +1,12 @@
 /*
   LUNY Catalog Patch v2
   GitHub filename:
-  luny-catalog-patch-v8.js
+  luny-catalog-patch-v9.js
 
   Required load order in 1SHOP:
   1) 原本標籤貼紙模板
   2) luny-catalog-pricing-v1.js
-  3) luny-catalog-patch-v8.js
+  3) luny-catalog-patch-v9.js
 
   This file:
   - Keeps the original label sticker UI/template
@@ -219,7 +219,7 @@
     const urgentFee = Number(priceResult && priceResult.urgentFee || (urgent === "rush" ? 300 : 0));
     const cutlineFee = Number(priceResult && priceResult.cutlineFee || (cutlineService === "designer" ? 600 : 0));
     const price = Number(priceResult && (priceResult.price || priceResult.total) || (basePrice + urgentFee + cutlineFee));
-    const urgentText = (priceResult && priceResult.urgentText) || (urgent === "rush" ? "急件(審核稿可+2工作天寄出)" : "一般件(審核稿可+6工作天寄出)");
+    const urgentText = (priceResult && priceResult.urgentText) || (urgent === "rush" ? "急件(審核稿可+2工作天)" : "一般件(審核稿可+6工作天)");
     const cutlineServiceText = (priceResult && priceResult.cutlineServiceText) || (cutlineService === "designer" ? "設計師協助" : "自行完稿");
     const materialLabel = (priceResult && priceResult.materialText) || materialText(material);
     const laminateLabel = (priceResult && priceResult.laminateText) || laminateText(laminate);
@@ -709,7 +709,7 @@
 
 
 
-/* LUNY Catalog Patch v8 override
+/* LUNY Catalog Patch v9 override
    強制重建：材質與上膜卡片含圖片、移除標籤貼紙 UI 閃現。
 */
 (function(){
@@ -905,4 +905,357 @@
   }, true);
 
   window.LUNY_FORCE_CATALOG_OPTIONS_V7 = forceCatalogOptionsV6;
+})();
+
+
+
+
+/* LUNY Catalog Patch v9 override
+   修正圖鑑貼紙儲存時誤走標籤貼紙 saveDesign，導致 Missing print/cut dataURL。
+*/
+(function(){
+  "use strict";
+
+  function $(id){ return document.getElementById(id); }
+
+  function safeParseJson(raw, fallback){
+    try{ return raw ? JSON.parse(raw) : fallback; }catch(e){ return fallback; }
+  }
+
+  function writeJson(key, value){
+    try{ localStorage.setItem(key, JSON.stringify(value)); }catch(e){}
+  }
+
+  function makeCatalogDesignId(){
+    return "cat_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,10);
+  }
+
+  function getCatalogCheckoutToken(){
+    const key = "LUNY_CHECKOUT_TOKEN";
+    let token = "";
+    try{ token = localStorage.getItem(key) || ""; }catch(e){}
+    if(!token){
+      token = "LUNY-CATALOG-" + new Date().toISOString().slice(0,10).replace(/-/g,"") + "-" + Math.random().toString(36).slice(2,8).toUpperCase();
+      try{ localStorage.setItem(key, token); }catch(e){}
+    }
+    return token;
+  }
+
+  function setStatus(text, danger){
+    const el = $("saveDesignStatus");
+    if(!el) return;
+    el.textContent = text || "";
+    el.style.color = danger ? "#dc2626" : "#2563eb";
+  }
+
+  function isValidUrl(url){
+    return /^https?:\/\/.+/i.test(String(url || "").trim());
+  }
+
+  function makeCatalogPlaceholder(q){
+    try{
+      const c = document.createElement("canvas");
+      c.width = 360;
+      c.height = 240;
+      const ctx = c.getContext("2d");
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillRect(0,0,c.width,c.height);
+
+      ctx.strokeStyle = "#d1d5db";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      const x=20,y=20,w=320,h=200,r=18;
+      ctx.moveTo(x+r,y);
+      ctx.lineTo(x+w-r,y);
+      ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+      ctx.lineTo(x+w,y+h-r);
+      ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+      ctx.lineTo(x+r,y+h);
+      ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+      ctx.lineTo(x,y+r);
+      ctx.quadraticCurveTo(x,y,x+r,y);
+      ctx.closePath();
+      ctx.stroke();
+
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#111827";
+      ctx.font = "700 28px -apple-system, BlinkMacSystemFont, 'Noto Sans TC', sans-serif";
+      ctx.fillText("圖鑑貼紙", 180, 82);
+
+      ctx.fillStyle = "#4b5563";
+      ctx.font = "500 18px -apple-system, BlinkMacSystemFont, 'Noto Sans TC', sans-serif";
+      ctx.fillText(`${q.catalogSize || q.size || ""}｜${q.materialText || ""}`, 180, 122);
+      ctx.fillText(`${q.laminateText || ""}｜${q.quantity || ""}張`, 180, 152);
+      ctx.fillText("待人工檢查", 180, 184);
+
+      return c.toDataURL("image/jpeg", 0.78);
+    }catch(e){
+      return "";
+    }
+  }
+
+  function loadCartItems(){
+    try{
+      const arr = safeParseJson(localStorage.getItem("LUNY_CART_ITEMS_V1"), []);
+      return Array.isArray(arr) ? arr.filter(x => x && x.designId) : [];
+    }catch(e){
+      return [];
+    }
+  }
+
+  function normalizeCartItem(item){
+    item = item || {};
+    return Object.assign({}, item, {
+      productType: String(item.productType || "CATALOG").toUpperCase(),
+      productCode: item.productCode || item.productName || "圖鑑貼紙",
+      productName: item.productName || "圖鑑貼紙"
+    });
+  }
+
+  function saveCartItems(arr){
+    const clean = [];
+    const seen = new Set();
+
+    (Array.isArray(arr) ? arr : []).forEach(item => {
+      if(!item || !item.designId) return;
+      const next = normalizeCartItem(item);
+      const key = String(next.productType || "") + "|" + String(next.designId || "");
+      if(seen.has(key)) return;
+      seen.add(key);
+      clean.push(next);
+    });
+
+    writeJson("LUNY_CART_ITEMS_V1", clean);
+
+    const currentOnly = clean.filter(x => String(x.productType || "").toUpperCase() === "CATALOG");
+    writeJson("LUNY_SAVED_DESIGNS_V2", currentOnly);
+
+    syncCatalogPendingBridge(clean);
+    return clean;
+  }
+
+  function syncCatalogPendingBridge(items){
+    const arr = (Array.isArray(items) ? items : []).filter(x => x && x.designId);
+    const ids = arr.map(x => String(x.designId)).filter(Boolean);
+    const total = arr.reduce((sum, item) => sum + (Number(item?.quote?.price || item?.price || 0) || 0), 0);
+    const token = getCatalogCheckoutToken();
+
+    try{
+      localStorage.setItem("LUNY_PENDING_DESIGN_IDS", JSON.stringify(ids));
+      localStorage.setItem("pendingDesignIds", JSON.stringify(ids));
+      localStorage.setItem("lunyDesignIds", JSON.stringify(ids));
+      localStorage.setItem("luny_order_draft_ids", JSON.stringify(ids));
+      localStorage.setItem("latestDesignId", ids[ids.length - 1] || "");
+      localStorage.setItem("LUNY_CHECKOUT_TOTAL_AMOUNT", String(total));
+
+      const compactItems = arr.map(item => ({
+        designId: item.designId,
+        productType: item.productType || "CATALOG",
+        productCode: item.productCode || "圖鑑貼紙",
+        productName: item.productName || "圖鑑貼紙",
+        quote: item.quote || {},
+        price: item.price || item?.quote?.price || 0,
+        catalogFileUrl: item.catalogFileUrl || "",
+        catalogShareChecked: !!item.catalogShareChecked,
+        catalogNote: item.catalogNote || "",
+        status: item.status || "待人工檢查",
+        previewThumb: item.previewThumb || ""
+      }));
+
+      const payload = {
+        v: 9,
+        productType: "CATALOG",
+        checkoutToken: token,
+        checkoutTotal: total,
+        designIds: ids,
+        items: compactItems,
+        savedAt: new Date().toISOString()
+      };
+
+      writeJson("LUNY_CHECKOUT_PAYLOAD_V2", payload);
+      writeJson("LUNY_PENDING_DESIGN_BACKUP_V1", payload);
+
+      try{
+        document.cookie = "LUNY_PENDING_DESIGN_IDS=" + encodeURIComponent(JSON.stringify(ids)) + "; max-age=" + (60*60*24*14) + "; path=/; SameSite=Lax";
+        document.cookie = "LUNY_PENDING_DESIGN_BACKUP_V1=" + encodeURIComponent(JSON.stringify({
+          v: payload.v,
+          checkoutToken: payload.checkoutToken,
+          checkoutTotal: payload.checkoutTotal,
+          designIds: payload.designIds,
+          items: compactItems.map(item => ({
+            designId: item.designId,
+            productType: item.productType,
+            productCode: item.productCode,
+            quote: item.quote,
+            catalogFileUrl: item.catalogFileUrl,
+            status: item.status
+          }))
+        })) + "; max-age=" + (60*60*24*14) + "; path=/; SameSite=Lax";
+      }catch(e){}
+    }catch(e){
+      console.warn("[LUNY CATALOG] sync bridge failed", e);
+    }
+  }
+
+  function getQuoteForSave(){
+    try{
+      if(typeof getCatalogQuote === "function"){
+        const q = getCatalogQuote();
+        if(q && q.price) return q;
+      }
+    }catch(e){}
+
+    try{
+      if(window.LUNY_CATALOG_PRICING && typeof window.LUNY_CATALOG_PRICING.getPrice === "function"){
+        return window.LUNY_CATALOG_PRICING.getPrice({
+          material: $("material") ? $("material").value : "pearlescent",
+          laminate: $("laminate") ? $("laminate").value : "gloss",
+          size: $("catalogSize") ? $("catalogSize").value : "A5",
+          quantity: $("quantity") ? $("quantity").value : 20,
+          urgent: $("urgent") ? $("urgent").value : "normal",
+          cutlineService: $("catalogCutlineService") ? $("catalogCutlineService").value : "self"
+        });
+      }
+    }catch(e){}
+
+    return null;
+  }
+
+  function saveCatalogDesignV9(event){
+    if(event){
+      event.preventDefault();
+      event.stopPropagation();
+      if(typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+    }
+
+    const fileUrl = ($("catalogFileUrl") && $("catalogFileUrl").value ? $("catalogFileUrl").value : "").trim();
+    const shareChecked = !!($("catalogShareChecked") && $("catalogShareChecked").checked);
+    const note = ($("catalogNote") && $("catalogNote").value ? $("catalogNote").value : "").trim();
+
+    if(!fileUrl){
+      setStatus("請先貼上設計檔雲端連結。", true);
+      alert("請先貼上設計檔雲端連結。");
+      return false;
+    }
+
+    if(!isValidUrl(fileUrl)){
+      setStatus("請貼上完整網址，需要包含 https://", true);
+      alert("請貼上完整網址，需要包含 https://");
+      return false;
+    }
+
+    if(!shareChecked){
+      setStatus("請先確認雲端連結已開啟共享權限。", true);
+      alert("請先確認雲端連結已開啟共享權限。");
+      return false;
+    }
+
+    const q = getQuoteForSave();
+
+    if(!q || !q.price){
+      setStatus("此規格尚未設定價格，請重新選擇。", true);
+      alert("此規格尚未設定價格，請重新選擇。");
+      return false;
+    }
+
+    const item = {
+      designId: makeCatalogDesignId(),
+      productType: "CATALOG",
+      productName: "圖鑑貼紙",
+      productCode: "圖鑑貼紙",
+      quote: q,
+      price: q.price,
+      catalogFileUrl: fileUrl,
+      catalogShareChecked: true,
+      catalogNote: note,
+      status: "待人工檢查",
+      previewThumb: makeCatalogPlaceholder(q),
+      createdAt: new Date().toISOString(),
+      page: {
+        href: location.href,
+        path: location.pathname,
+        title: document.title
+      }
+    };
+
+    const arr = loadCartItems();
+    arr.push(item);
+    saveCartItems(arr);
+
+    try{
+      if(typeof renderCheckoutSummary === "function") renderCheckoutSummary();
+    }catch(e){}
+
+    try{
+      localStorage.setItem("LUNY_LAST_EDIT_PRODUCT_URL", location.href);
+    }catch(e){}
+
+    setStatus("已儲存圖鑑貼紙款式。");
+    return false;
+  }
+
+  function goCatalogCheckoutV9(event){
+    if(event){
+      event.preventDefault();
+      event.stopPropagation();
+      if(typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+    }
+
+    const arr = loadCartItems();
+
+    if(!arr.length){
+      alert("請先儲存至少一款設計，再前往結帳。");
+      return false;
+    }
+
+    syncCatalogPendingBridge(arr);
+
+    try{
+      localStorage.setItem("LUNY_LAST_EDIT_PRODUCT_URL", location.href);
+    }catch(e){}
+
+    location.href = window.LUNY_CHECKOUT_CONFIRM_URL || "https://www.luny.tw/checkout-confirm";
+    return false;
+  }
+
+  function bindCatalogSaveButtonsV9(){
+    const saveBtn = $("saveDesignBtn");
+    if(saveBtn){
+      const newSaveBtn = saveBtn.cloneNode(true);
+      saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+      newSaveBtn.disabled = false;
+      newSaveBtn.textContent = "儲存設計";
+      newSaveBtn.addEventListener("click", saveCatalogDesignV9, true);
+      newSaveBtn.onclick = saveCatalogDesignV9;
+    }
+
+    const orderBtn = $("orderLink");
+    if(orderBtn){
+      const newOrderBtn = orderBtn.cloneNode(true);
+      orderBtn.parentNode.replaceChild(newOrderBtn, orderBtn);
+      newOrderBtn.disabled = false;
+      newOrderBtn.textContent = "前往結帳";
+      newOrderBtn.addEventListener("click", goCatalogCheckoutV9, true);
+      newOrderBtn.onclick = goCatalogCheckoutV9;
+    }
+
+    window.saveCatalogDesignV9 = saveCatalogDesignV9;
+    window.goCatalogCheckoutV9 = goCatalogCheckoutV9;
+  }
+
+  function scheduleBindV9(){
+    bindCatalogSaveButtonsV9();
+    setTimeout(bindCatalogSaveButtonsV9, 200);
+    setTimeout(bindCatalogSaveButtonsV9, 700);
+    setTimeout(bindCatalogSaveButtonsV9, 1500);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", scheduleBindV9);
+  }else{
+    scheduleBindV9();
+  }
+
+  window.addEventListener("load", scheduleBindV9);
 })();
