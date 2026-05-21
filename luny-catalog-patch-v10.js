@@ -1,12 +1,12 @@
 /*
   LUNY Catalog Patch v2
   GitHub filename:
-  luny-catalog-patch-v9.js
+  luny-catalog-patch-v10.js
 
   Required load order in 1SHOP:
   1) 原本標籤貼紙模板
   2) luny-catalog-pricing-v1.js
-  3) luny-catalog-patch-v9.js
+  3) luny-catalog-patch-v10.js
 
   This file:
   - Keeps the original label sticker UI/template
@@ -709,7 +709,7 @@
 
 
 
-/* LUNY Catalog Patch v9 override
+/* LUNY Catalog Patch v10 override
    強制重建：材質與上膜卡片含圖片、移除標籤貼紙 UI 閃現。
 */
 (function(){
@@ -910,7 +910,7 @@
 
 
 
-/* LUNY Catalog Patch v9 override
+/* LUNY Catalog Patch v10 override
    修正圖鑑貼紙儲存時誤走標籤貼紙 saveDesign，導致 Missing print/cut dataURL。
 */
 (function(){
@@ -1122,7 +1122,7 @@
     return null;
   }
 
-  function saveCatalogDesignV9(event){
+  function saveCatalogDesignV10(event){
     if(event){
       event.preventDefault();
       event.stopPropagation();
@@ -1195,7 +1195,7 @@
     return false;
   }
 
-  function goCatalogCheckoutV9(event){
+  function goCatalogCheckoutV10(event){
     if(event){
       event.preventDefault();
       event.stopPropagation();
@@ -1219,15 +1219,15 @@
     return false;
   }
 
-  function bindCatalogSaveButtonsV9(){
+  function bindCatalogSaveButtonsV10(){
     const saveBtn = $("saveDesignBtn");
     if(saveBtn){
       const newSaveBtn = saveBtn.cloneNode(true);
       saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
       newSaveBtn.disabled = false;
       newSaveBtn.textContent = "儲存設計";
-      newSaveBtn.addEventListener("click", saveCatalogDesignV9, true);
-      newSaveBtn.onclick = saveCatalogDesignV9;
+      newSaveBtn.addEventListener("click", saveCatalogDesignV10, true);
+      newSaveBtn.onclick = saveCatalogDesignV10;
     }
 
     const orderBtn = $("orderLink");
@@ -1236,26 +1236,111 @@
       orderBtn.parentNode.replaceChild(newOrderBtn, orderBtn);
       newOrderBtn.disabled = false;
       newOrderBtn.textContent = "前往結帳";
-      newOrderBtn.addEventListener("click", goCatalogCheckoutV9, true);
-      newOrderBtn.onclick = goCatalogCheckoutV9;
+      newOrderBtn.addEventListener("click", goCatalogCheckoutV10, true);
+      newOrderBtn.onclick = goCatalogCheckoutV10;
     }
 
-    window.saveCatalogDesignV9 = saveCatalogDesignV9;
-    window.goCatalogCheckoutV9 = goCatalogCheckoutV9;
+    window.saveCatalogDesignV10 = saveCatalogDesignV10;
+    window.goCatalogCheckoutV10 = goCatalogCheckoutV10;
   }
 
-  function scheduleBindV9(){
-    bindCatalogSaveButtonsV9();
-    setTimeout(bindCatalogSaveButtonsV9, 200);
-    setTimeout(bindCatalogSaveButtonsV9, 700);
-    setTimeout(bindCatalogSaveButtonsV9, 1500);
+  function scheduleBindV10(){
+    bindCatalogSaveButtonsV10();
+    setTimeout(bindCatalogSaveButtonsV10, 200);
+    setTimeout(bindCatalogSaveButtonsV10, 700);
+    setTimeout(bindCatalogSaveButtonsV10, 1500);
   }
 
   if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", scheduleBindV9);
+    document.addEventListener("DOMContentLoaded", scheduleBindV10);
   }else{
-    scheduleBindV9();
+    scheduleBindV10();
   }
 
-  window.addEventListener("load", scheduleBindV9);
+  window.addEventListener("load", scheduleBindV10);
+})();
+
+
+
+
+/* LUNY Catalog Patch v10 hard interceptor
+   在 document capture 階段攔截儲存/結帳，避免原標籤貼紙流程先檢查 print/cut dataURL。
+*/
+(function(){
+  "use strict";
+
+  function isCatalogPage(){
+    return String(window.LUNY_PRODUCT_TYPE || window.currentProductType || "").toUpperCase() === "CATALOG"
+      || !!document.getElementById("catalogFileUrl");
+  }
+
+  function findActionButton(target){
+    if(!target || !target.closest) return null;
+    return target.closest("#saveDesignBtn, #orderLink");
+  }
+
+  document.addEventListener("click", function(e){
+    if(!isCatalogPage()) return;
+
+    var btn = findActionButton(e.target);
+    if(!btn) return;
+
+    var id = btn.id;
+
+    if(id === "saveDesignBtn"){
+      e.preventDefault();
+      e.stopPropagation();
+      if(typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+
+      if(typeof window.saveCatalogDesignV10 === "function"){
+        return window.saveCatalogDesignV10(e);
+      }
+      return false;
+    }
+
+    if(id === "orderLink"){
+      e.preventDefault();
+      e.stopPropagation();
+      if(typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+
+      if(typeof window.goCatalogCheckoutV10 === "function"){
+        return window.goCatalogCheckoutV10(e);
+      }
+      return false;
+    }
+  }, true);
+
+  function removeOldInlineHandlers(){
+    var saveBtn = document.getElementById("saveDesignBtn");
+    if(saveBtn){
+      saveBtn.removeAttribute("onclick");
+      saveBtn.onclick = null;
+      saveBtn.disabled = false;
+      saveBtn.textContent = "儲存設計";
+    }
+
+    var orderBtn = document.getElementById("orderLink");
+    if(orderBtn){
+      orderBtn.removeAttribute("onclick");
+      orderBtn.onclick = null;
+      orderBtn.disabled = false;
+      orderBtn.textContent = "前往結帳";
+    }
+  }
+
+  function scheduleRemove(){
+    removeOldInlineHandlers();
+    setTimeout(removeOldInlineHandlers, 100);
+    setTimeout(removeOldInlineHandlers, 400);
+    setTimeout(removeOldInlineHandlers, 900);
+    setTimeout(removeOldInlineHandlers, 1800);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", scheduleRemove);
+  }else{
+    scheduleRemove();
+  }
+
+  window.addEventListener("load", scheduleRemove);
 })();
