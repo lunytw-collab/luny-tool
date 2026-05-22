@@ -1,8 +1,11 @@
 (function () {
   "use strict";
 
-  /* LUNY price engine v25
-     更新：解放數量上限，每個 module 級距皆可選到 10000 張。
+  /* LUNY price engine v26
+     更新：加入急件數量限制。
+     一般件仍可選到 10000 張。
+     急件上限 = min(mappedModule × 100 張大紙, 2000 張貼紙)。
+     超出上限時，急件選項不可選。
      模數估算維持 29 × 37.4cm 拼板邏輯。
   */
 
@@ -15,6 +18,15 @@
   const SHEET_SHORT_CM = 29;
   const SHEET_LONG_CM = 37.4;
   const MODULE_GAP_CM = 0.1;
+
+  const QUANTITY_LEVELS = [
+    100, 300, 500, 1000, 2000, 3000,
+    4000, 5000, 6000, 7000, 8000, 9000, 10000
+  ];
+
+  // 急件產能限制：最多 100 張大紙，但切割時間上限控制在 2000 張貼紙。
+  const RUSH_SHEET_LIMIT = 100;
+  const RUSH_ABSOLUTE_MAX_QTY = 2000;
 
   function estimateModule(width, height) {
     const w = Number(width) || 0;
@@ -48,10 +60,7 @@
 
     // v25：解放數量上限。所有 module 級距都可承接到 10000 張。
     // 保留 estimatedModule 參數，是為了相容舊版呼叫方式。
-    const validOptions = [
-      100, 300, 500, 1000, 2000, 3000,
-      4000, 5000, 6000, 7000, 8000, 9000, 10000
-    ];
+    const validOptions = QUANTITY_LEVELS;
 
     const current = parseInt(quantitySelect.value, 10);
 
@@ -95,6 +104,32 @@
     `;
   }
 
+  function getRushMaxQuantityByModule(mappedModule) {
+    const m = Number(mappedModule) || 0;
+    if (m <= 0) return 0;
+    return Math.min(m * RUSH_SHEET_LIMIT, RUSH_ABSOLUTE_MAX_QTY);
+  }
+
+  function isRushUnavailableByModule(mappedModule, quantity) {
+    const q = parseInt(quantity, 10) || 0;
+    if (q <= 0) return false;
+
+    const maxRushQty = getRushMaxQuantityByModule(mappedModule);
+    if (maxRushQty <= 0) return true;
+
+    return q > maxRushQty;
+  }
+
+  function getRushUnavailableMessage(mappedModule) {
+    const maxRushQty = getRushMaxQuantityByModule(mappedModule);
+
+    if (maxRushQty < 100) {
+      return "急件(此尺寸不開放急件)";
+    }
+
+    return `急件(此尺寸最多 ${maxRushQty} 張)`;
+  }
+
   function isSuperRushUnavailableBySpec(widthCm, heightCm, quantity) {
     const w = Number(widthCm) || 0;
     const h = Number(heightCm) || 0;
@@ -106,34 +141,64 @@
     return isSizeOver6x6 || isQuantityOver1000;
   }
 
-  function updateUrgentOptions(widthCm, heightCm, quantity) {
+  function updateUrgentOptions(widthCm, heightCm, quantity, mappedModule) {
     const urgentSelect = getEl("urgent");
     if (!urgentSelect) return "normal";
 
+    const rushOption = urgentSelect.querySelector('option[value="rush"]');
     const superrushOption = urgentSelect.querySelector('option[value="superrush"]');
-    const unavailable = isSuperRushUnavailableBySpec(widthCm, heightCm, quantity);
+
+    const rushUnavailable = isRushUnavailableByModule(mappedModule, quantity);
+    const superrushUnavailable = isSuperRushUnavailableBySpec(widthCm, heightCm, quantity);
+
+    if (rushOption) {
+      rushOption.disabled = rushUnavailable;
+      rushOption.hidden = false;
+      rushOption.textContent = rushUnavailable
+        ? getRushUnavailableMessage(mappedModule)
+        : "急件(1~2工作天寄出)";
+    }
 
     if (superrushOption) {
-      superrushOption.disabled = unavailable;
+      superrushOption.disabled = superrushUnavailable;
       superrushOption.hidden = false;
-      superrushOption.textContent = unavailable
+      superrushOption.textContent = superrushUnavailable
         ? "特急件(6×6cm以上或1000張以上不適用)"
         : "特急件(平日中午12點前下單，當天寄出)";
     }
 
-    if (unavailable && urgentSelect.value === "superrush") {
+    if (rushUnavailable && urgentSelect.value === "rush") {
+      urgentSelect.value = "normal";
+    }
+
+    if (superrushUnavailable && urgentSelect.value === "superrush") {
       urgentSelect.value = "normal";
     }
 
     return urgentSelect.value || "normal";
   }
 
-  function showSuperRushUnavailableNote(widthCm, heightCm, quantity) {
+  function showSuperRushUnavailableNote(widthCm, heightCm, quantity, mappedModule) {
     const orderNote = getEl("orderNote");
     if (!orderNote) return;
 
+    const notes = [];
+
+    if (isRushUnavailableByModule(mappedModule, quantity)) {
+      const maxRushQty = getRushMaxQuantityByModule(mappedModule);
+      if (maxRushQty >= 100) {
+        notes.push(`提醒：此尺寸急件最多可承接 ${maxRushQty} 張，超出請選擇一般件。`);
+      } else {
+        notes.push("提醒：此尺寸不開放急件，請選擇一般件。");
+      }
+    }
+
     if (isSuperRushUnavailableBySpec(widthCm, heightCm, quantity)) {
-      orderNote.textContent = "提醒：尺寸達 6×6cm 以上，或數量 1000 張以上，不開放特急件，請選擇一般件或急件。";
+      notes.push("提醒：尺寸達 6×6cm 以上，或數量 1000 張以上，不開放特急件。");
+    }
+
+    if (notes.length > 0) {
+      orderNote.textContent = notes.join(" ");
       orderNote.style.display = "block";
     }
   }
@@ -289,13 +354,14 @@
     }
 
     const estimatedModule = estimateModule(longSide, shortSide);
+    const mappedModule = mapModuleByRules(estimatedModule);
 
     adjustQuantityOptions(estimatedModule);
 
     const finalQuantity = parseInt(getEl("quantity")?.value || quantity || "0", 10);
 
-    urgent = updateUrgentOptions(widthCm, heightCm, finalQuantity);
-    showSuperRushUnavailableNote(widthCm, heightCm, finalQuantity);
+    urgent = updateUrgentOptions(widthCm, heightCm, finalQuantity, mappedModule);
+    showSuperRushUnavailableNote(widthCm, heightCm, finalQuantity, mappedModule);
 
     let materialTable = pricingTable?.[material];
 
@@ -321,7 +387,6 @@
       return;
     }
 
-    const mappedModule = mapModuleByRules(estimatedModule);
     const closest = findClosestModule(materialTable, mappedModule);
 
     if (!closest || !closest.price) {
@@ -349,22 +414,29 @@
 
     const upgradeHint = getEl("upgradeHint");
     if (upgradeHint) {
-      const qtyLevels = [100, 300, 500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000];
-      const currentIndex = qtyLevels.indexOf(finalQuantity);
-      const nextQty = qtyLevels[currentIndex + 1];
+      const currentIndex = QUANTITY_LEVELS.indexOf(finalQuantity);
+      const nextQty = QUANTITY_LEVELS[currentIndex + 1];
 
       if (nextQty && closest.price[nextQty]) {
-        const nextBaseTotal = Number(closest.price[nextQty] || 0);
-        const nextTotal = applyExtraFees(nextBaseTotal, shapeForPricing, urgent);
+        const nextRushUnavailable = urgent === "rush" && isRushUnavailableByModule(mappedModule, nextQty);
+        const nextSuperrushUnavailable = urgent === "superrush" && isSuperRushUnavailableBySpec(widthCm, heightCm, nextQty);
 
-        const diff = nextTotal - total;
-
-        if (diff > 0) {
-          upgradeHint.textContent = `優惠提醒：升級 ${nextQty} 張，只要加 ${diff} 元`;
-          upgradeHint.style.display = "block";
-        } else {
+        if (nextRushUnavailable || nextSuperrushUnavailable) {
           upgradeHint.textContent = "";
           upgradeHint.style.display = "none";
+        } else {
+          const nextBaseTotal = Number(closest.price[nextQty] || 0);
+          const nextTotal = applyExtraFees(nextBaseTotal, shapeForPricing, urgent);
+
+          const diff = nextTotal - total;
+
+          if (diff > 0) {
+            upgradeHint.textContent = `優惠提醒：升級 ${nextQty} 張，只要加 ${diff} 元`;
+            upgradeHint.style.display = "block";
+          } else {
+            upgradeHint.textContent = "";
+            upgradeHint.style.display = "none";
+          }
         }
       } else {
         upgradeHint.textContent = "";
@@ -409,6 +481,7 @@
       heightCm,
       estimatedModule,
       mappedModule,
+      rushMaxQuantity: getRushMaxQuantityByModule(mappedModule),
       moduleData: closest,
       summaryText,
       materialLabelForUrl: getMaterialLabelForUrl(material, laminate)
@@ -508,6 +581,9 @@
     isSuperRushUnavailableBySpec,
     updateUrgentOptions,
     showSuperRushUnavailableNote,
+    getRushMaxQuantityByModule,
+    isRushUnavailableByModule,
+    getRushUnavailableMessage,
     applyUrgentPrice,
     applyExtraFees,
     roundPrice
@@ -523,6 +599,9 @@
   window.isSuperRushUnavailableBySpec = isSuperRushUnavailableBySpec;
   window.updateUrgentOptions = updateUrgentOptions;
   window.showSuperRushUnavailableNote = showSuperRushUnavailableNote;
+  window.getRushMaxQuantityByModule = getRushMaxQuantityByModule;
+  window.isRushUnavailableByModule = isRushUnavailableByModule;
+  window.getRushUnavailableMessage = getRushUnavailableMessage;
   window.applyUrgentPrice = applyUrgentPrice;
   window.applyExtraFees = applyExtraFees;
   window.roundPrice = roundPrice;
