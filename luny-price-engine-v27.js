@@ -1,11 +1,12 @@
 (function () {
   "use strict";
 
-  /* LUNY price engine v26
-     更新：加入急件數量限制。
+  /* LUNY price engine v27
+     更新：加入特急件大紙數量限制。
      一般件仍可選到 10000 張。
      急件上限 = min(mappedModule × 100 張大紙, 2000 張貼紙)。
-     超出上限時，急件選項不可選。
+     特急件上限 = mappedModule × 40 張大紙。
+     超出上限時，急件 / 特急件選項不可選。
      模數估算維持 29 × 37.4cm 拼板邏輯。
   */
 
@@ -27,6 +28,9 @@
   // 急件產能限制：最多 100 張大紙，但切割時間上限控制在 2000 張貼紙。
   const RUSH_SHEET_LIMIT = 100;
   const RUSH_ABSOLUTE_MAX_QTY = 2000;
+
+  // 特急件產能限制：最多 40 張大紙，以大紙數量衡量。
+  const SUPER_RUSH_SHEET_LIMIT = 40;
 
   function estimateModule(width, height) {
     const w = Number(width) || 0;
@@ -130,15 +134,40 @@
     return `急件(此尺寸最多 ${maxRushQty} 張)`;
   }
 
-  function isSuperRushUnavailableBySpec(widthCm, heightCm, quantity) {
-    const w = Number(widthCm) || 0;
-    const h = Number(heightCm) || 0;
+  function getSuperRushMaxQuantityByModule(mappedModule) {
+    const m = Number(mappedModule) || 0;
+    if (m <= 0) return 0;
+    return m * SUPER_RUSH_SHEET_LIMIT;
+  }
+
+  function isSuperRushUnavailableByModule(mappedModule, quantity) {
     const q = parseInt(quantity, 10) || 0;
+    if (q <= 0) return false;
 
-    const isSizeOver6x6 = w >= 6 && h >= 6;
-    const isQuantityOver1000 = q >= 1000;
+    const maxSuperRushQty = getSuperRushMaxQuantityByModule(mappedModule);
+    if (maxSuperRushQty <= 0) return true;
 
-    return isSizeOver6x6 || isQuantityOver1000;
+    return q > maxSuperRushQty;
+  }
+
+  function getSuperRushUnavailableMessage(mappedModule) {
+    const maxSuperRushQty = getSuperRushMaxQuantityByModule(mappedModule);
+
+    if (maxSuperRushQty < 100) {
+      return "特急件(此尺寸不開放特急件)";
+    }
+
+    return `特急件(此尺寸最多 ${maxSuperRushQty} 張)`;
+  }
+
+  // 保留舊函式名稱，給外部舊程式相容使用。
+  // v27 起特急件改用大紙數量衡量，不再使用 6×6cm 或 1000 張的固定限制。
+  function isSuperRushUnavailableBySpec(widthCm, heightCm, quantity) {
+    const longSide = Math.max(Number(widthCm) || 0, Number(heightCm) || 0);
+    const shortSide = Math.min(Number(widthCm) || 0, Number(heightCm) || 0);
+    const estimatedModule = estimateModule(longSide, shortSide);
+    const mappedModule = mapModuleByRules(estimatedModule);
+    return isSuperRushUnavailableByModule(mappedModule, quantity);
   }
 
   function updateUrgentOptions(widthCm, heightCm, quantity, mappedModule) {
@@ -149,7 +178,7 @@
     const superrushOption = urgentSelect.querySelector('option[value="superrush"]');
 
     const rushUnavailable = isRushUnavailableByModule(mappedModule, quantity);
-    const superrushUnavailable = isSuperRushUnavailableBySpec(widthCm, heightCm, quantity);
+    const superrushUnavailable = isSuperRushUnavailableByModule(mappedModule, quantity);
 
     if (rushOption) {
       rushOption.disabled = rushUnavailable;
@@ -163,7 +192,7 @@
       superrushOption.disabled = superrushUnavailable;
       superrushOption.hidden = false;
       superrushOption.textContent = superrushUnavailable
-        ? "特急件(6×6cm以上或1000張以上不適用)"
+        ? getSuperRushUnavailableMessage(mappedModule)
         : "特急件(平日中午12點前下單，當天寄出)";
     }
 
@@ -193,8 +222,13 @@
       }
     }
 
-    if (isSuperRushUnavailableBySpec(widthCm, heightCm, quantity)) {
-      notes.push("提醒：尺寸達 6×6cm 以上，或數量 1000 張以上，不開放特急件。");
+    if (isSuperRushUnavailableByModule(mappedModule, quantity)) {
+      const maxSuperRushQty = getSuperRushMaxQuantityByModule(mappedModule);
+      if (maxSuperRushQty >= 100) {
+        notes.push(`提醒：此尺寸特急件最多可承接 ${maxSuperRushQty} 張，超出請選擇一般件或急件。`);
+      } else {
+        notes.push("提醒：此尺寸不開放特急件，請選擇一般件或急件。");
+      }
     }
 
     if (notes.length > 0) {
@@ -419,7 +453,7 @@
 
       if (nextQty && closest.price[nextQty]) {
         const nextRushUnavailable = urgent === "rush" && isRushUnavailableByModule(mappedModule, nextQty);
-        const nextSuperrushUnavailable = urgent === "superrush" && isSuperRushUnavailableBySpec(widthCm, heightCm, nextQty);
+        const nextSuperrushUnavailable = urgent === "superrush" && isSuperRushUnavailableByModule(mappedModule, nextQty);
 
         if (nextRushUnavailable || nextSuperrushUnavailable) {
           upgradeHint.textContent = "";
@@ -482,6 +516,7 @@
       estimatedModule,
       mappedModule,
       rushMaxQuantity: getRushMaxQuantityByModule(mappedModule),
+      superRushMaxQuantity: getSuperRushMaxQuantityByModule(mappedModule),
       moduleData: closest,
       summaryText,
       materialLabelForUrl: getMaterialLabelForUrl(material, laminate)
@@ -584,6 +619,9 @@
     getRushMaxQuantityByModule,
     isRushUnavailableByModule,
     getRushUnavailableMessage,
+    getSuperRushMaxQuantityByModule,
+    isSuperRushUnavailableByModule,
+    getSuperRushUnavailableMessage,
     applyUrgentPrice,
     applyExtraFees,
     roundPrice
@@ -602,6 +640,9 @@
   window.getRushMaxQuantityByModule = getRushMaxQuantityByModule;
   window.isRushUnavailableByModule = isRushUnavailableByModule;
   window.getRushUnavailableMessage = getRushUnavailableMessage;
+  window.getSuperRushMaxQuantityByModule = getSuperRushMaxQuantityByModule;
+  window.isSuperRushUnavailableByModule = isSuperRushUnavailableByModule;
+  window.getSuperRushUnavailableMessage = getSuperRushUnavailableMessage;
   window.applyUrgentPrice = applyUrgentPrice;
   window.applyExtraFees = applyExtraFees;
   window.roundPrice = roundPrice;
