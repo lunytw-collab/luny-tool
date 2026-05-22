@@ -1,11 +1,12 @@
 (function () {
   "use strict";
 
-  /* LUNY price engine v27
+  /* LUNY price engine v28
      更新：加入特急件大紙數量限制。
      一般件仍可選到 10000 張。
      急件上限 = min(mappedModule × 100 張大紙, 2000 張貼紙)。
-     特急件上限 = mappedModule × 40 張大紙。
+     特急件大紙原始上限 = mappedModule × 40 張大紙。
+     顯示與判斷時只使用實際提供的數量級距，不顯示 1400、1600 這類未提供級距。
      超出上限時，急件 / 特急件選項不可選。
      模數估算維持 29 × 37.4cm 拼板邏輯。
   */
@@ -114,18 +115,35 @@
     return Math.min(m * RUSH_SHEET_LIMIT, RUSH_ABSOLUTE_MAX_QTY);
   }
 
+  function getMaxProvidedQuantity(rawMaxQty) {
+    const raw = Number(rawMaxQty) || 0;
+    let maxProvided = 0;
+
+    for (const q of QUANTITY_LEVELS) {
+      if (q <= raw) {
+        maxProvided = q;
+      }
+    }
+
+    return maxProvided;
+  }
+
+  function getRushMaxProvidedQuantityByModule(mappedModule) {
+    return getMaxProvidedQuantity(getRushMaxQuantityByModule(mappedModule));
+  }
+
   function isRushUnavailableByModule(mappedModule, quantity) {
     const q = parseInt(quantity, 10) || 0;
     if (q <= 0) return false;
 
-    const maxRushQty = getRushMaxQuantityByModule(mappedModule);
+    const maxRushQty = getRushMaxProvidedQuantityByModule(mappedModule);
     if (maxRushQty <= 0) return true;
 
     return q > maxRushQty;
   }
 
   function getRushUnavailableMessage(mappedModule) {
-    const maxRushQty = getRushMaxQuantityByModule(mappedModule);
+    const maxRushQty = getRushMaxProvidedQuantityByModule(mappedModule);
 
     if (maxRushQty < 100) {
       return "急件(此尺寸不開放急件)";
@@ -140,18 +158,22 @@
     return m * SUPER_RUSH_SHEET_LIMIT;
   }
 
+  function getSuperRushMaxProvidedQuantityByModule(mappedModule) {
+    return getMaxProvidedQuantity(getSuperRushMaxQuantityByModule(mappedModule));
+  }
+
   function isSuperRushUnavailableByModule(mappedModule, quantity) {
     const q = parseInt(quantity, 10) || 0;
     if (q <= 0) return false;
 
-    const maxSuperRushQty = getSuperRushMaxQuantityByModule(mappedModule);
+    const maxSuperRushQty = getSuperRushMaxProvidedQuantityByModule(mappedModule);
     if (maxSuperRushQty <= 0) return true;
 
     return q > maxSuperRushQty;
   }
 
   function getSuperRushUnavailableMessage(mappedModule) {
-    const maxSuperRushQty = getSuperRushMaxQuantityByModule(mappedModule);
+    const maxSuperRushQty = getSuperRushMaxProvidedQuantityByModule(mappedModule);
 
     if (maxSuperRushQty < 100) {
       return "特急件(此尺寸不開放特急件)";
@@ -214,7 +236,7 @@
     const notes = [];
 
     if (isRushUnavailableByModule(mappedModule, quantity)) {
-      const maxRushQty = getRushMaxQuantityByModule(mappedModule);
+      const maxRushQty = getRushMaxProvidedQuantityByModule(mappedModule);
       if (maxRushQty >= 100) {
         notes.push(`提醒：此尺寸急件最多可承接 ${maxRushQty} 張，超出請選擇一般件。`);
       } else {
@@ -223,7 +245,7 @@
     }
 
     if (isSuperRushUnavailableByModule(mappedModule, quantity)) {
-      const maxSuperRushQty = getSuperRushMaxQuantityByModule(mappedModule);
+      const maxSuperRushQty = getSuperRushMaxProvidedQuantityByModule(mappedModule);
       if (maxSuperRushQty >= 100) {
         notes.push(`提醒：此尺寸特急件最多可承接 ${maxSuperRushQty} 張，超出請選擇一般件或急件。`);
       } else {
@@ -515,8 +537,10 @@
       heightCm,
       estimatedModule,
       mappedModule,
-      rushMaxQuantity: getRushMaxQuantityByModule(mappedModule),
-      superRushMaxQuantity: getSuperRushMaxQuantityByModule(mappedModule),
+      rushRawMaxQuantity: getRushMaxQuantityByModule(mappedModule),
+      rushMaxQuantity: getRushMaxProvidedQuantityByModule(mappedModule),
+      superRushRawMaxQuantity: getSuperRushMaxQuantityByModule(mappedModule),
+      superRushMaxQuantity: getSuperRushMaxProvidedQuantityByModule(mappedModule),
       moduleData: closest,
       summaryText,
       materialLabelForUrl: getMaterialLabelForUrl(material, laminate)
@@ -617,9 +641,12 @@
     updateUrgentOptions,
     showSuperRushUnavailableNote,
     getRushMaxQuantityByModule,
+    getRushMaxProvidedQuantityByModule,
+    getMaxProvidedQuantity,
     isRushUnavailableByModule,
     getRushUnavailableMessage,
     getSuperRushMaxQuantityByModule,
+    getSuperRushMaxProvidedQuantityByModule,
     isSuperRushUnavailableByModule,
     getSuperRushUnavailableMessage,
     applyUrgentPrice,
@@ -638,9 +665,12 @@
   window.updateUrgentOptions = updateUrgentOptions;
   window.showSuperRushUnavailableNote = showSuperRushUnavailableNote;
   window.getRushMaxQuantityByModule = getRushMaxQuantityByModule;
+  window.getRushMaxProvidedQuantityByModule = getRushMaxProvidedQuantityByModule;
+  window.getMaxProvidedQuantity = getMaxProvidedQuantity;
   window.isRushUnavailableByModule = isRushUnavailableByModule;
   window.getRushUnavailableMessage = getRushUnavailableMessage;
   window.getSuperRushMaxQuantityByModule = getSuperRushMaxQuantityByModule;
+  window.getSuperRushMaxProvidedQuantityByModule = getSuperRushMaxProvidedQuantityByModule;
   window.isSuperRushUnavailableByModule = isSuperRushUnavailableByModule;
   window.getSuperRushUnavailableMessage = getSuperRushUnavailableMessage;
   window.applyUrgentPrice = applyUrgentPrice;
