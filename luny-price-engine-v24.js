@@ -1,14 +1,19 @@
 (function () {
   "use strict";
 
+  /* LUNY price engine v24
+     修正：模數估算改回實際報價引擎使用的 29 × 37.4cm 拼板邏輯。
+     7×7cm 會估算為 20 模：floor(29/7.1) × floor(37.4/7.1) = 4 × 5。
+  */
+
   const pricingTable = window.LUNY_PRICING_TABLE || {};
 
   function getEl(id) {
     return document.getElementById(id);
   }
 
-  const SHEET_SHORT_CM = 26;
-  const SHEET_LONG_CM = 37;
+  const SHEET_SHORT_CM = 29;
+  const SHEET_LONG_CM = 37.4;
   const MODULE_GAP_CM = 0.1;
 
   function estimateModule(width, height) {
