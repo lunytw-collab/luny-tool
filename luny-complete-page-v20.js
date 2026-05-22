@@ -54,6 +54,14 @@ function collectPageText(){
   return candidates.join("\n");
 }
 
+function pagePath(){
+  try{
+    return String((location.pathname||"")+(location.search||"")+(location.hash||""));
+  }catch(e){
+    return "";
+  }
+}
+
 function orderNo(t){
   let raw=String(t||"")+"\n"+collectPageText();
 
@@ -91,7 +99,15 @@ function isDone(){
   let hasDoneWord=/已收到您的訂單|已經收到您的訂單|感謝您的訂購|訂單已成立|訂購完成|付款完成|交易成功|請拍照|儲存網址|訂單號碼|訂單編號/.test(all);
   let no=orderNo(all);
 
-  return !!(hasDoneWord&&no);
+  // v20：1SHOP 的真正訂單完成頁，有時網址會是 /order?l2=...
+  // 這種頁面不一定會落在傳統 complete/success 路徑，
+  // 但只要頁面已抓到訂單編號，就應允許送出 bindOrderNo。
+  let href="";
+  try{href=String(location.href||"")}catch(e){}
+  let path=pagePath();
+  let hasOrderUrl=/\/order(?:[\/?#]|$)/i.test(path)||/\/order(?:[\/?#]|$)/i.test(href);
+
+  return !!(no&&(hasDoneWord||hasOrderUrl));
 }
 
 function norm(p){
@@ -326,11 +342,24 @@ async function send(){
     }),
     orderStatus:"completed",
     confirmed:true,
-    source:"complete_v19_fallback_bind",
+    source:"complete_v20_order_path_fix",
+
+    // v20：同時送 root-level 與 page 物件，避免 GAS 端只讀 pagePath 時拿到空值，
+    // 造成 /order?l2=... 被誤判為 not_real_complete_page。
+    pageHref:location.href,
+    pagePath:pagePath(),
+    hasText:/已收到您的訂單|已經收到您的訂單|感謝您的訂購|訂單已成立|訂購完成|付款完成|交易成功|請拍照|儲存網址|訂單號碼|訂單編號/.test(all),
+    isRealCompletePage:true,
     page:{
       href:location.href,
+      path:pagePath(),
+      pathname:location.pathname||"",
+      search:location.search||"",
+      hash:location.hash||"",
       title:document.title||"",
-      detectedOrderNo:no
+      detectedOrderNo:no,
+      hasText:/已收到您的訂單|已經收到您的訂單|感謝您的訂購|訂單已成立|訂購完成|付款完成|交易成功|請拍照|儲存網址|訂單號碼|訂單編號/.test(all),
+      isRealCompletePage:true
     },
     orderPageText:all,
     userAgent:navigator.userAgent,
@@ -407,6 +436,14 @@ function collectPageText(){
   }catch(e){}
 
   return candidates.join("\n");
+}
+
+function pagePath(){
+  try{
+    return String((location.pathname||"")+(location.search||"")+(location.hash||""));
+  }catch(e){
+    return "";
+  }
 }
 
 function getOrderNo(t){
@@ -608,7 +645,10 @@ async function start(){
   let all=t+"\n"+collectPageText();
   let order=getOrderNo(all);
 
-  if(!order||!/已收到您的訂單|已經收到您的訂單|訂單號碼|訂單編號|請拍照|儲存網址/.test(all)){
+  let hasDoneText=/已收到您的訂單|已經收到您的訂單|訂單號碼|訂單編號|請拍照|儲存網址/.test(all);
+  let hasOrderUrl=/\/order(?:[\/?#]|$)/i.test(pagePath())||/\/order(?:[\/?#]|$)/i.test(location.href||"");
+
+  if(!order||!(hasDoneText||hasOrderUrl)){
     loading=0;
     return;
   }
