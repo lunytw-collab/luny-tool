@@ -1,9 +1,9 @@
 (function () {
   "use strict";
 
-  /* LUNY price engine v24
-     修正：模數估算改回實際報價引擎使用的 29 × 37.4cm 拼板邏輯。
-     7×7cm 會估算為 20 模：floor(29/7.1) × floor(37.4/7.1) = 4 × 5。
+  /* LUNY price engine v25
+     更新：解放數量上限，每個 module 級距皆可選到 10000 張。
+     模數估算維持 29 × 37.4cm 拼板邏輯。
   */
 
   const pricingTable = window.LUNY_PRICING_TABLE || {};
@@ -46,33 +46,21 @@
     const quantitySelect = getEl("quantity");
     if (!quantitySelect) return;
 
-    const thresholds = [
-      { limit: 3, max: 100 },
-      { limit: 6, max: 300 },
-      { limit: 10, max: 500 },
-      { limit: 19, max: 1000 },
-      { limit: 24, max: 2000 },
-      { limit: Infinity, max: 3000 }
+    // v25：解放數量上限。所有 module 級距都可承接到 10000 張。
+    // 保留 estimatedModule 參數，是為了相容舊版呼叫方式。
+    const validOptions = [
+      100, 300, 500, 1000, 2000, 3000,
+      4000, 5000, 6000, 7000, 8000, 9000, 10000
     ];
 
-    const current = quantitySelect.value;
-    let maxAllowed = 3000;
-
-    for (const t of thresholds) {
-      if (estimatedModule < t.limit) {
-        maxAllowed = t.max;
-        break;
-      }
-    }
-
-    const validOptions = [100, 300, 500, 1000, 2000, 3000].filter(q => q <= maxAllowed);
+    const current = parseInt(quantitySelect.value, 10);
 
     quantitySelect.innerHTML = validOptions
       .map(q => `<option value="${q}">${q}</option>`)
       .join("");
 
-    quantitySelect.value = validOptions.includes(parseInt(current, 10))
-      ? current
+    quantitySelect.value = validOptions.includes(current)
+      ? String(current)
       : String(validOptions[0]);
   }
 
@@ -361,7 +349,7 @@
 
     const upgradeHint = getEl("upgradeHint");
     if (upgradeHint) {
-      const qtyLevels = [100, 300, 500, 1000, 2000, 3000];
+      const qtyLevels = [100, 300, 500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000];
       const currentIndex = qtyLevels.indexOf(finalQuantity);
       const nextQty = qtyLevels[currentIndex + 1];
 
