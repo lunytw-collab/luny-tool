@@ -157,15 +157,26 @@ function payload(){
     items,
     total:Number(m.total||m.checkoutTotal||ls(K.total)||sum||0),
     checkoutTotal:Number(m.checkoutTotal||m.total||ls(K.total)||sum||0),
-    checkoutToken:clean(m.checkoutToken||ls(K.token)||""),
+    checkoutToken:clean(m.checkoutToken||m.chekoutToken||ls(K.token)||""),
     productType:"mixed"
   });
 }
 
 function token(p,t){
+  let urlToken="";
+  try{
+    let params=new URLSearchParams((location.search||"").replace(/^\?/,""));
+    urlToken=params.get("checkoutToken")||params.get("chekoutToken")||"";
+    if(!urlToken&&location.hash){
+      let hashParams=new URLSearchParams(String(location.hash||"").replace(/^#/,"").replace(/^\?/,""));
+      urlToken=hashParams.get("checkoutToken")||hashParams.get("chekoutToken")||"";
+    }
+  }catch(e){}
+
   return clean(
-    (p&&p.checkoutToken)||
+    (p&&(p.checkoutToken||p.chekoutToken))||
     ls(K.token)||
+    urlToken||
     (String(t||"").match(/LUNY-[A-Z]+-[0-9]{8}-[0-9A-Z]+|LUNY-[0-9]{8}-[0-9A-Z]+/i)||[""])[0]
   );
 }
