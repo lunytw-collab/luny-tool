@@ -1,10 +1,10 @@
 (function () {
   "use strict";
 
-  /* LUNY price engine v29
-     更新：加入規格生產範圍限制與特急件大紙數量限制。
+  /* LUNY price engine v32
+     更新：加入規格生產範圍限制與特急件大紙數量限制；下方提示只顯示規格張數限制。
      一般件在規格生產範圍內可選到 10000 張。
-     超出規格生產範圍時，最多只能選擇 mappedModule × 100 張大紙內的既有數量級距。
+     超出規格生產範圍時，最多只能選擇 min(mappedModule × 100 張大紙, 2000 張貼紙) 內的既有數量級距。
      急件上限 = min(mappedModule × 100 張大紙, 2000 張貼紙)。
      特急件大紙原始上限 = mappedModule × 40 張大紙。
      顯示與判斷時只使用實際提供的數量級距，不顯示 1400、1600 這類未提供級距。
@@ -34,8 +34,9 @@
   // 特急件產能限制：最多 40 張大紙，以大紙數量衡量。
   const SUPER_RUSH_SHEET_LIMIT = 40;
 
-  // 規格生產範圍限制。超出範圍時，最多只能做 100 張大紙內的既有數量級距。
-  const SPEC_LIMIT_SHEET_LIMIT = 100;
+  // 規格生產範圍限制。超出範圍時，最多只能做 1000 小張或 60 張大紙，取較小值。
+  const SPEC_LIMIT_SHEET_LIMIT = 60;
+  const SPEC_LIMIT_ABSOLUTE_MAX_QTY = 1000;
 
   const productionSizeLimits = {
     square: {
@@ -152,7 +153,7 @@
   function getSpecMaxQuantityByModule(mappedModule) {
     const m = Number(mappedModule) || 0;
     if (m <= 0) return 0;
-    return m * SPEC_LIMIT_SHEET_LIMIT;
+    return Math.min(m * SPEC_LIMIT_SHEET_LIMIT, SPEC_LIMIT_ABSOLUTE_MAX_QTY);
   }
 
   function getSpecMaxProvidedQuantityByModule(mappedModule) {
@@ -364,33 +365,10 @@
     const orderNote = getEl("orderNote");
     if (!orderNote) return;
 
-    const notes = [];
     const specLimitResult = getSpecQuantityLimitResult(shapeValue, widthCm, heightCm, mappedModule);
 
     if (specLimitResult.limited) {
-      notes.push(specLimitResult.message);
-    }
-
-    if (isRushUnavailableByModule(mappedModule, quantity)) {
-      const maxRushQty = getRushMaxProvidedQuantityByModule(mappedModule);
-      if (maxRushQty >= 100) {
-        notes.push(`提醒：此尺寸急件最多可承接 ${maxRushQty} 張，超出請選擇一般件。`);
-      } else {
-        notes.push("提醒：此尺寸不開放急件，請選擇一般件。");
-      }
-    }
-
-    if (isSuperRushUnavailableByModule(mappedModule, quantity)) {
-      const maxSuperRushQty = getSuperRushMaxProvidedQuantityByModule(mappedModule);
-      if (maxSuperRushQty >= 100) {
-        notes.push(`提醒：此尺寸特急件最多可承接 ${maxSuperRushQty} 張，超出請選擇一般件或急件。`);
-      } else {
-        notes.push("提醒：此尺寸不開放特急件，請選擇一般件或急件。");
-      }
-    }
-
-    if (notes.length > 0) {
-      orderNote.textContent = notes.join(" ");
+      orderNote.textContent = specLimitResult.message;
       orderNote.style.display = "block";
     }
   }
