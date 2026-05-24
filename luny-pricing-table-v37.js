@@ -24,8 +24,56 @@
 
   var NORMAL_PEARLESCENT_MODULE_MULTIPLIER = {
     35: 1.25,
-    56: 1.23,
-    88: 1.20
+    56: 1.24,
+    88: 1.21
+  };
+
+  var NORMAL_PEARLESCENT_QTY_MULTIPLIER = {
+    35: {
+      100: 1.25,
+      300: 1.25,
+      500: 1.25,
+      1000: 1.25,
+      2000: 1.25,
+      3000: 1.25,
+      4000: 1.25,
+      5000: 1.25,
+      6000: 1.25,
+      7000: 1.25,
+      8000: 1.25,
+      9000: 1.25,
+      10000: 1.25
+    },
+    56: {
+      100: 1.24,
+      300: 1.24,
+      500: 1.24,
+      1000: 1.24,
+      2000: 1.24,
+      3000: 1.23,
+      4000: 1.23,
+      5000: 1.23,
+      6000: 1.23,
+      7000: 1.23,
+      8000: 1.23,
+      9000: 1.23,
+      10000: 1.23
+    },
+    88: {
+      100: 1.21,
+      300: 1.21,
+      500: 1.21,
+      1000: 1.26,
+      2000: 1.26,
+      3000: 1.18,
+      4000: 1.18,
+      5000: 1.18,
+      6000: 1.18,
+      7000: 1.17,
+      8000: 1.17,
+      9000: 1.17,
+      10000: 1.17
+    }
   };
 
   var STICKER_MR_MULTIPLIER = {
@@ -217,19 +265,36 @@
     return { module: item.module, price: newPrice };
   });
 
+  function buildPricingTableByQtyModule(defaultMultiplier, moduleMultiplierMap, qtyMultiplierMap, noneRatio) {
+    return window.LUNY_BASE_PRICE_V34.map(function (item) {
+      var newPrice = {};
+      Object.keys(item.price).forEach(function (qty) {
+        var moduleQtyMap = qtyMultiplierMap[item.module] || null;
+        var qtyMultiplier = moduleQtyMap && moduleQtyMap[qty]
+          ? moduleQtyMap[qty]
+          : (moduleMultiplierMap[item.module] || defaultMultiplier);
+        var finalMultiplier = qtyMultiplier * (noneRatio || 1);
+        newPrice[qty] = Math.round(item.price[qty] * finalMultiplier);
+      });
+      return { module: item.module, price: newPrice };
+    });
+  }
+
   var normalPearlescentLaminated = applyFloorByStickerMrArtpaper(
-    buildPricingTableByModule(
+    buildPricingTableByQtyModule(
       MATERIAL_MULTIPLIER.normal_pearlescent_laminated,
       NORMAL_PEARLESCENT_MODULE_MULTIPLIER,
+      NORMAL_PEARLESCENT_QTY_MULTIPLIER,
       1
     ),
     STICKER_MR_MULTIPLIER.normal_pearlescent_laminated
   );
 
   var normalPearlescentNone = applyFloorByStickerMrArtpaper(
-    buildPricingTableByModule(
+    buildPricingTableByQtyModule(
       MATERIAL_MULTIPLIER.normal_pearlescent_laminated,
       NORMAL_PEARLESCENT_MODULE_MULTIPLIER,
+      NORMAL_PEARLESCENT_QTY_MULTIPLIER,
       0.9
     ),
     STICKER_MR_MULTIPLIER.normal_pearlescent_none
