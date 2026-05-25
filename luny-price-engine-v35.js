@@ -1,7 +1,21 @@
 (function () {
   "use strict";
 
- 
+  /* LUNY price engine v35
+     更新：修正客製化形狀加價邏輯。
+     客製化形狀只有在「一般件 500 張以上」且「符合特殊形狀級距」時，費用才改為 +1200。
+     100 / 300 張、急件、特急件，即使符合特殊形狀級距，仍維持客製化形狀 +200。
+     保留 v34 急件 / 特急件依數量倍率計算。
+     保留規格生產範圍限制與特急件大紙數量限制；下方提示只顯示規格張數限制。
+     一般件在規格生產範圍內可選到 10000 張。
+     超出規格生產範圍時，最多只能選擇 min(mappedModule × 100 張大紙, 2000 張貼紙) 內的既有數量級距。
+     急件上限 = min(mappedModule × 100 張大紙, 2000 張貼紙)。
+     特急件大紙原始上限 = mappedModule × 40 張大紙。
+     顯示與判斷時只使用實際提供的數量級距，不顯示 1400、1600 這類未提供級距。
+     超出上限時，對應選項不可選。
+     模數估算維持 29 × 37.4cm 拼板邏輯。
+  */
+
   const pricingTable = window.LUNY_PRICING_TABLE || {};
 
   function getEl(id) {
@@ -491,18 +505,32 @@
     return base;
   }
 
-  function getCustomShapeExtraFee(shapeForPricing, shapeValue, widthCm, heightCm) {
+  function shouldUseProductionPartner(quantity, urgent) {
+    const q = parseInt(quantity, 10) || 0;
+
+    if (urgent === "rush" || urgent === "superrush") return false;
+    if (q <= 300) return false;
+
+    return true;
+  }
+
+  function getCustomShapeExtraFee(shapeForPricing, shapeValue, widthCm, heightCm, quantity, urgent) {
     if (shapeForPricing !== "custom") return 0;
 
-    return isWithinProductionSizeLimit(shapeValue || "custom", widthCm, heightCm)
-      ? CUSTOM_SHAPE_SPECIAL_TIER_EXTRA_FEE
-      : CUSTOM_SHAPE_STANDARD_EXTRA_FEE;
+    const useProductionPartner = shouldUseProductionPartner(quantity, urgent);
+    const withinSpecialTier = isWithinSpecialShapeTier(widthCm, heightCm);
+
+    if (useProductionPartner && withinSpecialTier) {
+      return CUSTOM_SHAPE_SPECIAL_TIER_EXTRA_FEE;
+    }
+
+    return CUSTOM_SHAPE_STANDARD_EXTRA_FEE;
   }
 
   function applyExtraFees(basePrice, shapeForPricing, urgent, shapeValue, widthCm, heightCm, quantity) {
     let total = Number(basePrice) || 0;
 
-    total += getCustomShapeExtraFee(shapeForPricing, shapeValue, widthCm, heightCm);
+    total += getCustomShapeExtraFee(shapeForPricing, shapeValue, widthCm, heightCm, quantity, urgent);
 
     total = applyUrgentPrice(total, urgent, quantity);
 
@@ -750,7 +778,8 @@
       specMaxQuantity: getSpecMaxProvidedQuantityByModule(mappedModule),
       specQuantityLimit: getSpecQuantityLimitResult(shapeValue, widthCm, heightCm, mappedModule),
       specialShapeTier: getMatchingSpecialShapeTier(widthCm, heightCm),
-      customShapeExtraFee: getCustomShapeExtraFee(shapeForPricing, shapeValue, widthCm, heightCm),
+      customShapeUsesProductionPartner: shouldUseProductionPartner(finalQuantity, urgent),
+      customShapeExtraFee: getCustomShapeExtraFee(shapeForPricing, shapeValue, widthCm, heightCm, finalQuantity, urgent),
       rushRawMaxQuantity: getRushMaxQuantityByModule(mappedModule),
       rushMaxQuantity: getRushMaxProvidedQuantityByModule(mappedModule),
       superRushRawMaxQuantity: getSuperRushMaxQuantityByModule(mappedModule),
