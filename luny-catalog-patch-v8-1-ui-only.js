@@ -440,7 +440,7 @@
       if(urgentLabel) urgentLabel.textContent = '升級急件：';
       const urgentRow = urgent.closest('.form-row');
       if(urgentRow && !$("catalogCutlineService")){
-        urgentRow.insertAdjacentHTML('afterend','<div class="form-row row-2"><div style="width:100%;"><label for="catalogCutlineService">完稿刀線：</label><select id="catalogCutlineService"><option value="self" selected>自行完稿</option><option value="designer">設計師協助 +$600</option></select><div class="catalog-cloud-note">若選擇「設計師協助」，會協助檢查與整理完稿刀線，費用 +$600。</div></div></div>');
+        urgentRow.insertAdjacentHTML('afterend','<div class="form-row row-2"><div style="width:100%;"><label for="catalogCutlineService">完稿刀線：</label><select id="catalogCutlineService"><option value="self" selected>自行完稿</option><option value="designer">設計師協助 +$600(+3工作天)</option></select><div class="catalog-cloud-note">若選擇「設計師協助」，會協助檢查與整理完稿刀線，費用 +$600。</div></div></div>');
       }
     }
 
