@@ -7,6 +7,9 @@
     pearlescent_laminated: 1.76,
     pearlescent_none: 1.76 * 0.9,
 
+    normal_pearlescent_laminated: 1.32,
+    normal_pearlescent_none: 1.32 * 0.9,
+
     transparent_laminated: 1.69,
 
     kraft: 1.20,
@@ -19,12 +22,69 @@
     88: 1.55
   };
 
+  var NORMAL_PEARLESCENT_MODULE_MULTIPLIER = {
+    35: 1.25,
+    56: 1.24,
+    88: 1.21
+  };
+
+  var NORMAL_PEARLESCENT_QTY_MULTIPLIER = {
+    35: {
+      100: 1.25,
+      300: 1.25,
+      500: 1.25,
+      1000: 1.25,
+      2000: 1.25,
+      3000: 1.25,
+      4000: 1.25,
+      5000: 1.25,
+      6000: 1.25,
+      7000: 1.25,
+      8000: 1.25,
+      9000: 1.25,
+      10000: 1.25
+    },
+    56: {
+      100: 1.24,
+      300: 1.24,
+      500: 1.24,
+      1000: 1.24,
+      2000: 1.24,
+      3000: 1.23,
+      4000: 1.23,
+      5000: 1.23,
+      6000: 1.23,
+      7000: 1.23,
+      8000: 1.23,
+      9000: 1.23,
+      10000: 1.23
+    },
+    88: {
+      100: 1.21,
+      300: 1.21,
+      500: 1.21,
+      1000: 1.26,
+      2000: 1.26,
+      3000: 1.18,
+      4000: 1.18,
+      5000: 1.18,
+      6000: 1.18,
+      7000: 1.17,
+      8000: 1.17,
+      9000: 1.17,
+      10000: 1.17
+    }
+  };
+
   var STICKER_MR_MULTIPLIER = {
     artpaper_laminated: 1,
     artpaper_none: 0.9,
 
     pearlescent_laminated: 1.77,
     pearlescent_none: 1.77 * 0.9,
+
+    normal_pearlescent_laminated: 1.32,
+    normal_pearlescent_none: 1.32 * 0.9,
 
     transparent_laminated: 1.69,
 
@@ -46,12 +106,27 @@
     10000: 28
   };
 
+  var PEARLESCENT_SPECIAL_ADJUST = {
+    20: {
+      100: -230,
+      300: -150
+    },
+    24: {
+      100: -230,
+      300: -150
+    }
+  };
+
   window.LUNY_BASE_PRICE_V34 = [
     { module: 1, price: { 100:2380,300:3200,500:4120,1000:6000,2000:11035,3000:16231,4000:21427,5000:26624,6000:31820,7000:37017,8000:42213,9000:47408,10000:52605 } },
     { module: 2, price: { 100:1640,300:2580,500:2980,1000:3880,2000:5600,3000:7200,4000:8750,5000:10200,6000:11600,7000:13200,8000:15080,9000:16950,10000:18800 } },
+    { module: "M2_SQUARE_18X18", price: { 100:1033,300:1815,500:2599,1000:4556,2000:8468,3000:12382,4000:16295,5000:20209,6000:24121,7000:28035,8000:31948,9000:35862,10000:39774 } },
+    { module: "M2_LARGE_20X15", price: { 100:860,300:1293,500:1727,1000:2812,2000:4983,3000:7154,4000:9324,5000:11494,6000:13665,7000:15835,8000:18005,9000:20177,10000:22347 } },
+    { module: "M4_LARGE_15X15", price: { 100:806,300:1132,500:1460,1000:2277,2000:3914,3000:5550,4000:7186,5000:8821,6000:10457,7000:12093,8000:13728,9000:15365,10000:17001 } },
+    { module: "M3_MEDIUM_14X12", price: { 100:795,300:1100,500:1406,1000:2171,2000:3700,3000:5229,4000:6758,5000:8287,6000:9816,7000:11345,8000:12874,9000:14403,10000:15932 } },
     { module: 3, price: { 100:1100,300:1670,500:2080,1000:2800,2000:4200,3000:5600,4000:6900,5000:8200,6000:9400,7000:12250,8000:13950,9000:15680,10000:17400 } },
     { module: 4, price: { 100:880,300:1080,500:1353,1000:2064,2000:3486,3000:4908,4000:6330,5000:7752,6000:9174,7000:10597,8000:12018,9000:13440,10000:14863 } },
-    { module: 6, price: { 100:763,300:1005,500:1246,1000:1851,2000:3058,3000:4266,4000:5475,5000:6683,6000:7891,7000:9100,8000:10307,9000:11515,10000:12724 } },
+    { module: 6, price: { 100:774,300:1037,500:1300,1000:1957,2000:3272,3000:4587,4000:5902,5000:7218,6000:8533,7000:9848,8000:11163,9000:12478,10000:13793 } },
     { module: 7, price: { 100:739,300:934,500:1127,1000:1613,2000:2584,3000:3556,4000:4526,5000:5497,6000:6469,7000:7440,8000:8410,9000:9382,10000:10354 } },
     { module: 8, price: { 100:714,300:862,500:1008,1000:1375,2000:2109,3000:2845,4000:3578,5000:4311,6000:5047,7000:5781,8000:6514,9000:7249,10000:7983 } },
     { module: 9, price: { 100:711,300:852,500:990,1000:1340,2000:2038,3000:2738,4000:3436,5000:4133,6000:4833,7000:5532,8000:6229,9000:6928,10000:7626 } },
@@ -70,9 +145,13 @@
   var STICKER_MR_ARTPAPER_LAMINATED_TABLE = [
     { module: 1, price: { 100:1162,300:2200,500:3240,1000:5838,2000:11035,3000:16231,4000:21427,5000:26624,6000:31820,7000:37017,8000:42213,9000:47408,10000:52605 } },
     { module: 2, price: { 100:806,300:1132,500:1460,1000:2277,2000:3914,3000:5550,4000:7186,5000:8821,6000:10457,7000:12093,8000:13728,9000:15365,10000:17001 } },
+    { module: "M2_SQUARE_18X18", price: { 100:1033,300:1815,500:2599,1000:4556,2000:8468,3000:12382,4000:16295,5000:20209,6000:24121,7000:28035,8000:31948,9000:35862,10000:39774 } },
+    { module: "M2_LARGE_20X15", price: { 100:860,300:1293,500:1727,1000:2812,2000:4983,3000:7154,4000:9324,5000:11494,6000:13665,7000:15835,8000:18005,9000:20177,10000:22347 } },
+    { module: "M4_LARGE_15X15", price: { 100:806,300:1132,500:1460,1000:2277,2000:3914,3000:5550,4000:7186,5000:8821,6000:10457,7000:12093,8000:13728,9000:15365,10000:17001 } },
+    { module: "M3_MEDIUM_14X12", price: { 100:795,300:1100,500:1406,1000:2171,2000:3700,3000:5229,4000:6758,5000:8287,6000:9816,7000:11345,8000:12874,9000:14403,10000:15932 } },
     { module: 3, price: { 100:795,300:1100,500:1406,1000:2171,2000:3700,3000:5229,4000:6758,5000:8287,6000:9816,7000:11345,8000:12874,9000:14403,10000:15932 } },
     { module: 4, price: { 100:784,300:1069,500:1353,1000:2064,2000:3486,3000:4908,4000:6330,5000:7752,6000:9174,7000:10597,8000:12018,9000:13440,10000:14863 } },
-    { module: 6, price: { 100:763,300:1005,500:1246,1000:1851,2000:3058,3000:4266,4000:5475,5000:6683,6000:7891,7000:9100,8000:10307,9000:11515,10000:12724 } },
+    { module: 6, price: { 100:774,300:1037,500:1300,1000:1957,2000:3272,3000:4587,4000:5902,5000:7218,6000:8533,7000:9848,8000:11163,9000:12478,10000:13793 } },
     { module: 7, price: { 100:739,300:934,500:1127,1000:1613,2000:2584,3000:3556,4000:4526,5000:5497,6000:6469,7000:7440,8000:8410,9000:9382,10000:10354 } },
     { module: 8, price: { 100:700,300:862,500:1008,1000:1375,2000:2109,3000:2845,4000:3578,5000:4311,6000:5047,7000:5781,8000:6514,9000:7249,10000:7983 } },
     { module: 9, price: { 100:650,300:852,500:990,1000:1340,2000:2038,3000:2738,4000:3436,5000:4133,6000:4833,7000:5532,8000:6229,9000:6928,10000:7626 } },
@@ -90,7 +169,8 @@
 
   function findModule(table, module) {
     for (var i = 0; i < table.length; i++) {
-      if (Number(table[i].module) === Number(module)) return table[i];
+      if (String(table[i].module) === String(module)) return table[i];
+      if (!isNaN(Number(table[i].module)) && !isNaN(Number(module)) && Number(table[i].module) === Number(module)) return table[i];
     }
     return null;
   }
@@ -143,6 +223,25 @@
     });
   }
 
+  function applySpecialAdjust(table, adjustMap) {
+    return table.map(function (item) {
+      var adjust = adjustMap[item.module];
+      if (!adjust) return item;
+
+      var newPrice = {};
+      Object.keys(item.price).forEach(function (qty) {
+        newPrice[qty] = item.price[qty];
+      });
+
+      Object.keys(adjust).forEach(function (qty) {
+        if (typeof newPrice[qty] === "undefined") return;
+        newPrice[qty] = Math.max(0, newPrice[qty] + adjust[qty]);
+      });
+
+      return { module: item.module, price: newPrice };
+    });
+  }
+
   var artpaperLaminated = applyFloorByStickerMrArtpaper(
     buildPricingTable(MATERIAL_MULTIPLIER.artpaper_laminated),
     STICKER_MR_MULTIPLIER.artpaper_laminated
@@ -162,13 +261,52 @@
     STICKER_MR_MULTIPLIER.pearlescent_laminated
   );
 
-  var pearlescentNone = applyFloorByStickerMrArtpaper(
-    buildPricingTableByModule(
-      MATERIAL_MULTIPLIER.pearlescent_laminated,
-      PEARLESCENT_MODULE_MULTIPLIER,
+  pearlescentLaminated = applySpecialAdjust(
+    pearlescentLaminated,
+    PEARLESCENT_SPECIAL_ADJUST
+  );
+
+  var pearlescentNone = pearlescentLaminated.map(function (item) {
+    var newPrice = {};
+    Object.keys(item.price).forEach(function (qty) {
+      newPrice[qty] = Math.round(item.price[qty] * 0.9);
+    });
+    return { module: item.module, price: newPrice };
+  });
+
+  function buildPricingTableByQtyModule(defaultMultiplier, moduleMultiplierMap, qtyMultiplierMap, noneRatio) {
+    return window.LUNY_BASE_PRICE_V34.map(function (item) {
+      var newPrice = {};
+      Object.keys(item.price).forEach(function (qty) {
+        var moduleQtyMap = qtyMultiplierMap[item.module] || null;
+        var qtyMultiplier = moduleQtyMap && moduleQtyMap[qty]
+          ? moduleQtyMap[qty]
+          : (moduleMultiplierMap[item.module] || defaultMultiplier);
+        var finalMultiplier = qtyMultiplier * (noneRatio || 1);
+        newPrice[qty] = Math.round(item.price[qty] * finalMultiplier);
+      });
+      return { module: item.module, price: newPrice };
+    });
+  }
+
+  var normalPearlescentLaminated = applyFloorByStickerMrArtpaper(
+    buildPricingTableByQtyModule(
+      MATERIAL_MULTIPLIER.normal_pearlescent_laminated,
+      NORMAL_PEARLESCENT_MODULE_MULTIPLIER,
+      NORMAL_PEARLESCENT_QTY_MULTIPLIER,
+      1
+    ),
+    STICKER_MR_MULTIPLIER.normal_pearlescent_laminated
+  );
+
+  var normalPearlescentNone = applyFloorByStickerMrArtpaper(
+    buildPricingTableByQtyModule(
+      MATERIAL_MULTIPLIER.normal_pearlescent_laminated,
+      NORMAL_PEARLESCENT_MODULE_MULTIPLIER,
+      NORMAL_PEARLESCENT_QTY_MULTIPLIER,
       0.9
     ),
-    STICKER_MR_MULTIPLIER.pearlescent_none
+    STICKER_MR_MULTIPLIER.normal_pearlescent_none
   );
 
   var transparentLaminated = applyFloorByStickerMrArtpaper(
@@ -196,6 +334,24 @@
       "亮膜": pearlescentLaminated,
       "霧膜": pearlescentLaminated,
       "無": pearlescentNone
+    },
+
+    normalPearlescent: {
+      "亮膜": normalPearlescentLaminated,
+      "霧膜": normalPearlescentLaminated,
+      "無": normalPearlescentNone
+    },
+
+    waterproofPearlescent: {
+      "亮膜": normalPearlescentLaminated,
+      "霧膜": normalPearlescentLaminated,
+      "無": normalPearlescentNone
+    },
+
+    "一般防水珠光": {
+      "亮膜": normalPearlescentLaminated,
+      "霧膜": normalPearlescentLaminated,
+      "無": normalPearlescentNone
     },
 
     transparent: {
