@@ -1,8 +1,12 @@
 (function () {
   "use strict";
 
-  /* LUNY price engine v32
-     更新：加入規格生產範圍限制與特急件大紙數量限制；下方提示只顯示規格張數限制。
+  /* LUNY price engine v35
+     更新：修正客製化形狀加價邏輯。
+     客製化形狀只有在「一般件 500 張以上」且「符合特殊形狀級距」時，費用才改為 +1200。
+     100 / 300 張、急件、特急件，即使符合特殊形狀級距，仍維持客製化形狀 +200。
+     保留 v34 急件 / 特急件依數量倍率計算。
+     保留規格生產範圍限制與特急件大紙數量限制；下方提示只顯示規格張數限制。
      一般件在規格生產範圍內可選到 10000 張。
      超出規格生產範圍時，最多只能選擇 min(mappedModule × 100 張大紙, 2000 張貼紙) 內的既有數量級距。
      急件上限 = min(mappedModule × 100 張大紙, 2000 張貼紙)。
@@ -34,9 +38,9 @@
   // 特急件產能限制：最多 40 張大紙，以大紙數量衡量。
   const SUPER_RUSH_SHEET_LIMIT = 40;
 
-  // 規格生產範圍限制。超出範圍時，最多只能做 1000 小張或 60 張大紙，取較小值。
-  const SPEC_LIMIT_SHEET_LIMIT = 60;
-  const SPEC_LIMIT_ABSOLUTE_MAX_QTY = 1000;
+  // 規格生產範圍限制。超出範圍時，最多只能做 2000 小張或 100 張大紙，取較小值。
+  const SPEC_LIMIT_SHEET_LIMIT = 100;
+  const SPEC_LIMIT_ABSOLUTE_MAX_QTY = 2000;
 
   const productionSizeLimits = {
     square: {
@@ -67,11 +71,55 @@
       maxH: 9.7
     },
     special: {
-      name: "特殊形狀",
-      fixedOnly: true,
-      note: "此規格需客服確認"
+      name: "客製化形狀",
+      matchMode: "nearestLargerTier",
+      note: "需符合特殊形狀級距"
     }
   };
+
+  const SPECIAL_SHAPE_TIERS = [
+    { code: "FA3035", w: 3, h: 3.5 },
+    { code: "FA3347", w: 3.3, h: 4.7 },
+    { code: "FB17130", w: 1.7, h: 13 },
+    { code: "FB38180", w: 3.8, h: 18 },
+    { code: "FB47130", w: 4.7, h: 13 },
+    { code: "FC30128", w: 3, h: 12.8 },
+    { code: "FC47203", w: 4.7, h: 20.3 },
+    { code: "FD2261", w: 2.2, h: 6.1 },
+    { code: "FD4190", w: 4.1, h: 9 },
+    { code: "FD45147", w: 4.5, h: 14.7 },
+    { code: "FE3365", w: 3.3, h: 6.5 },
+    { code: "FE4257", w: 4.2, h: 5.7 },
+    { code: "FF2525", w: 2.5, h: 2.5 },
+    { code: "FF3838", w: 3.8, h: 3.8 },
+    { code: "FF5555", w: 5.5, h: 5.5 },
+    { code: "FG3460", w: 3.4, h: 6 },
+    { code: "FG4344", w: 4.3, h: 4.4 },
+    { code: "FG4470", w: 4.4, h: 7 },
+    { code: "FH3848", w: 3.8, h: 4.8 },
+    { code: "FH4356", w: 4.3, h: 5.6 },
+    { code: "FH60110", w: 6, h: 11 },
+    { code: "FJ4570", w: 4.5, h: 7 },
+    { code: "FJ65117", w: 6.5, h: 11.7 },
+    { code: "FJ95180", w: 9.5, h: 18 },
+    { code: "FK2259", w: 2.2, h: 5.9 },
+    { code: "FK25250", w: 2.5, h: 25 },
+    { code: "FM33112", w: 3.3, h: 11.2 },
+    { code: "FM43115", w: 4.3, h: 11.5 },
+    { code: "FN117117", w: 11.7, h: 11.7 },
+    { code: "FN118118", w: 11.8, h: 11.8 },
+    { code: "FP2425", w: 2.4, h: 2.5 },
+    { code: "FP2836", w: 2.8, h: 3.6 },
+    { code: "FP5075", w: 5, h: 7.5 },
+    { code: "FP5254", w: 5.2, h: 5.4 },
+    { code: "FP80100", w: 8, h: 10 },
+    { code: "FP8296", w: 8.2, h: 9.6 },
+    { code: "FP100100", w: 10, h: 10 },
+    { code: "FP120130", w: 12, h: 13 }
+  ];
+
+  const CUSTOM_SHAPE_STANDARD_EXTRA_FEE = 200;
+  const CUSTOM_SHAPE_SPECIAL_TIER_EXTRA_FEE = 1200;
 
   function estimateModule(width, height) {
     const w = Number(width) || 0;
@@ -92,8 +140,17 @@
   function findClosestModule(pricingArray, module) {
     if (!Array.isArray(pricingArray) || pricingArray.length === 0) return null;
 
-    return pricingArray.reduce((prev, curr) => {
-      return Math.abs(curr.module - module) < Math.abs(prev.module - module)
+    const exact = pricingArray.find(item => String(item.module) === String(module));
+    if (exact) return exact;
+
+    const numericModule = Number(module);
+    if (isNaN(numericModule)) return null;
+
+    const numericItems = pricingArray.filter(item => !isNaN(Number(item.module)));
+    if (numericItems.length === 0) return null;
+
+    return numericItems.reduce((prev, curr) => {
+      return Math.abs(Number(curr.module) - numericModule) < Math.abs(Number(prev.module) - numericModule)
         ? curr
         : prev;
     });
@@ -106,6 +163,29 @@
     if (shape === "heart") return "heart";
     if (shape === "custom" || shape === "special" || shape === "arch") return "special";
     return "special";
+  }
+
+  function canFitInTier(widthCm, heightCm, tier) {
+    const w = Number(widthCm) || 0;
+    const h = Number(heightCm) || 0;
+    const tw = Number(tier?.w) || 0;
+    const th = Number(tier?.h) || 0;
+
+    if (w <= 0 || h <= 0 || tw <= 0 || th <= 0) return false;
+
+    return (w <= tw && h <= th) || (w <= th && h <= tw);
+  }
+
+  function getMatchingSpecialShapeTier(widthCm, heightCm) {
+    const matched = SPECIAL_SHAPE_TIERS
+      .filter(tier => canFitInTier(widthCm, heightCm, tier))
+      .sort((a, b) => (a.w * a.h) - (b.w * b.h));
+
+    return matched[0] || null;
+  }
+
+  function isWithinSpecialShapeTier(widthCm, heightCm) {
+    return !!getMatchingSpecialShapeTier(widthCm, heightCm);
   }
 
   function isWithinProductionSizeLimit(shape, widthCm, heightCm) {
@@ -145,6 +225,10 @@
         shortSide <= limit.maxW &&
         longSide <= limit.maxH
       );
+    }
+
+    if (normalizedShape === "special") {
+      return isWithinSpecialShapeTier(w, h);
     }
 
     return false;
@@ -394,32 +478,104 @@
     return 1;
   }
 
+  function getCorrectedPricingModule(widthCm, heightCm, mappedModule) {
+    const w = Number(widthCm) || 0;
+    const h = Number(heightCm) || 0;
+
+    if (w <= 0 || h <= 0) return mappedModule;
+    if (Number(mappedModule) === 1) return mappedModule;
+
+    const longSide = Math.max(w, h);
+    const shortSide = Math.min(w, h);
+    const area = w * h;
+
+    if (longSide >= 17.5 && shortSide >= 17.5 && area >= 300) {
+      return "M2_SQUARE_18X18";
+    }
+
+    if (longSide >= 18 && shortSide >= 14 && area >= 280) {
+      return "M2_LARGE_20X15";
+    }
+
+    if (longSide <= 16 && shortSide >= 13 && area >= 190) {
+      return "M4_LARGE_15X15";
+    }
+
+    if (longSide >= 13.8 && shortSide >= 11.8 && area >= 165 && area < 190) {
+      return "M3_MEDIUM_14X12";
+    }
+
+    if (longSide <= 10.5 && shortSide <= 10.5 && area >= 90) {
+      return 8;
+    }
+
+    return mappedModule;
+  }
+
   function roundPrice(price) {
     return Math.round(Number(price) || 0);
   }
 
-  function applyUrgentPrice(basePrice, urgent) {
+  function getRushRateByQuantity(quantity) {
+    const q = parseInt(quantity, 10) || 0;
+
+    if (q >= 2000) return 1.69;
+    if (q >= 1000) return 1.63;
+    return 1.4;
+  }
+
+  function getSuperRushRateByQuantity(quantity) {
+    const q = parseInt(quantity, 10) || 0;
+
+    if (q >= 2000) return 2.23;
+    if (q >= 1000) return 1.98;
+    return 1.78;
+  }
+
+  function applyUrgentPrice(basePrice, urgent, quantity) {
     const base = Number(basePrice) || 0;
 
     if (urgent === "rush") {
-      return Math.max(base * 1.8, base + 300);
+      const rate = getRushRateByQuantity(quantity);
+      return Math.max(base * rate, base + 300);
     }
 
     if (urgent === "superrush") {
-      return Math.max(base * 2.5, base + 600);
+      const rate = getSuperRushRateByQuantity(quantity);
+      return Math.max(base * rate, base + 600);
     }
 
     return base;
   }
 
-  function applyExtraFees(basePrice, shapeForPricing, urgent) {
-    let total = Number(basePrice) || 0;
+  function shouldUseProductionPartner(quantity, urgent) {
+    const q = parseInt(quantity, 10) || 0;
 
-    if (shapeForPricing === "custom") {
-      total += 200;
+    if (urgent === "rush" || urgent === "superrush") return false;
+    if (q <= 300) return false;
+
+    return true;
+  }
+
+  function getCustomShapeExtraFee(shapeForPricing, shapeValue, widthCm, heightCm, quantity, urgent) {
+    if (shapeForPricing !== "custom") return 0;
+
+    const useProductionPartner = shouldUseProductionPartner(quantity, urgent);
+    const withinSpecialTier = isWithinSpecialShapeTier(widthCm, heightCm);
+
+    if (useProductionPartner && withinSpecialTier) {
+      return CUSTOM_SHAPE_SPECIAL_TIER_EXTRA_FEE;
     }
 
-    total = applyUrgentPrice(total, urgent);
+    return CUSTOM_SHAPE_STANDARD_EXTRA_FEE;
+  }
+
+  function applyExtraFees(basePrice, shapeForPricing, urgent, shapeValue, widthCm, heightCm, quantity) {
+    let total = Number(basePrice) || 0;
+
+    total += getCustomShapeExtraFee(shapeForPricing, shapeValue, widthCm, heightCm, quantity, urgent);
+
+    total = applyUrgentPrice(total, urgent, quantity);
 
     return roundPrice(total);
   }
@@ -532,6 +688,7 @@
 
     const estimatedModule = estimateModule(longSide, shortSide);
     const mappedModule = mapModuleByRules(estimatedModule);
+    const pricingModule = getCorrectedPricingModule(widthCm, heightCm, mappedModule);
 
     adjustQuantityOptions(estimatedModule, shapeValue, widthCm, heightCm, mappedModule);
 
@@ -564,7 +721,7 @@
       return;
     }
 
-    const closest = findClosestModule(materialTable, mappedModule);
+    const closest = findClosestModule(materialTable, pricingModule);
 
     if (!closest || !closest.price) {
       priceDisplay.textContent = "0";
@@ -573,7 +730,7 @@
     }
 
     const baseTotal = Number(closest.price[finalQuantity] || 0);
-    let total = applyExtraFees(baseTotal, shapeForPricing, urgent);
+    let total = applyExtraFees(baseTotal, shapeForPricing, urgent, shapeValue, widthCm, heightCm, finalQuantity);
 
     priceDisplay.textContent = String(total);
 
@@ -605,7 +762,7 @@
           upgradeHint.style.display = "none";
         } else {
           const nextBaseTotal = Number(closest.price[nextQty] || 0);
-          const nextTotal = applyExtraFees(nextBaseTotal, shapeForPricing, urgent);
+          const nextTotal = applyExtraFees(nextBaseTotal, shapeForPricing, urgent, shapeValue, widthCm, heightCm, nextQty);
 
           const diff = nextTotal - total;
 
@@ -660,10 +817,15 @@
       heightCm,
       estimatedModule,
       mappedModule,
+      pricingModule,
+      sizeCorrectionApplied: String(pricingModule) !== String(mappedModule),
       withinProductionSizeLimit: isWithinProductionSizeLimit(shapeValue, widthCm, heightCm),
       specRawMaxQuantity: getSpecMaxQuantityByModule(mappedModule),
       specMaxQuantity: getSpecMaxProvidedQuantityByModule(mappedModule),
       specQuantityLimit: getSpecQuantityLimitResult(shapeValue, widthCm, heightCm, mappedModule),
+      specialShapeTier: getMatchingSpecialShapeTier(widthCm, heightCm),
+      customShapeUsesProductionPartner: shouldUseProductionPartner(finalQuantity, urgent),
+      customShapeExtraFee: getCustomShapeExtraFee(shapeForPricing, shapeValue, widthCm, heightCm, finalQuantity, urgent),
       rushRawMaxQuantity: getRushMaxQuantityByModule(mappedModule),
       rushMaxQuantity: getRushMaxProvidedQuantityByModule(mappedModule),
       superRushRawMaxQuantity: getSuperRushMaxQuantityByModule(mappedModule),
@@ -760,9 +922,15 @@
     adjustQuantityOptions,
     updateLaminateOptions,
     mapModuleByRules,
+    getCorrectedPricingModule,
     getMaterialLabelForUrl,
     getMaterialLabel,
     productionSizeLimits,
+    SPECIAL_SHAPE_TIERS,
+    canFitInTier,
+    getMatchingSpecialShapeTier,
+    isWithinSpecialShapeTier,
+    getCustomShapeExtraFee,
     normalizeShapeForProductionLimit,
     isWithinProductionSizeLimit,
     getSpecMaxQuantityByModule,
@@ -782,6 +950,8 @@
     getSuperRushMaxProvidedQuantityByModule,
     isSuperRushUnavailableByModule,
     getSuperRushUnavailableMessage,
+    getRushRateByQuantity,
+    getSuperRushRateByQuantity,
     applyUrgentPrice,
     applyExtraFees,
     roundPrice
@@ -793,8 +963,14 @@
   window.findClosestModule = findClosestModule;
   window.adjustQuantityOptions = adjustQuantityOptions;
   window.mapModuleByRules = mapModuleByRules;
+  window.getCorrectedPricingModule = getCorrectedPricingModule;
   window.getMaterialLabelForUrl = getMaterialLabelForUrl;
   window.productionSizeLimits = productionSizeLimits;
+  window.SPECIAL_SHAPE_TIERS = SPECIAL_SHAPE_TIERS;
+  window.canFitInTier = canFitInTier;
+  window.getMatchingSpecialShapeTier = getMatchingSpecialShapeTier;
+  window.isWithinSpecialShapeTier = isWithinSpecialShapeTier;
+  window.getCustomShapeExtraFee = getCustomShapeExtraFee;
   window.normalizeShapeForProductionLimit = normalizeShapeForProductionLimit;
   window.isWithinProductionSizeLimit = isWithinProductionSizeLimit;
   window.getSpecMaxQuantityByModule = getSpecMaxQuantityByModule;
@@ -812,6 +988,8 @@
   window.getSuperRushMaxProvidedQuantityByModule = getSuperRushMaxProvidedQuantityByModule;
   window.isSuperRushUnavailableByModule = isSuperRushUnavailableByModule;
   window.getSuperRushUnavailableMessage = getSuperRushUnavailableMessage;
+  window.getRushRateByQuantity = getRushRateByQuantity;
+  window.getSuperRushRateByQuantity = getSuperRushRateByQuantity;
   window.applyUrgentPrice = applyUrgentPrice;
   window.applyExtraFees = applyExtraFees;
   window.roundPrice = roundPrice;
