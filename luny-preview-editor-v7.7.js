@@ -1,4 +1,4 @@
-/* LUNY 滿版底色修正版 v7.6：
+/* LUNY 滿版底色修正版 v7.7：
    修正：
    1. 不再把滿版底色直接補畫到 canvasGuides 本體，避免縮放/拖曳時閃爍。
    2. 改用獨立透明 overlay canvas，滿版底色與提示文字固定在上層。
@@ -231,7 +231,7 @@
     }
     if(note){
       note.textContent = full
-        ? (isEdgeColorEnabled() ? '已套用色票顏色，會將邊框延伸至灰色出血線。' : '預設透明：不額外上色，保留客戶自行預留的出血。')
+        ? '預設為白色，請自行套用想要的滿版顏色'
         : '加白邊固定使用白色邊框。';
     }
     scheduleOverlay();
@@ -424,7 +424,7 @@
 })();
 
 
-/* LUNY V7.6 修正：
+/* LUNY V7.7 修正：
    滿版底色預設透明不補色，不用透明色去畫。
    因為 V5 會先把 bgColor 白底畫進 canvas，透明色無法抵消白底。
    只有勾選 #edgeColorEnabled 時，才會把滿版底色圈套用到預覽、縮圖、print/cut。 */
@@ -444,14 +444,14 @@
       box.style.margin = "8px 0 6px";
       box.style.fontSize = "13px";
       box.style.color = "#555";
-      box.innerHTML = '<input type="checkbox" id="edgeColorEnabled"> 套用滿版底色顏色';
+      box.innerHTML = '<input type="checkbox" id="edgeColorEnabled"> 套用滿版底色 / 邊框顏色';
       var target = color.closest("label") || color;
       wrap.insertBefore(box, target);
 
       var input = $("edgeColorEnabled");
       input.addEventListener("change", function(){
-        color.disabled = false;
-        color.style.opacity = "1";
+        color.disabled = !input.checked;
+        color.style.opacity = input.checked ? "1" : "0.45";
         try{
           var evt = new Event("input", { bubbles:true });
           color.dispatchEvent(evt);
@@ -460,9 +460,9 @@
     }
 
     var enabled = $("edgeColorEnabled");
-    if(enabled && !enabled.checked){
-      color.disabled = false;
-      color.style.opacity = "1";
+    if(enabled){
+      color.disabled = !enabled.checked;
+      color.style.opacity = enabled.checked ? "1" : "0.45";
     }
   }
 
@@ -479,6 +479,77 @@
   window.addEventListener("load", function(){
     ensureEdgeColorToggle();
     setTimeout(ensureEdgeColorToggle, 300);
+  });
+})();
+
+
+
+/* LUNY V7.7 UI 修正：
+   滿版底色 / 邊框顏色：打勾後才啟用色票，並維持提示文案。 */
+(function(){
+  function $(id){ return document.getElementById(id); }
+
+  function syncEdgeColorUIV77(){
+    var wrap = $("edgeColorWrap");
+    var color = $("edgeColor");
+    var enabled = $("edgeColorEnabled");
+    var label = $("edgeColorLabel");
+    var note = $("edgeColorNote");
+
+    if(label) label.textContent = "滿版底色 / 邊框顏色：";
+    if(note) note.textContent = "預設為白色，請自行套用想要的滿版顏色";
+
+    if(!color || !enabled) return;
+
+    color.disabled = !enabled.checked;
+    color.style.opacity = enabled.checked ? "1" : "0.45";
+    color.style.cursor = enabled.checked ? "pointer" : "not-allowed";
+
+    if(!color.value || color.value === "transparent"){
+      color.value = "#ffffff";
+    }
+
+    if(wrap){
+      wrap.style.display = ((document.querySelector('input[name="edgeOption"]:checked')?.value || "off") === "off") ? "block" : "none";
+    }
+  }
+
+  function bindV77(){
+    var enabled = $("edgeColorEnabled");
+    var color = $("edgeColor");
+
+    if(enabled && !enabled.__lunyV77Bound){
+      enabled.__lunyV77Bound = true;
+      enabled.addEventListener("change", function(){
+        syncEdgeColorUIV77();
+        try{
+          if(color){
+            color.dispatchEvent(new Event("input", { bubbles:true }));
+            color.dispatchEvent(new Event("change", { bubbles:true }));
+          }
+        }catch(e){}
+      });
+    }
+
+    document.querySelectorAll('input[name="edgeOption"]').forEach(function(el){
+      if(el.__lunyV77Bound) return;
+      el.__lunyV77Bound = true;
+      el.addEventListener("change", function(){
+        setTimeout(syncEdgeColorUIV77, 0);
+      });
+    });
+
+    syncEdgeColorUIV77();
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(bindV77, 0);
+    setTimeout(bindV77, 300);
+  });
+  window.addEventListener("load", function(){
+    setTimeout(bindV77, 0);
+    setTimeout(bindV77, 300);
+    setTimeout(bindV77, 1000);
   });
 })();
 
