@@ -1,4 +1,4 @@
-/* LUNY 滿版底色修正版 v7.7：
+/* LUNY 滿版底色修正版 v7.8：
    修正：
    1. 不再把滿版底色直接補畫到 canvasGuides 本體，避免縮放/拖曳時閃爍。
    2. 改用獨立透明 overlay canvas，滿版底色與提示文字固定在上層。
@@ -105,6 +105,72 @@
     ctx.restore();
   }
 
+  function drawDimensionMarkers(ctx,W,H,cm2px){
+    try{
+      const wInput = $('widthCm');
+      const hInput = $('heightCm');
+      const widthCm = Math.max(0.1, parseFloat(wInput?.value || '0'));
+      const heightCm = Math.max(0.1, parseFloat(hInput?.value || '0'));
+
+      const b = BLEED_CM * cm2px;
+      const cutX1 = b;
+      const cutY1 = b;
+      const cutX2 = W - b;
+      const cutY2 = H - b;
+
+      const labelFont = Math.max(11, Math.min(16, W * 0.028));
+      const lineW = Math.max(1.6, W * 0.0032);
+      const tick = Math.max(8, Math.min(16, W * 0.028));
+      const pad = Math.max(10, Math.min(20, W * 0.035));
+
+      function haloText(text,x,y,rotate){
+        ctx.save();
+        ctx.translate(x,y);
+        if(rotate) ctx.rotate(rotate);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `700 ${labelFont}px "Noto Sans TC", sans-serif`;
+        ctx.lineJoin = 'round';
+        ctx.miterLimit = 2;
+        ctx.strokeStyle = 'rgba(255,255,255,0.96)';
+        ctx.lineWidth = Math.max(4, labelFont * 0.34);
+        ctx.strokeText(text,0,0);
+        ctx.fillStyle = '#4b5563';
+        ctx.fillText(text,0,0);
+        ctx.restore();
+      }
+
+      function strokeLine(points){
+        ctx.save();
+        ctx.strokeStyle = '#4b5563';
+        ctx.lineWidth = lineW;
+        ctx.lineCap = 'round';
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(points[0][0], points[0][1]);
+        for(let i=1;i<points.length;i++) ctx.lineTo(points[i][0], points[i][1]);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 下方寬度標示，畫在最外圈內側，避免被滿版底色蓋住。
+      const by = Math.max(8, Math.min(H - 8, H - pad));
+      strokeLine([[cutX1,by],[cutX2,by]]);
+      strokeLine([[cutX1,by-tick/2],[cutX1,by+tick/2]]);
+      strokeLine([[cutX2,by-tick/2],[cutX2,by+tick/2]]);
+      haloText(`${Number.isInteger(widthCm) ? widthCm.toFixed(0) : widthCm.toFixed(1)}cm`, W/2, Math.max(labelFont, by - labelFont*0.95), 0);
+
+      // 左側高度標示。
+      const lx = Math.max(8, Math.min(W - 8, pad));
+      strokeLine([[lx,cutY1],[lx,cutY2]]);
+      strokeLine([[lx-tick/2,cutY1],[lx+tick/2,cutY1]]);
+      strokeLine([[lx-tick/2,cutY2],[lx+tick/2,cutY2]]);
+      haloText(`${Number.isInteger(heightCm) ? heightCm.toFixed(0) : heightCm.toFixed(1)}cm`, Math.min(W - labelFont, lx + labelFont*1.15), H/2, -Math.PI/2);
+    }catch(e){
+      console.warn('[LUNY] 尺寸標記重畫失敗：', e);
+    }
+  }
+
   function drawEdgeRing(ctx,W,H,cm2px,color,withGuideLines,withWarning){
     const shapeValue = getShapeValue();
     const b = BLEED_CM * cm2px;
@@ -142,6 +208,10 @@
       stroke(bleedW,bleedH,'#888888',4,[8,8]);
       stroke(cutW,cutH,'#D3162D',4,[]);
       stroke(safeW,safeH,'#32CD32',4,[8,8]);
+    }
+
+    if(withGuideLines){
+      drawDimensionMarkers(ctx,W,H,cm2px);
     }
 
     if(withWarning){
@@ -424,7 +494,7 @@
 })();
 
 
-/* LUNY V7.7 修正：
+/* LUNY V7.8 修正：
    滿版底色預設透明不補色，不用透明色去畫。
    因為 V5 會先把 bgColor 白底畫進 canvas，透明色無法抵消白底。
    只有勾選 #edgeColorEnabled 時，才會把滿版底色圈套用到預覽、縮圖、print/cut。 */
@@ -484,7 +554,7 @@
 
 
 
-/* LUNY V7.7 UI 修正：
+/* LUNY V7.8 UI 修正：
    滿版底色 / 邊框顏色：打勾後才啟用色票，並維持提示文案。 */
 (function(){
   function $(id){ return document.getElementById(id); }
