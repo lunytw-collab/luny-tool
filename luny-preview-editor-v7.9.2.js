@@ -1,4 +1,4 @@
-/* LUNY 滿版底色補丁 v7.9.2：沿用 v7.9，僅配合主程式 v7.9.2 版本號 */
+/* LUNY 滿版底色補丁 v7.9.6：沿用 v7.9，僅配合主程式 v7.9.6 版本號 */
 /* LUNY 滿版底色修正版 v7.9：
    修正：
    1. 不再把滿版底色直接補畫到 canvasGuides 本體，避免縮放/拖曳時閃爍。
@@ -65,46 +65,7 @@
     }
   }
 
-  function drawTopWarning(ctx,W,H,b,gap,cm2px,safeW,safeH){
-    const lines = [
-      '背景 / 底色請延伸到灰線，避免裁切後白邊',
-      isEdgeColorEnabled() ? '已套用滿版底色：會補到最外圈灰線' : '未套用滿版底色：請自行把圖片放大到灰線'
-    ];
-    ctx.save();
-    let fontPx = Math.max(12, Math.min(18, W * 0.032));
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = `700 ${fontPx}px "Noto Sans TC", sans-serif`;
-    const maxAllowedW = Math.min(W * 0.86, safeW * 0.96);
-    function maxTextW(){ return Math.max(...lines.map(t=>ctx.measureText(t).width)); }
-    while(maxTextW() > maxAllowedW && fontPx > 10){
-      fontPx *= 0.94;
-      ctx.font = `700 ${fontPx}px "Noto Sans TC", sans-serif`;
-    }
-    const lineH = fontPx * 1.25;
-    const padX = fontPx * 0.8;
-    const padY = fontPx * 0.45;
-    const boxW = Math.min(maxAllowedW, maxTextW() + padX * 2);
-    const boxH = lines.length * lineH + padY * 2;
-    let x = (W - boxW) / 2;
-    let y = Math.max(6, b + 6);
-    if(H < 360) y = Math.max(4, b * 0.35);
-
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.strokeStyle = 'rgba(47,139,57,0.75)';
-    ctx.lineWidth = Math.max(1.4, fontPx * 0.1);
-    ctx.beginPath();
-    roundedRectPath(ctx,x,y,boxW,boxH,Math.min(boxH/2,14));
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    lines.forEach((line,i)=>{
-      ctx.fillStyle = i === 0 ? '#1f8f35' : '#9a5a00';
-      ctx.fillText(line, W/2, y + padY + lineH/2 + i*lineH);
-    });
-    ctx.restore();
-  }
+  function drawTopWarning(ctx,W,H,b,gap,cm2px,safeW,safeH){/* v7.9.6：預覽畫布 overlay 不再顯示提示文字，避免遮住客戶圖片。 */return;}
 
   function drawDimensionMarkers(ctx,W,H,cm2px){
     try{
