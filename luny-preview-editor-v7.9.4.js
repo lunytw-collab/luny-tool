@@ -1,4 +1,4 @@
-/* LUNY 滿版底色補丁 v7.9.12：沿用 v7.9，僅配合主程式 v7.9.12 版本號 */
+/* LUNY 滿版底色補丁 v7.9.13：沿用 v7.9，僅配合主程式 v7.9.13 版本號 */
 /* LUNY 滿版底色修正版 v7.9：
    修正：
    1. 不再把滿版底色直接補畫到 canvasGuides 本體，避免縮放/拖曳時閃爍。
@@ -65,7 +65,7 @@
     }
   }
 
-  function drawTopWarning(ctx,W,H,b,gap,cm2px,safeW,safeH){/* v7.9.12：預覽畫布 overlay 不再顯示提示文字，避免遮住客戶圖片。 */return;}
+  function drawTopWarning(ctx,W,H,b,gap,cm2px,safeW,safeH){/* v7.9.13：預覽畫布 overlay 不再顯示提示文字，避免遮住客戶圖片。 */return;}
 
   function drawDimensionMarkers(ctx,W,H,cm2px){
     try{
