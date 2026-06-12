@@ -407,6 +407,7 @@ function boot(){
   }catch(e){}
 }
 
+// v25：延長 GAS 查詢等待時間，避免 LockService 造成 v24 6 秒 timeout 後永遠補不到 Drive 連結。
 // v24：快速顯示明細＋手機原生查看檔案攔截＋延後補 Drive 連結。
 // v23：1SHOP 完成頁有時會在 load 事件後才載入外部 JS。
 // 若只等 load，可能整支完成頁程式不啟動，導致 LUNY 訂購明細不顯示。
@@ -636,7 +637,7 @@ function openFirstLunyFileLink(ev){
     try{
       if(!window.__LUNY_FILE_LINK_WAIT_ALERTED__){
         window.__LUNY_FILE_LINK_WAIT_ALERTED__=1;
-        alert('檔案連結還在載入中，請稍候 5～10 秒後再點一次。');
+        alert('檔案連結還在查詢中，請稍候。若超過 1～2 分鐘仍無法開啟，請確認 GAS 已部署新版，且 orders 表內有 folderLink / printFileLink。');
         setTimeout(()=>{window.__LUNY_FILE_LINK_WAIT_ALERTED__=0;},8000);
       }
     }catch(e){}
@@ -801,7 +802,9 @@ function render(d, force){
 }
 
 function fetchOrderSummaryWithTimeout(order,ms){
-  ms=Number(ms||6000);
+  // v25：GAS 完成頁可能同時在做 bindOrderNo，會被 LockService 擋 30～60 秒。
+  // v24 的 6 秒 timeout 太短，會導致檔案連結永遠補不上。
+  ms=Number(ms||45000);
   const controller=(typeof AbortController!=="undefined")?new AbortController():null;
   const timer=setTimeout(()=>{try{controller&&controller.abort();}catch(e){}},ms);
   return fetch(GAS_URL,{
@@ -839,7 +842,7 @@ async function start(){
   }
 
   try{
-    let r=await fetchOrderSummaryWithTimeout(order,6000);
+    let r=await fetchOrderSummaryWithTimeout(order,45000);
 
     if(r&&r.ok&&Array.isArray(r.items)&&r.items.length){
       setFirstLunyFileLink(r);
@@ -860,7 +863,7 @@ function boot(){
   booted=1;
   installNativeFileClickInterceptor();
 
-  [200,800,1800,3000,4500,6500,9000,12000,16000,24000,36000,52000,70000].forEach(ms=>{
+  [200,800,1800,3000,4500,6500,9000,12000,16000,24000,36000,52000,70000,90000,120000,150000,180000].forEach(ms=>{
     setTimeout(start,ms);
     setTimeout(()=>{try{ if(window.__LUNY_LAST_ORDER_SUMMARY__) patchNativeFileLinks(window.__LUNY_LAST_ORDER_SUMMARY__); }catch(e){}},ms+250);
   });
@@ -876,6 +879,7 @@ function boot(){
   }catch(e){}
 }
 
+// v25：延長 GAS 查詢等待時間，避免 LockService 造成 v24 6 秒 timeout 後永遠補不到 Drive 連結。
 // v24：快速顯示明細＋手機原生查看檔案攔截＋延後補 Drive 連結。
 // v23：1SHOP 完成頁有時會在 load 事件後才載入外部 JS。
 // 若只等 load，可能整支完成頁程式不啟動，導致 LUNY 訂購明細不顯示。
