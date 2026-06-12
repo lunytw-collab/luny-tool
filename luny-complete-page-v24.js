@@ -353,7 +353,7 @@ async function send(){
     }),
     orderStatus:"completed",
     confirmed:true,
-    source:"complete_v22_mobile_file_link_fix",
+    source:"complete_v23_boot_fix",
 
     // v20：同時送 root-level 與 page 物件，避免 GAS 端只讀 pagePath 時拿到空值，
     // 造成 /order?l2=... 被誤判為 not_real_complete_page。
@@ -407,7 +407,15 @@ function boot(){
   }catch(e){}
 }
 
-document.readyState==="complete"?boot():addEventListener("load",boot);
+// v24：快速顯示明細＋手機原生查看檔案攔截＋延後補 Drive 連結。
+// v23：1SHOP 完成頁有時會在 load 事件後才載入外部 JS。
+// 若只等 load，可能整支完成頁程式不啟動，導致 LUNY 訂購明細不顯示。
+if(document.readyState==="loading"){
+  document.addEventListener("DOMContentLoaded",boot);
+  addEventListener("load",boot);
+}else{
+  setTimeout(boot,0);
+}
 })();
 
 (()=>{
@@ -620,10 +628,21 @@ function isLunyNativeFileText(el){
 
 function openFirstLunyFileLink(ev){
   let first=window.__LUNY_FIRST_FILE_LINK__||'';
-  if(!first||!/^https?:\/\//i.test(first))return false;
   try{
     if(ev){ev.preventDefault();ev.stopPropagation();ev.stopImmediatePropagation&&ev.stopImmediatePropagation();}
   }catch(e){}
+
+  if(!first||!/^https?:\/\//i.test(first)){
+    try{
+      if(!window.__LUNY_FILE_LINK_WAIT_ALERTED__){
+        window.__LUNY_FILE_LINK_WAIT_ALERTED__=1;
+        alert('檔案連結還在載入中，請稍候 5～10 秒後再點一次。');
+        setTimeout(()=>{window.__LUNY_FILE_LINK_WAIT_ALERTED__=0;},8000);
+      }
+    }catch(e){}
+    return false;
+  }
+
   try{ window.open(first,'_blank','noopener'); }catch(e){ location.href=first; }
   return true;
 }
@@ -632,10 +651,7 @@ function installNativeFileClickInterceptor(){
   if(window.__LUNY_NATIVE_FILE_CLICK_INTERCEPTOR__)return;
   window.__LUNY_NATIVE_FILE_CLICK_INTERCEPTOR__=1;
 
-  document.addEventListener('click',function(ev){
-    let first=window.__LUNY_FIRST_FILE_LINK__||'';
-    if(!first||!/^https?:\/\//i.test(first))return;
-
+  function handler(ev){
     let path=[];
     try{ path=ev.composedPath?ev.composedPath():[]; }catch(e){}
     if(!path.length){
@@ -647,23 +663,24 @@ function installNativeFileClickInterceptor(){
       if(!el||el===document||el===window)continue;
       if(el.getAttribute&&el.getAttribute('data-luny-file-link')==='1')return;
 
-      let tag=String(el.tagName||'').toUpperCase();
       let href='';
       try{ href=String((el.getAttribute&&el.getAttribute('href'))||el.href||''); }catch(e){}
-      let hasNativeFileText=isLunyNativeFileText(el);
+      let text='';
+      try{ text=clean((el.innerText||el.textContent||el.value||(el.getAttribute&&el.getAttribute('aria-label'))||'')); }catch(e){}
+
+      let hasNativeFileText=/查看檔案|檔案|設計檔|下載檔案/.test(text);
       let badHref=href&&(/luny\.tw/i.test(href)||href==='#'||href.indexOf('javascript:')===0);
 
-      if(hasNativeFileText || (badHref&&/查看檔案|檔案|設計檔|下載檔案/.test(clean((el.innerText||el.textContent||''))))){
-        openFirstLunyFileLink(ev);
-        return;
-      }
-
-      if((tag==='A'||tag==='BUTTON')&&hasNativeFileText){
+      if(hasNativeFileText || (badHref&&/查看檔案|檔案|設計檔|下載檔案/.test(text))){
         openFirstLunyFileLink(ev);
         return;
       }
     }
-  },true);
+  }
+
+  ['pointerdown','touchstart','mousedown','click'].forEach(type=>{
+    document.addEventListener(type,handler,true);
+  });
 }
 
 function patchNativeFileLinks(d){
@@ -699,7 +716,9 @@ function patchNativeFileLinks(d){
   }catch(e){}
 }
 
-function render(d){
+function render(d, force){
+  const oldBox=document.getElementById("lunyOrderDoneSummary");
+  if(oldBox&&force){ try{oldBox.remove();}catch(e){} done=0; }
   if(done||document.getElementById("lunyOrderDoneSummary"))return;
 
   let items=Array.isArray(d.items)?d.items:[];
@@ -781,8 +800,23 @@ function render(d){
     : document.body.prepend(box);
 }
 
+function fetchOrderSummaryWithTimeout(order,ms){
+  ms=Number(ms||6000);
+  const controller=(typeof AbortController!=="undefined")?new AbortController():null;
+  const timer=setTimeout(()=>{try{controller&&controller.abort();}catch(e){}},ms);
+  return fetch(GAS_URL,{
+    method:"POST",
+    headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body:JSON.stringify({type:"getOrderSummaryByOrderNo",orderNo:order}),
+    signal:controller?controller.signal:undefined
+  }).then(x=>x.json()).finally(()=>clearTimeout(timer));
+}
+
 async function start(){
-  if(loading||done)return;
+  if(loading)return;
+
+  // 已經拿到 Drive 連結後，就不用再重複查詢。
+  if(done&&window.__LUNY_FIRST_FILE_LINK__)return;
 
   loading=1;
 
@@ -798,25 +832,24 @@ async function start(){
     return;
   }
 
+  // v24：先用本機暫存快速顯示明細，避免 GAS 鎖定時等 30～60 秒才出現。
+  if(!done){
+    let p=localPayload();
+    if(p)render(Object.assign({},p,{orderNo:order,mode:"local_fast"}));
+  }
+
   try{
-    let r=await fetch(GAS_URL,{
-      method:"POST",
-      headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body:JSON.stringify({
-        type:"getOrderSummaryByOrderNo",
-        orderNo:order
-      })
-    }).then(x=>x.json());
+    let r=await fetchOrderSummaryWithTimeout(order,6000);
 
     if(r&&r.ok&&Array.isArray(r.items)&&r.items.length){
-      render(Object.assign({},r,{mode:"GAS"}));
+      setFirstLunyFileLink(r);
+      patchNativeFileLinks(r);
+      // 若先前是 local_fast，GAS 回來後重畫一次，補上查看資料夾 / 印刷檔 / 切割檔。
+      render(Object.assign({},r,{mode:"GAS"}), true);
       loading=0;
       return;
     }
   }catch(e){}
-
-  let p=localPayload();
-  if(p)render(Object.assign({},p,{orderNo:order}));
 
   loading=0;
 }
@@ -827,7 +860,7 @@ function boot(){
   booted=1;
   installNativeFileClickInterceptor();
 
-  [800,1800,3000,4500,6500,9000,12000,16000].forEach(ms=>{
+  [200,800,1800,3000,4500,6500,9000,12000,16000,24000,36000,52000,70000].forEach(ms=>{
     setTimeout(start,ms);
     setTimeout(()=>{try{ if(window.__LUNY_LAST_ORDER_SUMMARY__) patchNativeFileLinks(window.__LUNY_LAST_ORDER_SUMMARY__); }catch(e){}},ms+250);
   });
@@ -843,5 +876,13 @@ function boot(){
   }catch(e){}
 }
 
-document.readyState==="complete"?boot():addEventListener("load",boot);
+// v24：快速顯示明細＋手機原生查看檔案攔截＋延後補 Drive 連結。
+// v23：1SHOP 完成頁有時會在 load 事件後才載入外部 JS。
+// 若只等 load，可能整支完成頁程式不啟動，導致 LUNY 訂購明細不顯示。
+if(document.readyState==="loading"){
+  document.addEventListener("DOMContentLoaded",boot);
+  addEventListener("load",boot);
+}else{
+  setTimeout(boot,0);
+}
 })();
