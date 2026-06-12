@@ -145,6 +145,7 @@ function drawPreview(){resizePreviewCanvas();handles=drawAll(ctxG,cG,CM2PX,{incl
     print:{filename:`${base}_印刷檔.png`,dataURL:printDataURL},
     cut:{filename:`${base}_切割檔.png`,dataURL:cutDataURL}
   };
+};
 })();
 
 /* ===== LUNY 滿版底色補丁已整合於同一檔案：開始 ===== */
