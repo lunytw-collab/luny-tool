@@ -353,7 +353,7 @@ async function send(){
     }),
     orderStatus:"completed",
     confirmed:true,
-    source:"complete_v20_order_path_fix",
+    source:"complete_v22_mobile_file_link_fix",
 
     // v20：同時送 root-level 與 page 物件，避免 GAS 端只讀 pagePath 時拿到空值，
     // 造成 /order?l2=... 被誤判為 not_real_complete_page。
@@ -599,34 +599,102 @@ function fileButtons(i){
     </div>`;
 }
 
+
+function setFirstLunyFileLink(d){
+  try{
+    let first=firstFileLinkFromItems(Array.isArray(d&&d.items)?d.items:[]);
+    if(first&&/^https?:\/\//i.test(first)){
+      window.__LUNY_FIRST_FILE_LINK__=first;
+    }
+  }catch(e){}
+}
+
+function isLunyNativeFileText(el){
+  try{
+    let text=clean((el&&((el.innerText||el.textContent||el.value||el.getAttribute&&el.getAttribute('aria-label'))))||'');
+    return /查看檔案|檔案|設計檔|下載檔案/.test(text);
+  }catch(e){
+    return false;
+  }
+}
+
+function openFirstLunyFileLink(ev){
+  let first=window.__LUNY_FIRST_FILE_LINK__||'';
+  if(!first||!/^https?:\/\//i.test(first))return false;
+  try{
+    if(ev){ev.preventDefault();ev.stopPropagation();ev.stopImmediatePropagation&&ev.stopImmediatePropagation();}
+  }catch(e){}
+  try{ window.open(first,'_blank','noopener'); }catch(e){ location.href=first; }
+  return true;
+}
+
+function installNativeFileClickInterceptor(){
+  if(window.__LUNY_NATIVE_FILE_CLICK_INTERCEPTOR__)return;
+  window.__LUNY_NATIVE_FILE_CLICK_INTERCEPTOR__=1;
+
+  document.addEventListener('click',function(ev){
+    let first=window.__LUNY_FIRST_FILE_LINK__||'';
+    if(!first||!/^https?:\/\//i.test(first))return;
+
+    let path=[];
+    try{ path=ev.composedPath?ev.composedPath():[]; }catch(e){}
+    if(!path.length){
+      let n=ev.target;
+      while(n&&n!==document){ path.push(n); n=n.parentNode; }
+    }
+
+    for(let el of path){
+      if(!el||el===document||el===window)continue;
+      if(el.getAttribute&&el.getAttribute('data-luny-file-link')==='1')return;
+
+      let tag=String(el.tagName||'').toUpperCase();
+      let href='';
+      try{ href=String((el.getAttribute&&el.getAttribute('href'))||el.href||''); }catch(e){}
+      let hasNativeFileText=isLunyNativeFileText(el);
+      let badHref=href&&(/luny\.tw/i.test(href)||href==='#'||href.indexOf('javascript:')===0);
+
+      if(hasNativeFileText || (badHref&&/查看檔案|檔案|設計檔|下載檔案/.test(clean((el.innerText||el.textContent||''))))){
+        openFirstLunyFileLink(ev);
+        return;
+      }
+
+      if((tag==='A'||tag==='BUTTON')&&hasNativeFileText){
+        openFirstLunyFileLink(ev);
+        return;
+      }
+    }
+  },true);
+}
+
 function patchNativeFileLinks(d){
   let items=Array.isArray(d&&d.items)?d.items:[];
   let first=firstFileLinkFromItems(items);
   if(!first)return;
 
+  setFirstLunyFileLink(d);
+  installNativeFileClickInterceptor();
+
   try{
-    document.querySelectorAll("a,button").forEach(el=>{
-      let text=clean(el.innerText||el.textContent||el.value||"");
+    document.querySelectorAll("a,button,[role=button],.btn,.button").forEach(el=>{
+      let text=clean(el.innerText||el.textContent||el.value||el.getAttribute&&el.getAttribute('aria-label')||"");
       if(!/查看檔案|檔案|設計檔|下載檔案/.test(text))return;
       if(el.getAttribute&&el.getAttribute("data-luny-file-link")==="1")return;
 
-      if(el.tagName==="A"){
+      if(String(el.tagName||"").toUpperCase()==="A"){
         let href=String(el.getAttribute("href")||el.href||"");
-        // 只修正 1SHOP / LUNY 原生錯誤連結，避免覆蓋我們自己的 Drive 連結
+        // v22：手機版常會用原生 a/父層事件導回 luny.tw，因此不只改 href，也加 capture click 攔截。
         if(!href || /luny\.tw/i.test(href) || href==="#" || href.indexOf("javascript:")===0){
           el.setAttribute("href", first);
           el.setAttribute("target", "_blank");
           el.setAttribute("rel", "noopener");
           el.dataset.lunyPatchedFileLink="1";
         }
-      }else{
-        el.onclick=function(ev){
-          try{ev.preventDefault();ev.stopPropagation();}catch(e){}
-          window.open(first,"_blank","noopener");
-          return false;
-        };
-        el.dataset.lunyPatchedFileLink="1";
       }
+
+      el.addEventListener("click",function(ev){
+        openFirstLunyFileLink(ev);
+      },true);
+      el.dataset.lunyPatchedFileLink="1";
     });
   }catch(e){}
 }
@@ -637,6 +705,7 @@ function render(d){
   let items=Array.isArray(d.items)?d.items:[];
   if(!items.length)return;
 
+  window.__LUNY_LAST_ORDER_SUMMARY__=d;
   patchNativeFileLinks(d);
 
   done=1;
@@ -756,9 +825,11 @@ let booted=0;
 function boot(){
   if(booted)return;
   booted=1;
+  installNativeFileClickInterceptor();
 
   [800,1800,3000,4500,6500,9000,12000,16000].forEach(ms=>{
     setTimeout(start,ms);
+    setTimeout(()=>{try{ if(window.__LUNY_LAST_ORDER_SUMMARY__) patchNativeFileLinks(window.__LUNY_LAST_ORDER_SUMMARY__); }catch(e){}},ms+250);
   });
 
   try{
