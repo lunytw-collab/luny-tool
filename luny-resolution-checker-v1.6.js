@@ -1,5 +1,5 @@
 /*!
- * LUNY Resolution Checker v1.5
+ * LUNY Resolution Checker v1.7
  * File: luny-resolution-checker-v1.js
  *
  * 升級重點：
@@ -20,7 +20,7 @@
   'use strict';
 
   const CONFIG = {
-    version: '1.5.0',
+    version: '1.7.0',
 
     /**
      * before：預覽畫布上方
@@ -187,51 +187,51 @@
       .luny-resolution-notice {
         box-sizing: border-box;
         width: 100%;
-        margin: 8px 0 10px;
-        padding: 10px 12px;
-        border-radius: 12px;
+        margin: 6px 0 8px;
+        padding: 8px 10px;
+        border-radius: 10px;
         font-size: 13px;
-        line-height: 1.5;
-        letter-spacing: .01em;
+        line-height: 1.42;
+        letter-spacing: 0;
       }
 
       .luny-resolution-notice strong {
         display: block;
-        margin-bottom: 5px;
+        margin-bottom: 3px;
         font-size: 14px;
         font-weight: 700;
-        line-height: 1.35;
+        line-height: 1.3;
       }
 
       .luny-resolution-notice ul {
-        margin: 3px 0 0 17px;
+        margin: 2px 0 0 15px;
         padding: 0;
       }
 
       .luny-resolution-notice li {
-        margin: 2px 0;
+        margin: 0;
       }
 
       @media (max-width: 480px) {
         .luny-resolution-notice {
-          margin: 7px 0 9px;
-          padding: 9px 11px;
-          font-size: 13px;
-          line-height: 1.45;
-          border-radius: 11px;
+          margin: 5px 0 7px;
+          padding: 8px 10px;
+          font-size: 12.5px;
+          line-height: 1.38;
+          border-radius: 10px;
         }
 
         .luny-resolution-notice strong {
-          margin-bottom: 4px;
-          font-size: 14px;
+          margin-bottom: 3px;
+          font-size: 13.5px;
         }
 
         .luny-resolution-notice ul {
-          margin-left: 16px;
+          margin-left: 15px;
         }
 
         .luny-resolution-notice li {
-          margin: 1px 0;
+          margin: 0;
         }
       }
 
@@ -475,11 +475,12 @@
     if (contentDpi < CONFIG.dpiWarning || wholeDpi < CONFIG.dpiWarning) {
       return {
         level: 'danger',
-        title: '解析度不足，可能影響印刷',
+        title: '解析度不足',
         suggestions: uniqueList([
-          '請上傳更清晰的 PNG 或 JPG。',
-          '避免放大截圖、LINE 或社群下載圖。',
-          `可重新輸出 3 倍尺寸，例如 ${currentW} × ${currentH} cm 輸出 ${exportW} × ${exportH} cm。`
+          '請上傳更清晰的圖檔。',
+          '避免使用截圖、壓縮圖。',
+          '請將圖檔放大 3 倍尺寸重新轉存。',
+          `例：${currentW} × ${currentH} cm → ${exportW} × ${exportH} cm。`
         ])
       };
     }
@@ -495,9 +496,10 @@
         level: 'warning',
         title: '解析度足夠',
         suggestions: uniqueList([
-          '有文字、Logo 或 QR Code 時，請確認預覽是否清楚。',
-          '避免使用截圖、LINE 或社群下載圖。',
-          `想更清晰，可輸出 3 倍尺寸，例如 ${currentW} × ${currentH} cm 輸出 ${exportW} × ${exportH} cm。`
+          '有文字、Logo、QR Code 時，請確認預覽清楚。',
+          '避免使用截圖、壓縮圖。',
+          '想更清晰，可將圖檔放大 3 倍重新轉存。',
+          `例：${currentW} × ${currentH} cm → ${exportW} × ${exportH} cm。`
         ])
       };
     }
@@ -506,7 +508,7 @@
       level: 'good',
       title: '解析度良好',
       suggestions: uniqueList([
-        '有小字、Logo 或 QR Code 時，請確認預覽是否清楚。'
+        '有小字、Logo、QR Code 時，請確認預覽清楚。'
       ])
     };
   }
@@ -708,6 +710,6 @@
     observeDynamicInputs();
     exposePublicApi();
 
-    console.log('✅ LUNY Resolution Checker v1.5 loaded');
+    console.log('✅ LUNY Resolution Checker v1.7 loaded');
   });
 })();
