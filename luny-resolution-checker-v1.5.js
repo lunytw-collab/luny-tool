@@ -1,5 +1,5 @@
 /*!
- * LUNY Resolution Checker v1.2
+ * LUNY Resolution Checker v1.4
  * File: luny-resolution-checker-v1.js
  *
  * 升級重點：
@@ -20,7 +20,7 @@
   'use strict';
 
   const CONFIG = {
-    version: '1.2.0',
+    version: '1.4.0',
 
     /**
      * before：預覽畫布上方
@@ -202,10 +202,6 @@
         font-weight: 700;
       }
 
-      .luny-resolution-notice .luny-resolution-suggestion-title {
-        font-weight: 700;
-        margin: 4px 0 2px;
-      }
 
       .luny-resolution-notice ul {
         margin: 4px 0 0 18px;
@@ -452,53 +448,38 @@
     if (contentDpi < CONFIG.dpiWarning || wholeDpi < CONFIG.dpiWarning) {
       return {
         level: 'danger',
-        title: '圖片解析度偏低，印出來可能會模糊',
+        title: '解析度不足，將影響印刷效果',
         suggestions: uniqueList([
-          '建議上傳更清晰的原圖，避免直接放大低解析圖片。',
-          '若是自己製圖，請回到 Canva、Illustrator、Photoshop 或其他製圖軟體，重新輸出較大尺寸。',
-          `建議輸出為實際貼紙尺寸的 3 倍以上。${sizeExampleText}`,
-          '建議上傳 PNG 或 JPG 圖檔，避免使用截圖、通訊軟體下載圖或被壓縮過的圖片。',
-          '若圖片內有小字、Logo 或 QR Code，低解析度可能導致印刷後不清楚或無法辨識。',
-          '若確認使用目前圖片製作，印刷結果將以您上傳的圖檔品質為準。'
+          '建議上傳更清晰的 PNG 或 JPG。',
+          '避免直接放大截圖或通訊軟體下載圖片。',
+          '若是自己製圖，建議重新輸出實際尺寸 3 倍以上。'
         ])
       };
     }
 
-    const warningSuggestions = [];
+    const shouldWarn =
+      contentDpi < CONFIG.dpiGood ||
+      hasLargeWhiteMargin ||
+      hasCompressionRisk ||
+      hasBlurRisk;
 
-    if (contentDpi < CONFIG.dpiGood) {
-      warningSuggestions.push('若圖片內含小字、Logo 或 QR Code，建議上傳更清晰原圖。');
-    }
-
-    if (hasLargeWhiteMargin) {
-      warningSuggestions.push('系統偵測到圖片可能有較多白邊，建議先裁掉多餘白邊後再上傳。');
-    }
-
-    if (hasCompressionRisk || hasBlurRisk) {
-      warningSuggestions.push('系統偵測到圖片可能有壓縮痕跡、邊緣模糊或鋸齒感。');
-    }
-
-    if (warningSuggestions.length > 0) {
+    if (shouldWarn) {
       return {
         level: 'warning',
-        title: '圖片尺寸足夠，但請確認原圖畫質',
+        title: '解析度足夠',
         suggestions: uniqueList([
-          ...warningSuggestions,
-          '若圖片內含文字、Logo 或 QR Code，建議回到製圖階段重新輸出較大尺寸。',
-          `建議輸出為實際貼紙尺寸的 3 倍以上。${sizeExampleText}`,
-          '建議上傳 PNG 或 JPG 圖檔，避免使用截圖、社群平台下載圖、LINE 傳過的圖片。',
-          '若確認使用目前圖片製作，印刷結果將以您上傳的圖檔品質為準。'
+          '若有文字、Logo 或 QR Code，請確認預覽畫面是否清楚。',
+          '避免使用截圖、LINE 或社群下載的圖片。',
+          `若想更清晰，製圖時可輸出實際尺寸 3 倍，例如 ${stripDecimal(printWidthCm)} × ${stripDecimal(printHeightCm)} cm 建議輸出 ${stripDecimal(Math.round(printWidthCm * 3 * 10) / 10)} × ${stripDecimal(Math.round(printHeightCm * 3 * 10) / 10)} cm。`
         ])
       };
     }
 
     return {
       level: 'good',
-      title: '圖片解析度良好',
+      title: '解析度良好',
       suggestions: uniqueList([
-        '這張圖片可用於目前尺寸製作，印刷清晰度通常沒有問題。',
-        '若圖片內含小字、Logo 或 QR Code，請確認預覽畫面中文字邊緣是否清楚。',
-        '建議上傳 PNG 或 JPG 圖檔，避免使用截圖、通訊軟體下載圖或被壓縮過的圖片。'
+        '若圖片有小字、Logo 或 QR Code，請確認預覽畫面是否清楚。'
       ])
     };
   }
@@ -511,7 +492,7 @@
     box.style.display = 'block';
 
     const suggestionsHtml = level.suggestions.length
-      ? `<div class="luny-resolution-suggestion-title">建議作法：</div><ul>${level.suggestions.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+      ? `<ul>${level.suggestions.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
       : '';
 
     box.innerHTML = `
@@ -700,6 +681,6 @@
     observeDynamicInputs();
     exposePublicApi();
 
-    console.log('✅ LUNY Resolution Checker v1.2 loaded');
+    console.log('✅ LUNY Resolution Checker v1.4 loaded');
   });
 })();
