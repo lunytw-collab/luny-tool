@@ -1,5 +1,5 @@
 /*!
- * LUNY Resolution Checker v1.7
+ * LUNY Resolution Checker v1.8
  * File: luny-resolution-checker-v1.js
  *
  * 升級重點：
@@ -20,7 +20,7 @@
   'use strict';
 
   const CONFIG = {
-    version: '1.7.0',
+    version: '1.8.0',
 
     /**
      * before：預覽畫布上方
@@ -32,23 +32,23 @@
      * DPI 門檻
      */
     dpiGood: 300,
-    dpiWarning: 200,
+    dpiWarning: 180,
 
     /**
      * 有效圖案區佔比低於此值，代表可能有大量白邊
      */
-    contentAreaRatioWarning: 0.42,
+    contentAreaRatioWarning: 0.30,
 
     /**
      * 有效圖案寬或高低於整張圖此比例，提醒可能有白邊
      */
-    contentSideRatioWarning: 0.72,
+    contentSideRatioWarning: 0.58,
 
     /**
      * 畫質風險門檻
      */
-    compressionRiskWarning: 0.32,
-    blurRiskWarning: 0.58,
+    compressionRiskWarning: 0.46,
+    blurRiskWarning: 0.72,
 
     /**
      * 預設不阻擋送出，只提醒
@@ -460,9 +460,13 @@
         result.contentBox.sideRatioY < CONFIG.contentSideRatioWarning
       );
 
+    /**
+     * v1.8 調整：
+     * - JPG 不再自動判定為黃色，因為多數客戶上傳照片本來就是 JPG
+     * - 只有偵測到「明顯壓縮/鋸齒」才提醒
+     */
     const hasCompressionRisk =
-      result.quality.compressionRisk >= CONFIG.compressionRiskWarning ||
-      result.fileRisk.isJpg;
+      result.quality.compressionRisk >= CONFIG.compressionRiskWarning;
 
     const hasBlurRisk =
       result.quality.blurRisk >= CONFIG.blurRiskWarning;
@@ -472,7 +476,15 @@
     const currentW = stripDecimal(printWidthCm);
     const currentH = stripDecimal(printHeightCm);
 
-    if (contentDpi < CONFIG.dpiWarning || wholeDpi < CONFIG.dpiWarning) {
+    /**
+     * 紅色：只給真正明顯不足的圖
+     * 避免過度嚇跑客戶
+     */
+    const isClearlyLowResolution =
+      contentDpi < CONFIG.dpiWarning ||
+      wholeDpi < CONFIG.dpiWarning;
+
+    if (isClearlyLowResolution) {
       return {
         level: 'danger',
         title: '解析度不足',
@@ -485,11 +497,26 @@
       };
     }
 
-    const shouldWarn =
+    /**
+     * 黃色：可製作，但建議確認
+     * 條件需較明確，避免清晰圖片一直被打成黃色
+     */
+    const isMediumResolution =
       contentDpi < CONFIG.dpiGood ||
-      hasLargeWhiteMargin ||
+      wholeDpi < CONFIG.dpiGood;
+
+    /**
+     * 白邊本身不一定代表低畫質。
+     * 只有在有效圖案 DPI 也不高時，才納入黃色提醒。
+     */
+    const hasWhiteMarginRisk =
+      hasLargeWhiteMargin && contentDpi < 360;
+
+    const shouldWarn =
+      isMediumResolution ||
       hasCompressionRisk ||
-      hasBlurRisk;
+      hasBlurRisk ||
+      hasWhiteMarginRisk;
 
     if (shouldWarn) {
       return {
@@ -710,6 +737,6 @@
     observeDynamicInputs();
     exposePublicApi();
 
-    console.log('✅ LUNY Resolution Checker v1.7 loaded');
+    console.log('✅ LUNY Resolution Checker v1.8 loaded');
   });
 })();
