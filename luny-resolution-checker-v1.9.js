@@ -1,5 +1,5 @@
 /*!
- * LUNY Resolution Checker v1.8
+ * LUNY Resolution Checker v1.9
  * File: luny-resolution-checker-v1.js
  *
  * 升級重點：
@@ -20,7 +20,7 @@
   'use strict';
 
   const CONFIG = {
-    version: '1.8.0',
+    version: '1.9.0',
 
     /**
      * before：預覽畫布上方
@@ -461,15 +461,33 @@
       );
 
     /**
-     * v1.8 調整：
-     * - JPG 不再自動判定為黃色，因為多數客戶上傳照片本來就是 JPG
-     * - 只有偵測到「明顯壓縮/鋸齒」才提醒
+     * v1.9 判定原則：
+     * - 不確定但可印：黃色
+     * - 真的可能糊或明顯鋸齒：紅色
+     * - 清楚且風險低：綠色
+     *
+     * 注意：
+     * - JPG 不會自動變黃色，因為多數客戶上傳照片本來就是 JPG。
+     * - 白邊不等於低畫質，只有有效圖案解析度也不高時才提醒。
      */
-    const hasCompressionRisk =
+
+    const isMildlyJaggy =
       result.quality.compressionRisk >= CONFIG.compressionRiskWarning;
 
-    const hasBlurRisk =
+    const isClearlyJaggy =
+      result.quality.compressionRisk >= 0.62;
+
+    const isExtremelyJaggy =
+      result.quality.compressionRisk >= 0.74;
+
+    const isMildlyBlurry =
       result.quality.blurRisk >= CONFIG.blurRiskWarning;
+
+    const isVeryBlurry =
+      result.quality.blurRisk >= 0.84;
+
+    const hasWhiteMarginRisk =
+      hasLargeWhiteMargin && contentDpi < 360;
 
     const exportW = stripDecimal(Math.round(printWidthCm * 3 * 10) / 10);
     const exportH = stripDecimal(Math.round(printHeightCm * 3 * 10) / 10);
@@ -477,21 +495,25 @@
     const currentH = stripDecimal(printHeightCm);
 
     /**
-     * 紅色：只給真正明顯不足的圖
-     * 避免過度嚇跑客戶
+     * 紅色：真的不足才提醒
+     * 1. 有效圖案或整張圖明顯低於 180 DPI
+     * 2. 低於 240 DPI 且有明顯鋸齒或明顯模糊
+     * 3. 低於 300 DPI 且鋸齒非常明顯
      */
     const isClearlyLowResolution =
       contentDpi < CONFIG.dpiWarning ||
-      wholeDpi < CONFIG.dpiWarning;
+      wholeDpi < CONFIG.dpiWarning ||
+      (contentDpi < 240 && (isClearlyJaggy || isVeryBlurry)) ||
+      (contentDpi < CONFIG.dpiGood && isExtremelyJaggy);
 
     if (isClearlyLowResolution) {
       return {
         level: 'danger',
         title: '解析度不足',
         suggestions: uniqueList([
-          '請上傳更清晰的圖檔。',
+          '建議更換更清晰的圖檔。',
           '避免使用截圖、壓縮圖。',
-          '請將圖檔放大 3 倍尺寸重新轉存。',
+          '有原始設計檔時，請輸出 3 倍尺寸。',
           `例：${currentW} × ${currentH} cm → ${exportW} × ${exportH} cm。`
         ])
       };
@@ -499,23 +521,13 @@
 
     /**
      * 黃色：可製作，但建議確認
-     * 條件需較明確，避免清晰圖片一直被打成黃色
+     * 這層承接大多數「可印，但細節可能要注意」的圖片。
      */
-    const isMediumResolution =
-      contentDpi < CONFIG.dpiGood ||
-      wholeDpi < CONFIG.dpiGood;
-
-    /**
-     * 白邊本身不一定代表低畫質。
-     * 只有在有效圖案 DPI 也不高時，才納入黃色提醒。
-     */
-    const hasWhiteMarginRisk =
-      hasLargeWhiteMargin && contentDpi < 360;
-
     const shouldWarn =
-      isMediumResolution ||
-      hasCompressionRisk ||
-      hasBlurRisk ||
+      contentDpi < CONFIG.dpiGood ||
+      wholeDpi < CONFIG.dpiGood ||
+      isMildlyJaggy ||
+      isMildlyBlurry ||
       hasWhiteMarginRisk;
 
     if (shouldWarn) {
@@ -523,9 +535,9 @@
         level: 'warning',
         title: '解析度足夠',
         suggestions: uniqueList([
-          '有文字、Logo、QR Code 時，請確認預覽清楚。',
+          '可製作，請確認文字、Logo、QR Code 是否清楚。',
           '避免使用截圖、壓縮圖。',
-          '想更清晰，可將圖檔放大 3 倍重新轉存。',
+          '想更清晰，可從原始設計檔輸出 3 倍尺寸。',
           `例：${currentW} × ${currentH} cm → ${exportW} × ${exportH} cm。`
         ])
       };
@@ -737,6 +749,6 @@
     observeDynamicInputs();
     exposePublicApi();
 
-    console.log('✅ LUNY Resolution Checker v1.8 loaded');
+    console.log('✅ LUNY Resolution Checker v1.9 loaded');
   });
 })();
