@@ -1,28 +1,26 @@
 /*!
- * LUNY Resolution Checker v1.1
+ * LUNY Resolution Checker v1.2
  * File: luny-resolution-checker-v1.js
  *
  * 升級重點：
- * 1. 不只看原圖像素，也偵測「有效圖案區」避免白邊灌水
- * 2. 加入疑似截圖 / JPG 壓縮 / 邊緣模糊 / 鋸齒風險提醒
- * 3. 支援 LUNY 目前全斷貼紙欄位：
- *    - 主圖：#imgFile
- *    - 寬度：#widthCm
- *    - 高度：#heightCm
- *    - 預覽畫布：#canvasGuides
- * 4. 預設不阻擋下單，只提醒
+ * 1. 顯示文字改為「主標題 + 建議作法列點」
+ * 2. 移除像素 / DPI / 有效圖案尺寸等技術資訊，避免客戶困惑
+ * 3. 建議客戶在製圖階段輸出實際尺寸 3 倍以上
+ * 4. 建議上傳 PNG 或 JPG，不建議顯示 AI / PDF，因目前預覽工具不支援
+ * 5. 保留內部判斷：原圖 DPI、有效圖案區 DPI、白邊、JPG 壓縮、邊緣模糊 / 鋸齒風險
  *
- * 判斷邏輯：
- * - 綠色：有效圖案 DPI 足夠，且沒有明顯畫質風險
- * - 黃色：尺寸夠，但可能有白邊、壓縮、模糊或鋸齒，建議確認原圖
- * - 紅色：有效圖案 DPI 偏低，印出來可能模糊
+ * 支援 LUNY 目前欄位：
+ * - 主圖：#imgFile
+ * - 寬度：#widthCm
+ * - 高度：#heightCm
+ * - 預覽畫布：#canvasGuides
  */
 
 (function () {
   'use strict';
 
   const CONFIG = {
-    version: '1.1.0',
+    version: '1.2.0',
 
     /**
      * before：預覽畫布上方
@@ -37,19 +35,17 @@
     dpiWarning: 200,
 
     /**
-     * 低於這個比例，代表圖片中有效圖案佔比偏低，可能有大量白邊
+     * 有效圖案區佔比低於此值，代表可能有大量白邊
      */
     contentAreaRatioWarning: 0.42,
 
     /**
-     * 白邊偵測：若有效圖案寬或高小於整張圖的這個比例，提醒客戶確認
+     * 有效圖案寬或高低於整張圖此比例，提醒可能有白邊
      */
     contentSideRatioWarning: 0.72,
 
     /**
-     * 畫質偵測門檻
-     * compressionRisk：越高代表壓縮/雜訊/鋸齒風險越高
-     * blurRisk：越高代表邊緣偏糊
+     * 畫質風險門檻
      */
     compressionRiskWarning: 0.32,
     blurRiskWarning: 0.58,
@@ -168,6 +164,20 @@
     };
   }
 
+  function getSizeExampleText(printWidthCm, printHeightCm) {
+    const w = Number(printWidthCm || CONFIG.fallbackWidthCm);
+    const h = Number(printHeightCm || CONFIG.fallbackHeightCm);
+    const exportW = Math.round(w * 3 * 10) / 10;
+    const exportH = Math.round(h * 3 * 10) / 10;
+
+    return `例如貼紙製作尺寸為 ${stripDecimal(w)} × ${stripDecimal(h)} cm，建議轉存約 ${stripDecimal(exportW)} × ${stripDecimal(exportH)} cm 的 PNG 或 JPG 圖檔後再上傳。`;
+  }
+
+  function stripDecimal(num) {
+    if (Math.abs(num - Math.round(num)) < 0.001) return String(Math.round(num));
+    return String(num);
+  }
+
   function injectStyle() {
     if (document.querySelector('#luny-resolution-style')) return;
 
@@ -187,29 +197,23 @@
 
       .luny-resolution-notice strong {
         display: block;
-        margin-bottom: 3px;
+        margin-bottom: 6px;
         font-size: 15px;
         font-weight: 700;
       }
 
-      .luny-resolution-notice .luny-resolution-main {
-        margin-bottom: 4px;
-      }
-
-      .luny-resolution-notice small {
-        display: block;
-        margin-top: 5px;
-        opacity: .9;
-        line-height: 1.55;
+      .luny-resolution-notice .luny-resolution-suggestion-title {
+        font-weight: 700;
+        margin: 4px 0 2px;
       }
 
       .luny-resolution-notice ul {
-        margin: 6px 0 0 18px;
+        margin: 4px 0 0 18px;
         padding: 0;
       }
 
       .luny-resolution-notice li {
-        margin: 2px 0;
+        margin: 3px 0;
       }
 
       .luny-resolution-notice.is-good {
@@ -293,10 +297,6 @@
     let maxY = -1;
     let contentPixels = 0;
 
-    /**
-     * 用「非白色」抓有效圖案。
-     * 淡色底也會算進內容，但純白大背景不算。
-     */
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const i = (y * width + x) * 4;
@@ -357,14 +357,6 @@
     let softEdgeCount = 0;
     let sampled = 0;
 
-    /**
-     * 簡易品質偵測：
-     * - strong edge：亮度差大
-     * - jaggy：邊緣附近顏色跳動明顯，常見於截圖/低品質 JPG/鋸齒文字
-     * - soft edge：邊緣過渡太平，可能偏糊
-     *
-     * 這不是精準 AI 判讀，但足夠做「風險提醒」。
-     */
     for (let y = 1; y < height - 1; y += 2) {
       for (let x = 1; x < width - 1; x += 2) {
         const i = (y * width + x) * 4;
@@ -430,9 +422,14 @@
     return { isJpg, isPng, isWebp };
   }
 
+  function uniqueList(items) {
+    return Array.from(new Set(items.filter(Boolean)));
+  }
+
   function buildResultLevel(result) {
-    const reasons = [];
-    const suggestions = [];
+    const printWidthCm = result.printWidthCm;
+    const printHeightCm = result.printHeightCm;
+    const sizeExampleText = getSizeExampleText(printWidthCm, printHeightCm);
 
     const wholeDpi = result.wholeDpi.effectiveDpi;
     const contentDpi = result.contentDpi.effectiveDpi;
@@ -452,68 +449,57 @@
     const hasBlurRisk =
       result.quality.blurRisk >= CONFIG.blurRiskWarning;
 
-    if (contentDpi < CONFIG.dpiWarning) {
-      reasons.push('有效圖案解析度偏低');
-      suggestions.push('建議上傳更大尺寸的原圖，避免使用截圖或社群下載圖片。');
-
+    if (contentDpi < CONFIG.dpiWarning || wholeDpi < CONFIG.dpiWarning) {
       return {
         level: 'danger',
         title: '圖片解析度偏低，印出來可能會模糊',
-        message: '系統以有效圖案區重新估算後，解析度可能不足。',
-        reasons,
-        suggestions
+        suggestions: uniqueList([
+          '建議上傳更清晰的原圖，避免直接放大低解析圖片。',
+          '若是自己製圖，請回到 Canva、Illustrator、Photoshop 或其他製圖軟體，重新輸出較大尺寸。',
+          `建議輸出為實際貼紙尺寸的 3 倍以上。${sizeExampleText}`,
+          '建議上傳 PNG 或 JPG 圖檔，避免使用截圖、通訊軟體下載圖或被壓縮過的圖片。',
+          '若圖片內有小字、Logo 或 QR Code，低解析度可能導致印刷後不清楚或無法辨識。',
+          '若確認使用目前圖片製作，印刷結果將以您上傳的圖檔品質為準。'
+        ])
       };
     }
 
-    if (wholeDpi < CONFIG.dpiWarning) {
-      reasons.push('整張圖片解析度偏低');
-      suggestions.push('建議上傳更大尺寸圖片，或縮小製作尺寸。');
-
-      return {
-        level: 'danger',
-        title: '圖片解析度偏低，印出來可能會模糊',
-        message: '這張圖片的像素尺寸對目前製作尺寸來說偏小。',
-        reasons,
-        suggestions
-      };
-    }
+    const warningSuggestions = [];
 
     if (contentDpi < CONFIG.dpiGood) {
-      reasons.push('有效圖案解析度未達 300 DPI');
-      suggestions.push('若圖片含有小字、Logo、QR Code，建議上傳更清晰原圖。');
+      warningSuggestions.push('若圖片內含小字、Logo 或 QR Code，建議上傳更清晰原圖。');
     }
 
     if (hasLargeWhiteMargin) {
-      reasons.push('圖片中可能有大量白邊，有效圖案區比整張圖小');
-      suggestions.push('建議先裁掉多餘白邊，再上傳圖檔。');
+      warningSuggestions.push('系統偵測到圖片可能有較多白邊，建議先裁掉多餘白邊後再上傳。');
     }
 
-    if (hasCompressionRisk) {
-      reasons.push('圖片可能為 JPG / 截圖 / 壓縮圖，文字或 Logo 邊緣可能有鋸齒');
-      suggestions.push('建議上傳原始 PNG、PDF、AI 檔，或更高品質的圖片。');
+    if (hasCompressionRisk || hasBlurRisk) {
+      warningSuggestions.push('系統偵測到圖片可能有壓縮痕跡、邊緣模糊或鋸齒感。');
     }
 
-    if (hasBlurRisk) {
-      reasons.push('偵測到邊緣可能偏糊');
-      suggestions.push('若圖片內有細字或小 Logo，建議人工確認或請客戶提供原始檔。');
-    }
-
-    if (reasons.length > 0) {
+    if (warningSuggestions.length > 0) {
       return {
         level: 'warning',
         title: '圖片尺寸足夠，但請確認原圖畫質',
-        message: '這張圖的像素可能足夠，但系統偵測到畫質風險；若有文字、Logo 或 QR Code，建議上傳更清晰原圖。',
-        reasons,
-        suggestions
+        suggestions: uniqueList([
+          ...warningSuggestions,
+          '若圖片內含文字、Logo 或 QR Code，建議回到製圖階段重新輸出較大尺寸。',
+          `建議輸出為實際貼紙尺寸的 3 倍以上。${sizeExampleText}`,
+          '建議上傳 PNG 或 JPG 圖檔，避免使用截圖、社群平台下載圖、LINE 傳過的圖片。',
+          '若確認使用目前圖片製作，印刷結果將以您上傳的圖檔品質為準。'
+        ])
       };
     }
 
     return {
       level: 'good',
       title: '圖片解析度良好',
-      message: '這張圖片的解析度足夠印刷，印出來通常會比較清晰。',
-      reasons,
-      suggestions
+      suggestions: uniqueList([
+        '這張圖片可用於目前尺寸製作，印刷清晰度通常沒有問題。',
+        '若圖片內含小字、Logo 或 QR Code，請確認預覽畫面中文字邊緣是否清楚。',
+        '建議上傳 PNG 或 JPG 圖檔，避免使用截圖、通訊軟體下載圖或被壓縮過的圖片。'
+      ])
     };
   }
 
@@ -524,28 +510,12 @@
     box.className = `luny-resolution-notice is-${level.level}`;
     box.style.display = 'block';
 
-    const reasonsHtml = level.reasons.length
-      ? `<ul>${level.reasons.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
-      : '';
-
     const suggestionsHtml = level.suggestions.length
-      ? `<small>建議：${escapeHtml(Array.from(new Set(level.suggestions)).join('；'))}</small>`
-      : '';
-
-    const contentBoxText = result.contentBox.found
-      ? `有效圖案約 ${result.contentBox.width} × ${result.contentBox.height}px｜有效圖案估算約 ${result.contentDpi.effectiveDpi} DPI｜`
+      ? `<div class="luny-resolution-suggestion-title">建議作法：</div><ul>${level.suggestions.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
       : '';
 
     box.innerHTML = `
       <strong>${escapeHtml(level.title)}</strong>
-      <div class="luny-resolution-main">${escapeHtml(level.message)}</div>
-      ${reasonsHtml}
-      <small>
-        圖片尺寸：${result.pixelWidth} × ${result.pixelHeight}px｜
-        ${contentBoxText}
-        製作尺寸：約 ${result.printWidthCm} × ${result.printHeightCm}cm｜
-        整張圖估算約 ${result.wholeDpi.effectiveDpi} DPI
-      </small>
       ${suggestionsHtml}
     `;
 
@@ -553,7 +523,6 @@
       ...result,
       level: level.level,
       title: level.title,
-      reasons: level.reasons,
       suggestions: level.suggestions
     };
 
@@ -664,7 +633,7 @@
 
         const ok = window.confirm(
           '提醒：系統偵測到圖片可能有解析度或畫質風險。\n\n' +
-          '若圖片含有文字、Logo 或 QR Code，建議上傳更清晰的原圖。\n\n' +
+          '若圖片含有文字、Logo 或 QR Code，建議上傳更清晰的 PNG 或 JPG 圖檔。\n\n' +
           '仍要繼續送出訂單嗎？'
         );
 
@@ -731,6 +700,6 @@
     observeDynamicInputs();
     exposePublicApi();
 
-    console.log('✅ LUNY Resolution Checker v1.1 loaded');
+    console.log('✅ LUNY Resolution Checker v1.2 loaded');
   });
 })();
