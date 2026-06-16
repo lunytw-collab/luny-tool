@@ -574,7 +574,7 @@ function img(i){
   u=link(i.printFileLink||i.previewFileLink||i.folderLink||"");
 
   return u
-    ? `<a href="${esc(u)}" target="_blank" style="font-size:12px;color:#8b5e3c;text-decoration:underline;">查看檔案</a>`
+    ? `<a data-luny-file-link="1" href="${esc(u)}" target="_blank" rel="noopener" style="font-size:12px;color:#8b5e3c;text-decoration:underline;">查看檔案</a>`
     : `<span style="font-size:12px;color:#999;">無預覽圖</span>`;
 }
 
@@ -627,6 +627,56 @@ function isLunyNativeFileText(el){
   }
 }
 
+function isNativeFileButtonElement(el){
+  try{
+    if(!el || !el.matches)return false;
+
+    // LUNY 自己產生的檔案按鈕，不要攔截，讓它走自己的 href
+    if(el.getAttribute && el.getAttribute("data-luny-file-link")==="1")return false;
+
+    // 只允許真正像按鈕/連結的元素，不要掃整個父層
+    if(!el.matches("a,button,[role='button'],.btn,.button,[onclick],[data-href]"))return false;
+
+    let label="";
+    try{
+      label=(el.getAttribute&&(
+        el.getAttribute("aria-label")||
+        el.getAttribute("title")||
+        ""
+      ))||"";
+    }catch(e){}
+
+    let text=clean(el.innerText||el.textContent||el.value||label||"")
+      .replace(/\s+/g,"")
+      .trim();
+
+    if(!text)return false;
+
+    // 重點：只接受很短、明確的檔案按鈕文字
+    // 避免父層包含「查看檔案」就整區被綁住
+    if(text.length>12)return false;
+
+    return /^(查看檔案|查看資料夾|印刷檔|切割檔|預覽圖|設計檔|下載檔案|檔案)$/.test(text);
+  }catch(e){
+    return false;
+  }
+}
+
+function nativeFileButtonFromEvent(ev){
+  try{
+    let target=ev.target;
+    if(target && target.nodeType!==1)target=target.parentElement;
+    if(!target || !target.closest)return null;
+
+    let el=target.closest("a,button,[role='button'],.btn,.button,[onclick],[data-href]");
+    if(el && isNativeFileButtonElement(el))return el;
+
+    return null;
+  }catch(e){
+    return null;
+  }
+}
+
 function openFirstLunyFileLink(ev){
   let first=window.__LUNY_FIRST_FILE_LINK__||'';
   try{
@@ -653,37 +703,16 @@ function installNativeFileClickInterceptor(){
   window.__LUNY_NATIVE_FILE_CLICK_INTERCEPTOR__=1;
 
   function handler(ev){
-    let path=[];
-    try{ path=ev.composedPath?ev.composedPath():[]; }catch(e){}
-    if(!path.length){
-      let n=ev.target;
-      while(n&&n!==document){ path.push(n); n=n.parentNode; }
-    }
+    let btn=nativeFileButtonFromEvent(ev);
+    if(!btn)return;
 
-    for(let el of path){
-      if(!el||el===document||el===window)continue;
-      if(el.getAttribute&&el.getAttribute('data-luny-file-link')==='1')return;
-
-      let href='';
-      try{ href=String((el.getAttribute&&el.getAttribute('href'))||el.href||''); }catch(e){}
-      let text='';
-      try{ text=clean((el.innerText||el.textContent||el.value||(el.getAttribute&&el.getAttribute('aria-label'))||'')); }catch(e){}
-
-      let hasNativeFileText=/查看檔案|檔案|設計檔|下載檔案/.test(text);
-      let badHref=href&&(/luny\.tw/i.test(href)||href==='#'||href.indexOf('javascript:')===0);
-
-      if(hasNativeFileText || (badHref&&/查看檔案|檔案|設計檔|下載檔案/.test(text))){
-        openFirstLunyFileLink(ev);
-        return;
-      }
-    }
+    openFirstLunyFileLink(ev);
   }
 
-  ['pointerdown','touchstart','mousedown','click'].forEach(type=>{
-    document.addEventListener(type,handler,true);
-  });
+  // v26：只攔截 click，不再攔截 pointerdown / touchstart / mousedown
+  // 避免手機或桌機點任何父層區塊時被提前導到雲端資料夾
+  document.addEventListener("click",handler,true);
 }
-
 function patchNativeFileLinks(d){
   let items=Array.isArray(d&&d.items)?d.items:[];
   let first=firstFileLinkFromItems(items);
@@ -693,30 +722,28 @@ function patchNativeFileLinks(d){
   installNativeFileClickInterceptor();
 
   try{
-    document.querySelectorAll("a,button,[role=button],.btn,.button").forEach(el=>{
-      let text=clean(el.innerText||el.textContent||el.value||el.getAttribute&&el.getAttribute('aria-label')||"");
-      if(!/查看檔案|檔案|設計檔|下載檔案/.test(text))return;
-      if(el.getAttribute&&el.getAttribute("data-luny-file-link")==="1")return;
+    document.querySelectorAll("a,button,[role='button'],.btn,.button,[onclick],[data-href]").forEach(el=>{
+      if(!isNativeFileButtonElement(el))return;
+      if(el.dataset && el.dataset.lunyPatchedFileLink==="1")return;
 
       if(String(el.tagName||"").toUpperCase()==="A"){
         let href=String(el.getAttribute("href")||el.href||"");
-        // v22：手機版常會用原生 a/父層事件導回 luny.tw，因此不只改 href，也加 capture click 攔截。
+
         if(!href || /luny\.tw/i.test(href) || href==="#" || href.indexOf("javascript:")===0){
           el.setAttribute("href", first);
           el.setAttribute("target", "_blank");
           el.setAttribute("rel", "noopener");
-          el.dataset.lunyPatchedFileLink="1";
         }
       }
 
       el.addEventListener("click",function(ev){
         openFirstLunyFileLink(ev);
       },true);
-      el.dataset.lunyPatchedFileLink="1";
+
+      if(el.dataset)el.dataset.lunyPatchedFileLink="1";
     });
   }catch(e){}
 }
-
 function render(d, force){
   const oldBox=document.getElementById("lunyOrderDoneSummary");
   if(oldBox&&force){ try{oldBox.remove();}catch(e){} done=0; }
