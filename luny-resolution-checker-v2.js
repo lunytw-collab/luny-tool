@@ -1,15 +1,17 @@
 /*!
- * LUNY Resolution Checker v1.9
+ * LUNY Resolution Checker v1.10
  * File: luny-resolution-checker-v1.js
  *
- * 升級重點：
- * 1. 顯示文字改為「主標題 + 建議作法列點」
- * 2. 移除像素 / DPI / 有效圖案尺寸等技術資訊，避免客戶困惑
- * 3. 建議客戶在製圖階段輸出實際尺寸 3 倍以上
- * 4. 建議上傳 PNG 或 JPG，不建議顯示 AI / PDF，因目前預覽工具不支援
- * 5. 保留內部判斷：原圖 DPI、有效圖案區 DPI、白邊、JPG 壓縮、邊緣模糊 / 鋸齒風險
+ * 目的：
+ * - 協助客戶在上傳圖片後，快速了解印刷清晰度風險
+ * - 兼顧轉換率：不要過度警告，但真的不足時要提醒
  *
- * 支援 LUNY 目前欄位：
+ * 顯示狀態：
+ * - 解析度良好：綠色
+ * - 解析度足夠：淺綠色，可製作但提醒確認細節
+ * - 解析度不足：紅色，建議更換更清晰圖檔
+ *
+ * 支援欄位：
  * - 主圖：#imgFile
  * - 寬度：#widthCm
  * - 高度：#heightCm
@@ -20,39 +22,19 @@
   'use strict';
 
   const CONFIG = {
-    version: '1.9.0',
+    version: '1.10.0',
 
-    /**
-     * before：預覽畫布上方
-     * after：預覽畫布下方
-     */
     noticePosition: 'before',
 
-    /**
-     * DPI 門檻
-     */
     dpiGood: 300,
     dpiWarning: 180,
 
-    /**
-     * 有效圖案區佔比低於此值，代表可能有大量白邊
-     */
     contentAreaRatioWarning: 0.30,
-
-    /**
-     * 有效圖案寬或高低於整張圖此比例，提醒可能有白邊
-     */
     contentSideRatioWarning: 0.58,
 
-    /**
-     * 畫質風險門檻
-     */
     compressionRiskWarning: 0.46,
     blurRiskWarning: 0.72,
 
-    /**
-     * 預設不阻擋送出，只提醒
-     */
     blockSubmit: false,
 
     previewSelectors: [
@@ -152,6 +134,11 @@
     return cm / 2.54;
   }
 
+  function stripDecimal(num) {
+    if (Math.abs(num - Math.round(num)) < 0.001) return String(Math.round(num));
+    return String(num);
+  }
+
   function calcDpi(pixelWidth, pixelHeight, printWidthCm, printHeightCm) {
     const dpiX = pixelWidth / cmToInch(printWidthCm);
     const dpiY = pixelHeight / cmToInch(printHeightCm);
@@ -162,20 +149,6 @@
       dpiY: Math.floor(dpiY),
       effectiveDpi
     };
-  }
-
-  function getSizeExampleText(printWidthCm, printHeightCm) {
-    const w = Number(printWidthCm || CONFIG.fallbackWidthCm);
-    const h = Number(printHeightCm || CONFIG.fallbackHeightCm);
-    const exportW = Math.round(w * 3 * 10) / 10;
-    const exportH = Math.round(h * 3 * 10) / 10;
-
-    return `例如貼紙製作尺寸為 ${stripDecimal(w)} × ${stripDecimal(h)} cm，建議轉存約 ${stripDecimal(exportW)} × ${stripDecimal(exportH)} cm 的 PNG 或 JPG 圖檔後再上傳。`;
-  }
-
-  function stripDecimal(num) {
-    if (Math.abs(num - Math.round(num)) < 0.001) return String(Math.round(num));
-    return String(num);
   }
 
   function injectStyle() {
@@ -242,9 +215,9 @@
       }
 
       .luny-resolution-notice.is-warning {
-        color: #8a5a00;
-        background: #fff8e6;
-        border: 1px solid #f0d37a;
+        color: #2f5f46;
+        background: #f3faf6;
+        border: 1px solid #d4eadc;
       }
 
       .luny-resolution-notice.is-danger {
@@ -430,17 +403,6 @@
     };
   }
 
-  function getFileTypeRisk(file) {
-    const name = (file && file.name ? file.name : '').toLowerCase();
-    const type = (file && file.type ? file.type : '').toLowerCase();
-
-    const isJpg = type.includes('jpeg') || type.includes('jpg') || /\.(jpg|jpeg)$/.test(name);
-    const isPng = type.includes('png') || /\.png$/.test(name);
-    const isWebp = type.includes('webp') || /\.webp$/.test(name);
-
-    return { isJpg, isPng, isWebp };
-  }
-
   function uniqueList(items) {
     return Array.from(new Set(items.filter(Boolean)));
   }
@@ -459,17 +421,6 @@
         result.contentBox.sideRatioX < CONFIG.contentSideRatioWarning ||
         result.contentBox.sideRatioY < CONFIG.contentSideRatioWarning
       );
-
-    /**
-     * v1.9 判定原則：
-     * - 不確定但可印：黃色
-     * - 真的可能糊或明顯鋸齒：紅色
-     * - 清楚且風險低：綠色
-     *
-     * 注意：
-     * - JPG 不會自動變黃色，因為多數客戶上傳照片本來就是 JPG。
-     * - 白邊不等於低畫質，只有有效圖案解析度也不高時才提醒。
-     */
 
     const isMildlyJaggy =
       result.quality.compressionRisk >= CONFIG.compressionRiskWarning;
@@ -494,12 +445,6 @@
     const currentW = stripDecimal(printWidthCm);
     const currentH = stripDecimal(printHeightCm);
 
-    /**
-     * 紅色：真的不足才提醒
-     * 1. 有效圖案或整張圖明顯低於 180 DPI
-     * 2. 低於 240 DPI 且有明顯鋸齒或明顯模糊
-     * 3. 低於 300 DPI 且鋸齒非常明顯
-     */
     const isClearlyLowResolution =
       contentDpi < CONFIG.dpiWarning ||
       wholeDpi < CONFIG.dpiWarning ||
@@ -519,10 +464,6 @@
       };
     }
 
-    /**
-     * 黃色：可製作，但建議確認
-     * 這層承接大多數「可印，但細節可能要注意」的圖片。
-     */
     const shouldWarn =
       contentDpi < CONFIG.dpiGood ||
       wholeDpi < CONFIG.dpiGood ||
@@ -536,9 +477,8 @@
         title: '解析度足夠',
         suggestions: uniqueList([
           '可製作，請確認文字、Logo、QR Code 是否清楚。',
-          '避免使用截圖、壓縮圖。',
-          '想更清晰，可從原始設計檔輸出 3 倍尺寸。',
-          `例：${currentW} × ${currentH} cm → ${exportW} × ${exportH} cm。`
+          '小字建議 7pt 以上，細線建議 0.3mm 以上。',
+          '想更清晰，可從原始設計檔輸出 3 倍尺寸。'
         ])
       };
     }
@@ -547,7 +487,7 @@
       level: 'good',
       title: '解析度良好',
       suggestions: uniqueList([
-        '有小字、Logo、QR Code 時，請確認預覽清楚。'
+        '小字建議 7pt 以上，細線建議 0.3mm 以上。'
       ])
     };
   }
@@ -596,7 +536,6 @@
 
       const contentBox = detectContentBox(img);
       const quality = analyzeQuality(img);
-      const fileRisk = getFileTypeRisk(file);
 
       const wholeDpi = calcDpi(
         img.naturalWidth,
@@ -622,8 +561,7 @@
         wholeDpi,
         contentDpi,
         contentBox,
-        quality,
-        fileRisk
+        quality
       });
 
       URL.revokeObjectURL(objectUrl);
@@ -678,11 +616,11 @@
 
       form.addEventListener('submit', function (event) {
         const result = STATE.lastResult;
-        if (!result || result.level === 'good') return;
+        if (!result || result.level !== 'danger') return;
 
         const ok = window.confirm(
-          '提醒：系統偵測到圖片可能有解析度或畫質風險。\n\n' +
-          '若圖片含有文字、Logo 或 QR Code，建議上傳更清晰的 PNG 或 JPG 圖檔。\n\n' +
+          '提醒：系統偵測到圖片解析度可能不足。\n\n' +
+          '建議上傳更清晰的圖檔，或由原始設計檔重新輸出。\n\n' +
           '仍要繼續送出訂單嗎？'
         );
 
@@ -749,6 +687,6 @@
     observeDynamicInputs();
     exposePublicApi();
 
-    console.log('✅ LUNY Resolution Checker v1.9 loaded');
+    console.log('✅ LUNY Resolution Checker v1.10 loaded');
   });
 })();
