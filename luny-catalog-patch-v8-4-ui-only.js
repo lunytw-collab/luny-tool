@@ -59,7 +59,7 @@
 
 
 
-  const CATALOG_PRICING_SRC = "https://cdn.jsdelivr.net/gh/lunytw-collab/luny-tool/luny-catalog-pricing-v5.js?v=20260617-4";
+  const CATALOG_PRICING_SRC = "https://cdn.jsdelivr.net/gh/lunytw-collab/luny-tool/luny-catalog-pricing-v5.js?v=20260617-5";
   let __catalogPricingLoading = false;
 
   function ensureCatalogPricingLoaded(callback){
@@ -192,6 +192,41 @@
     return "self";
   }
 
+  // 客人看得到的文字：只呈現結果，不呈現急件計價公式。
+  // 價格公式仍由 pricing JS 依 urgent/cutlineService 的 value 計算。
+  function getCatalogUrgentDisplayText(urgent){
+    return normalizeCatalogUrgentValue(urgent) === "rush" ? "急件優先排程" : "一般件";
+  }
+
+  function getCatalogCutlineDisplayText(cutlineService){
+    return normalizeCatalogCutlineValue(cutlineService) === "designer" ? "協助整理刀線" : "自行完稿／僅需審稿";
+  }
+
+  function buildCatalogSummaryText(q){
+    q = q || {};
+    const size = q.catalogSize || q.size || "";
+    const materialLabel = q.materialText || materialText(q.material);
+    const laminateLabel = q.laminateText || laminateText(q.laminate);
+    const qty = q.quantity || "";
+    const urgentLabel = getCatalogUrgentDisplayText(q.urgent);
+    const cutlineLabel = getCatalogCutlineDisplayText(q.cutlineService);
+    const price = Number(q.price || q.total || 0);
+    return `圖鑑貼紙｜${size}｜${materialLabel}｜${laminateLabel}｜${qty}張｜${urgentLabel}｜${cutlineLabel}｜NT$${price}`;
+  }
+
+  function normalizeCatalogQuoteDisplay(q){
+    if(!q) return q;
+    if(String(q.productType || q.productCode || "").toUpperCase().indexOf("CATALOG") < 0 && String(q.productCode || "").indexOf("圖鑑") < 0){
+      return q;
+    }
+    q.urgent = normalizeCatalogUrgentValue(q.urgent || q.urgentText);
+    q.cutlineService = normalizeCatalogCutlineValue(q.cutlineService || q.cutlineServiceText);
+    q.urgentText = getCatalogUrgentDisplayText(q.urgent);
+    q.cutlineServiceText = getCatalogCutlineDisplayText(q.cutlineService);
+    q.summary = buildCatalogSummaryText(q);
+    return q;
+  }
+
   function catalogPreviewDataUrl(){
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220"><rect width="220" height="220" rx="34" fill="#F8F9FA"/><rect x="18" y="18" width="184" height="184" rx="26" fill="#FFFFFF" stroke="#E5E7EB"/><text x="110" y="92" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#374151" font-weight="700">圖鑑貼紙</text><text x="110" y="128" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#667085">待人工檢查</text></svg>';
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
@@ -223,8 +258,8 @@
     const urgentFee = Number(priceResult && priceResult.urgentFee || (urgent === "rush" ? 300 : 0));
     const cutlineFee = Number(priceResult && priceResult.cutlineFee || (cutlineService === "designer" ? 600 : 0));
     const price = Number(priceResult && (priceResult.price || priceResult.total) || (basePrice + urgentFee + cutlineFee));
-    const urgentText = (priceResult && priceResult.urgentText) || (urgent === "rush" ? "急件優先排程" : "一般件");
-    const cutlineServiceText = (priceResult && priceResult.cutlineServiceText) || (cutlineService === "designer" ? "協助整理刀線" : "自行完稿／僅需審稿");
+    const urgentText = getCatalogUrgentDisplayText(urgent);
+    const cutlineServiceText = getCatalogCutlineDisplayText(cutlineService);
     const materialLabel = (priceResult && priceResult.materialText) || materialText(material);
     const laminateLabel = (priceResult && priceResult.laminateText) || laminateText(laminate);
     const fileUrl = ($("catalogFileUrl") ? $("catalogFileUrl").value : "").trim();
@@ -256,7 +291,10 @@
       catalogShareChecked: !!($("catalogShareChecked") && $("catalogShareChecked").checked),
       catalogStatus:"待人工檢查",
       price,
-      summary:`圖鑑貼紙｜${size}｜${materialLabel}｜${laminateLabel}｜${qty}張｜${urgentText}｜${cutlineServiceText}｜NT$${price}`
+      summary:buildCatalogSummaryText({
+        catalogSize:size, material, materialText:materialLabel, laminate, laminateText:laminateLabel,
+        quantity:qty, urgent, cutlineService, price
+      })
     };
   }
 
@@ -537,7 +575,13 @@
   normalizeCartItemForProduct = function(item){
     const rawType = String(item && item.productType || 'CATALOG').toUpperCase();
     const type = rawType === 'FULLCUT' ? 'FULLCUT' : (rawType === 'LABEL' ? 'LABEL' : 'CATALOG');
-    return {...item, productType:type, productCode:item && item.productCode ? item.productCode : productNameByType(type)};
+    const normalized = {...item, productType:type, productCode:item && item.productCode ? item.productCode : productNameByType(type)};
+    if(type === 'CATALOG' && normalized.quote){
+      normalized.quote = normalizeCatalogQuoteDisplay({...normalized.quote, productType:'CATALOG', productCode:'圖鑑貼紙'});
+      normalized.price = normalized.quote.price || normalized.price;
+      normalized.summary = normalized.quote.summary || normalized.summary;
+    }
+    return normalized;
   };
   saveCartItemsForCheckout = function(arr){
     const seen = new Set();
@@ -588,13 +632,13 @@
       return '<div class="checkout-product-group" style="margin:14px 0 18px;">'+
         '<div class="checkout-product-title" style="font-weight:700;font-size:15px;color:#111827;margin:0 0 8px;text-align:left;">'+esc(group.name)+'</div>'+
         group.items.map((row,groupIndex)=>{
-          const item=row.item, q=item.quote||{};
+          const item=row.item, q=normalizeCatalogQuoteDisplay(item.quote||{});
           const preview=item.previewThumb||item.previewUrl||item.previewDataUrl||item.thumbnail||catalogPreviewDataUrl();
           const fileUrl = q.catalogFileUrl || (item.catalog && item.catalog.fileUrl) || '';
           const isCatalog = group.type === 'CATALOG';
           const title = (groupIndex+1)+'. '+group.name+'｜小計 NT$ '+row.price;
           const info = isCatalog
-            ? `尺寸：${esc(q.catalogSize||'')}<br>材質：${esc(q.materialText||materialText(q.material))}<br>上膜：${esc(q.laminateText||laminateText(q.laminate))}<br>數量：${esc(q.quantity||'')} 張<br>升級急件：${esc(q.urgentText||'一般件')}<br>完稿方式：${esc(q.cutlineServiceText||'自行完稿／僅需審稿')}<br>設計檔：${fileUrl ? '<a href="'+esc(fileUrl)+'" target="_blank" rel="noopener">開啟雲端連結</a>' : '未提供'}<br>狀態：待人工檢查`
+            ? `尺寸：${esc(q.catalogSize||'')}<br>材質：${esc(q.materialText||materialText(q.material))}<br>上膜：${esc(q.laminateText||laminateText(q.laminate))}<br>數量：${esc(q.quantity||'')} 張<br>升級急件：${esc(getCatalogUrgentDisplayText(q.urgent))}<br>完稿方式：${esc(getCatalogCutlineDisplayText(q.cutlineService))}<br>設計檔：${fileUrl ? '<a href="'+esc(fileUrl)+'" target="_blank" rel="noopener">開啟雲端連結</a>' : '未提供'}<br>狀態：待人工檢查`
             : `尺寸：${esc(q.widthCm||'')} × ${esc(q.heightCm||'')} cm<br>材質：${esc(q.materialText||'')}<br>上膜：${esc(q.laminateText||'')}<br>數量：${esc(q.quantity||'')} 張`;
           return '<div class="checkout-design-item">'+
             '<img class="checkout-design-thumb" src="'+preview+'" alt="'+esc(group.name)+'預覽圖">'+
