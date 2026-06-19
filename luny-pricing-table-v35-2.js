@@ -23,8 +23,8 @@
   };
 
   var NORMAL_PEARLESCENT_MODULE_MULTIPLIER = {
-    35: 1.25,
-    56: 1.24,
+    35: 1.24,
+    56: 1.23,
     88: 1.21
   };
 
