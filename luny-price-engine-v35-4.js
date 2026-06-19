@@ -543,13 +543,16 @@
     return Math.round(Number(price) || 0);
   }
 
-  function getRushRateByQuantity(quantity) {
-    const q = parseInt(quantity, 10) || 0;
+ function getRushRateByQuantity(quantity) {
+  const q = parseInt(quantity, 10) || 0;
 
-    if (q >= 2000) return 1.69;
-    if (q >= 1000) return 1.63;
-    return 1.4;
-  }
+  if (q >= 5000) return 1.78;
+  if (q >= 4000) return 1.75;
+  if (q >= 3000) return 1.72;
+  if (q >= 2000) return 1.69;
+  if (q >= 1000) return 1.63;
+  return 1.4;
+}
 
   function getSuperRushRateByQuantity(quantity) {
     const q = parseInt(quantity, 10) || 0;
