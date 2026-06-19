@@ -546,11 +546,11 @@
  function getRushRateByQuantity(quantity) {
   const q = parseInt(quantity, 10) || 0;
 
-  if (q >= 5000) return 1.78;
-  if (q >= 4000) return 1.75;
-  if (q >= 3000) return 1.72;
-  if (q >= 2000) return 1.69;
-  if (q >= 1000) return 1.63;
+  if (q >= 5000) return 1.9;
+  if (q >= 4000) return 1.85;
+  if (q >= 3000) return 1.8;
+  if (q >= 2000) return 1.72;
+  if (q >= 1000) return 1.69;
   return 1.4;
 }
 
