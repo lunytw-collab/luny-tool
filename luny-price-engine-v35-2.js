@@ -33,9 +33,9 @@
     4000, 5000, 6000, 7000, 8000, 9000, 10000
   ];
 
-  // 急件產能限制：最多 100 張大紙，但切割時間上限控制在 2000 張貼紙。
-  const RUSH_SHEET_LIMIT = 100;
-  const RUSH_ABSOLUTE_MAX_QTY = 2000;
+  // 急件產能限制：最多 100 張大紙，但切割時間上限控制在 5000 張貼紙。
+  const RUSH_SHEET_LIMIT = 120;
+  const RUSH_ABSOLUTE_MAX_QTY = 5000;
 
   // 特急件產能限制：最多 40 張大紙，以大紙數量衡量。
   const SUPER_RUSH_SHEET_LIMIT = 40;
