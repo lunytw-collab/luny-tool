@@ -127,14 +127,14 @@
 
     if (urgent === "rush") {
       const rate = getFullcutRushRateByQuantity(quantity);
-      return Math.max(base * rate, base + 300);
+      return Math.round(Math.max(base * rate, base + 300));
     }
 
     if (urgent === "superrush") {
-      return base + 600;
+      return Math.round(base + 600);
     }
 
-    return base;
+    return Math.round(base);
   }
 
   function calculatePrice() {
@@ -241,7 +241,7 @@
 
         nextTotal = applyFullcutUrgentPrice(nextTotal, urgent, nextQty);
 
-        const diff = nextTotal - total;
+        const diff = Math.round(nextTotal) - Math.round(total);
 
         if (diff > 0) {
           upgradeHint.textContent = `優惠提醒：升級 ${nextQty} 張，只要加 ${diff} 元`;
