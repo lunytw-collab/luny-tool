@@ -12,8 +12,8 @@
 
     transparent_laminated: 1.69,
 
-    kraft: 1.20,
-    shtte: 1.14
+    kraft: 1.15,
+    shtte: 0.9
   };
 
   var PEARLESCENT_MODULE_MULTIPLIER = {
@@ -88,8 +88,8 @@
 
     transparent_laminated: 1.69,
 
-    kraft: 1.20,
-    shtte: 1.14
+    kraft: 1.15,
+    shtte: 0.9
   };
 
   var PRICE_FLOOR_DIFF = {
