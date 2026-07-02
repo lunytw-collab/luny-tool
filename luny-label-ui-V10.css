@@ -1890,9 +1890,9 @@ body .page-shell .layout-main > .layout-right video{
 
 
 /* =========================================================
-   LUNY v10：上膜卡片安全版
-   目的：讓上膜卡片接近材質卡片，但不使用破壞版面的 grid-area / pseudo 強塞。
-   搭配 HTML 內 v10 safe patch，會把上膜卡片內容包成 .luny-laminate-content。
+   LUNY v11：上膜卡片樣式修正
+   目的：上膜卡片接近材質卡片，但不額外產生「膜」縮圖。
+   注意：不要改上膜 select / 報價邏輯，只調整呈現。
    ========================================================= */
 .laminate-row-card > div{
   width:100% !important;
@@ -1910,8 +1910,10 @@ body .page-shell .layout-main > .layout-right video{
   width:100% !important;
   min-height:104px !important;
   display:grid !important;
-  grid-template-columns:66px minmax(0, 1fr) !important;
+  grid-template-columns:64px minmax(0, 1fr) !important;
+  grid-auto-rows:auto !important;
   column-gap:12px !important;
+  row-gap:3px !important;
   align-items:start !important;
   padding:12px 13px !important;
   border:1px solid var(--luny-ui-gray-300) !important;
@@ -1957,55 +1959,54 @@ body .page-shell .layout-main > .layout-right video{
   font-weight:950 !important;
   z-index:2 !important;
 }
+/* v10 曾注入的「膜」縮圖：v11 一律隱藏 / 由 JS 移除。 */
 .laminate-card .luny-laminate-thumb{
-  width:66px !important;
-  height:66px !important;
-  display:grid !important;
-  place-items:center !important;
-  border-radius:13px !important;
-  background:
-    radial-gradient(circle at 28% 24%, rgba(255,255,255,.92), rgba(255,255,255,0) 32%),
-    linear-gradient(135deg, #fff7e8, #f0f0f2 55%, #e9ddcf) !important;
-  border:1px solid var(--luny-ui-gray-200) !important;
-  color:var(--luny-ui-brown) !important;
-  font-size:18px !important;
-  font-weight:950 !important;
-  line-height:1 !important;
+  display:none !important;
 }
+/* 若瀏覽器中仍殘留 v10 包裝，讓內容回到自然格線，不再形成第三個區塊。 */
 .laminate-card .luny-laminate-content{
-  min-width:0 !important;
-  display:flex !important;
-  flex-direction:column !important;
-  justify-content:flex-start !important;
-  gap:3px !important;
-  padding-right:26px !important;
-  line-height:1.35 !important;
-  color:var(--luny-ui-gray-700) !important;
-  font-size:12px !important;
-  font-weight:650 !important;
+  display:contents !important;
 }
-.laminate-card .luny-laminate-content input,
-.laminate-card .luny-laminate-content select{
+.laminate-card input,
+.laminate-card select{
   position:absolute !important;
   width:1px !important;
   height:1px !important;
   opacity:0 !important;
   pointer-events:none !important;
 }
-.laminate-card-title,
-.laminate-card .luny-laminate-content strong,
-.laminate-card .luny-laminate-content b,
-.laminate-card .luny-laminate-content > span:first-of-type{
+.laminate-card img,
+.laminate-card .laminate-card-img,
+.laminate-card .luny-laminate-img{
+  grid-column:1 !important;
+  grid-row:1 / span 3 !important;
+  width:64px !important;
+  height:64px !important;
   display:block !important;
-  margin:0 0 1px !important;
+  object-fit:cover !important;
+  border-radius:13px !important;
+  background:#f3f4f6 !important;
+  border:1px solid var(--luny-ui-gray-200) !important;
+}
+.laminate-card-title,
+.laminate-card strong,
+.laminate-card b,
+.laminate-card > span:first-of-type,
+.laminate-card .luny-laminate-content > span:first-of-type{
+  grid-column:2 !important;
+  display:block !important;
+  margin:0 26px 1px 0 !important;
   font-size:15px !important;
   line-height:1.25 !important;
   font-weight:950 !important;
   color:var(--luny-ui-black) !important;
 }
 .laminate-card-subtitle,
+.laminate-card > small:first-of-type,
+.laminate-card > span:nth-of-type(2),
 .laminate-card .luny-laminate-content > small:first-of-type,
 .laminate-card .luny-laminate-content > span:nth-of-type(2){
+  grid-column:2 !important;
   display:block !important;
   margin:0 !important;
   font-size:12px !important;
@@ -2014,8 +2015,11 @@ body .page-shell .layout-main > .layout-right video{
   color:var(--luny-ui-brown) !important;
 }
 .laminate-card-desc,
+.laminate-card > small:nth-of-type(n+2),
+.laminate-card > span:nth-of-type(n+3),
 .laminate-card .luny-laminate-content > small:nth-of-type(n+2),
 .laminate-card .luny-laminate-content > span:nth-of-type(n+3){
+  grid-column:2 !important;
   display:block !important;
   margin:0 !important;
   font-size:12px !important;
@@ -2039,10 +2043,11 @@ body .page-shell .layout-main > .layout-right video{
   .laminate-card[aria-pressed="true"]{
     padding:10px 11px !important;
   }
-  .laminate-card .luny-laminate-thumb{
+  .laminate-card img,
+  .laminate-card .laminate-card-img,
+  .laminate-card .luny-laminate-img{
     width:58px !important;
     height:58px !important;
     border-radius:12px !important;
-    font-size:16px !important;
   }
 }
