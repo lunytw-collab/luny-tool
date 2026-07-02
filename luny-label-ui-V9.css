@@ -1888,9 +1888,11 @@ body .page-shell .layout-main > .layout-right video{
 }
 
 
+
 /* =========================================================
-   LUNY v9：上膜卡片改成與材質卡片一致
-   只調整視覺，不改 #laminate select / 報價邏輯。
+   LUNY v10：上膜卡片安全版
+   目的：讓上膜卡片接近材質卡片，但不使用破壞版面的 grid-area / pseudo 強塞。
+   搭配 HTML 內 v10 safe patch，會把上膜卡片內容包成 .luny-laminate-content。
    ========================================================= */
 .laminate-row-card > div{
   width:100% !important;
@@ -1900,6 +1902,7 @@ body .page-shell .layout-main > .layout-right video{
   grid-template-columns:repeat(2, minmax(0, 1fr)) !important;
   gap:10px !important;
   margin-top:10px !important;
+  overflow:visible !important;
 }
 .laminate-card{
   appearance:none !important;
@@ -1908,10 +1911,6 @@ body .page-shell .layout-main > .layout-right video{
   min-height:104px !important;
   display:grid !important;
   grid-template-columns:66px minmax(0, 1fr) !important;
-  grid-template-areas:
-    "thumb title"
-    "thumb subtitle"
-    "thumb desc" !important;
   column-gap:12px !important;
   align-items:start !important;
   padding:12px 13px !important;
@@ -1923,24 +1922,8 @@ body .page-shell .layout-main > .layout-right video{
   box-shadow:0 4px 14px rgba(17,24,39,.035) !important;
   cursor:pointer !important;
   overflow:hidden !important;
+  transform:none !important;
   transition:background .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease !important;
-}
-.laminate-card::before{
-  content:'膜' !important;
-  grid-area:thumb !important;
-  width:66px !important;
-  height:66px !important;
-  display:grid !important;
-  place-items:center !important;
-  border-radius:13px !important;
-  background:
-    radial-gradient(circle at 28% 24%, rgba(255,255,255,.92), rgba(255,255,255,0) 32%),
-    linear-gradient(135deg, #fff7e8, #f0f0f2 55%, #e9ddcf) !important;
-  border:1px solid var(--luny-ui-gray-200) !important;
-  color:var(--luny-ui-brown) !important;
-  font-size:18px !important;
-  font-weight:950 !important;
-  line-height:1 !important;
 }
 .laminate-card:hover{
   transform:translateY(-1px) !important;
@@ -1949,14 +1932,16 @@ body .page-shell .layout-main > .layout-right video{
   box-shadow:0 8px 22px rgba(17,24,39,.055) !important;
 }
 .laminate-card.is-active,
-.laminate-card.active{
+.laminate-card.active,
+.laminate-card[aria-pressed="true"]{
   border:2px solid var(--luny-ui-black) !important;
   background:#fffaf0 !important;
   box-shadow:0 10px 26px rgba(17,24,39,.08) !important;
   padding:11px 12px !important;
 }
 .laminate-card.is-active::after,
-.laminate-card.active::after{
+.laminate-card.active::after,
+.laminate-card[aria-pressed="true"]::after{
   content:'✓' !important;
   position:absolute !important;
   top:9px !important;
@@ -1972,30 +1957,65 @@ body .page-shell .layout-main > .layout-right video{
   font-weight:950 !important;
   z-index:2 !important;
 }
+.laminate-card .luny-laminate-thumb{
+  width:66px !important;
+  height:66px !important;
+  display:grid !important;
+  place-items:center !important;
+  border-radius:13px !important;
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255,255,255,.92), rgba(255,255,255,0) 32%),
+    linear-gradient(135deg, #fff7e8, #f0f0f2 55%, #e9ddcf) !important;
+  border:1px solid var(--luny-ui-gray-200) !important;
+  color:var(--luny-ui-brown) !important;
+  font-size:18px !important;
+  font-weight:950 !important;
+  line-height:1 !important;
+}
+.laminate-card .luny-laminate-content{
+  min-width:0 !important;
+  display:flex !important;
+  flex-direction:column !important;
+  justify-content:flex-start !important;
+  gap:3px !important;
+  padding-right:26px !important;
+  line-height:1.35 !important;
+  color:var(--luny-ui-gray-700) !important;
+  font-size:12px !important;
+  font-weight:650 !important;
+}
+.laminate-card .luny-laminate-content input,
+.laminate-card .luny-laminate-content select{
+  position:absolute !important;
+  width:1px !important;
+  height:1px !important;
+  opacity:0 !important;
+  pointer-events:none !important;
+}
 .laminate-card-title,
-.laminate-card > strong:first-child{
-  grid-area:title !important;
+.laminate-card .luny-laminate-content strong,
+.laminate-card .luny-laminate-content b,
+.laminate-card .luny-laminate-content > span:first-of-type{
   display:block !important;
-  margin:0 28px 3px 0 !important;
+  margin:0 0 1px !important;
   font-size:15px !important;
   line-height:1.25 !important;
   font-weight:950 !important;
   color:var(--luny-ui-black) !important;
 }
 .laminate-card-subtitle,
-.laminate-card > span:first-of-type{
-  grid-area:subtitle !important;
+.laminate-card .luny-laminate-content > small:first-of-type,
+.laminate-card .luny-laminate-content > span:nth-of-type(2){
   display:block !important;
-  margin:0 0 3px !important;
+  margin:0 !important;
   font-size:12px !important;
   line-height:1.35 !important;
   font-weight:900 !important;
   color:var(--luny-ui-brown) !important;
 }
 .laminate-card-desc,
-.laminate-card > small,
-.laminate-card > span:nth-of-type(2){
-  grid-area:desc !important;
+.laminate-card .luny-laminate-content > small:nth-of-type(n+2),
+.laminate-card .luny-laminate-content > span:nth-of-type(n+3){
   display:block !important;
   margin:0 !important;
   font-size:12px !important;
@@ -2015,10 +2035,11 @@ body .page-shell .layout-main > .layout-right video{
     padding:11px 12px !important;
   }
   .laminate-card.is-active,
-  .laminate-card.active{
+  .laminate-card.active,
+  .laminate-card[aria-pressed="true"]{
     padding:10px 11px !important;
   }
-  .laminate-card::before{
+  .laminate-card .luny-laminate-thumb{
     width:58px !important;
     height:58px !important;
     border-radius:12px !important;
