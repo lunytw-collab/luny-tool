@@ -188,3 +188,85 @@
     setInterval(unlockUrgentCards, 900);
   });
 })();
+
+
+/* LUNY v12 patch：整理上膜卡片 DOM，避免文字與圖片疊在一起。 */
+(function(){
+  function ready(fn){ document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', fn) : fn(); }
+  function $(id){ return document.getElementById(id); }
+  function unwrapOldNodes(card){
+    Array.prototype.slice.call(card.querySelectorAll('.luny-laminate-thumb')).forEach(function(node){ node.remove(); });
+    Array.prototype.slice.call(card.querySelectorAll('.luny-laminate-content')).forEach(function(wrap){
+      while(wrap.firstChild){ wrap.parentNode.insertBefore(wrap.firstChild, wrap); }
+      wrap.remove();
+    });
+  }
+  function isControlNode(node){
+    return node && node.nodeType === 1 && /^(INPUT|SELECT|OPTION|SCRIPT|STYLE)$/i.test(node.tagName || '');
+  }
+  function isEmptyText(node){
+    return node && node.nodeType === 3 && !String(node.nodeValue || '').trim();
+  }
+  function getDirectTextWrap(card){
+    var children = Array.prototype.slice.call(card.children || []);
+    return children.find(function(el){ return el.classList && el.classList.contains('luny-laminate-text-wrap'); }) || null;
+  }
+  function normalizeOne(card){
+    if(!card || card.__lunyLaminateNormalizing) return;
+    card.__lunyLaminateNormalizing = true;
+    try{
+      unwrapOldNodes(card);
+
+      var directChildren = Array.prototype.slice.call(card.children || []);
+      var imgs = directChildren.filter(function(el){ return el && el.tagName && el.tagName.toLowerCase() === 'img'; });
+      var img = imgs[0] || null;
+      imgs.slice(1).forEach(function(extra){ extra.remove(); });
+
+      var wrap = getDirectTextWrap(card);
+      if(!wrap){
+        wrap = document.createElement('div');
+        wrap.className = 'luny-laminate-text-wrap';
+      }
+
+      Array.prototype.slice.call(card.childNodes || []).forEach(function(node){
+        if(node === img || node === wrap) return;
+        if(isEmptyText(node)){ node.remove(); return; }
+        if(isControlNode(node)) return;
+        if(node.nodeType === 1 && node.classList && node.classList.contains('luny-laminate-text-wrap')) return;
+        wrap.appendChild(node);
+      });
+
+      if(img){
+        img.classList.add('luny-laminate-img');
+        card.classList.remove('luny-laminate-no-image');
+        card.appendChild(img);
+      }else{
+        card.classList.add('luny-laminate-no-image');
+      }
+      card.appendChild(wrap);
+      card.setAttribute('data-luny-laminate-v12', '1');
+    }catch(err){
+      console.warn('[LUNY] laminate normalize v12 failed', err);
+    }finally{
+      card.__lunyLaminateNormalizing = false;
+    }
+  }
+  function normalizeAll(){
+    var group = $('laminateCardGroup');
+    if(!group) return;
+    Array.prototype.slice.call(group.querySelectorAll('.laminate-card')).forEach(normalizeOne);
+  }
+  ready(function(){
+    normalizeAll();
+    var group = $('laminateCardGroup');
+    if(group && window.MutationObserver){
+      var timer = null;
+      new MutationObserver(function(){
+        clearTimeout(timer);
+        timer = setTimeout(normalizeAll, 30);
+      }).observe(group, { childList:true, subtree:true });
+    }
+    [80, 180, 350, 700, 1200, 2200, 3600].forEach(function(ms){ setTimeout(normalizeAll, ms); });
+  });
+  window.LUNY_normalizeLaminateCardsV12 = normalizeAll;
+})();
