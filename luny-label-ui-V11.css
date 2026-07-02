@@ -2051,3 +2051,116 @@ body .page-shell .layout-main > .layout-right video{
     border-radius:12px !important;
   }
 }
+
+
+/* =========================================================
+   LUNY v12：上膜卡片穩定排版
+   修正：避免標題 / 描述文字壓在上膜圖片上。
+   做法：搭配 luny-label-ui-fix-v12.js 將卡片整理成「圖片 + 文字容器」。
+   ========================================================= */
+.laminate-card{
+  grid-template-columns:72px minmax(0, 1fr) !important;
+  grid-auto-flow:row !important;
+  align-items:start !important;
+  min-height:132px !important;
+  column-gap:13px !important;
+  row-gap:0 !important;
+  overflow:hidden !important;
+}
+.laminate-card.luny-laminate-no-image{
+  grid-template-columns:1fr !important;
+  min-height:104px !important;
+}
+.laminate-card > img.luny-laminate-img,
+.laminate-card > img.laminate-card-img,
+.laminate-card > img{
+  grid-column:1 !important;
+  grid-row:1 !important;
+  align-self:start !important;
+  justify-self:start !important;
+  width:72px !important;
+  height:72px !important;
+  min-width:72px !important;
+  max-width:72px !important;
+  object-fit:cover !important;
+  border-radius:14px !important;
+  margin:0 !important;
+  background:#f3f4f6 !important;
+  border:1px solid var(--luny-ui-gray-200) !important;
+  z-index:1 !important;
+}
+.laminate-card > .luny-laminate-text-wrap{
+  grid-column:2 !important;
+  grid-row:1 !important;
+  min-width:0 !important;
+  width:100% !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:flex-start !important;
+  justify-content:flex-start !important;
+  gap:4px !important;
+  padding:0 24px 0 0 !important;
+  margin:0 !important;
+  text-align:left !important;
+  z-index:1 !important;
+}
+.laminate-card.luny-laminate-no-image > .luny-laminate-text-wrap{
+  grid-column:1 !important;
+  padding-right:26px !important;
+}
+.laminate-card > .luny-laminate-text-wrap > *,
+.laminate-card > .luny-laminate-text-wrap strong,
+.laminate-card > .luny-laminate-text-wrap b,
+.laminate-card > .luny-laminate-text-wrap span,
+.laminate-card > .luny-laminate-text-wrap small,
+.laminate-card > .luny-laminate-text-wrap div,
+.laminate-card > .luny-laminate-text-wrap p{
+  grid-column:auto !important;
+  grid-row:auto !important;
+  width:auto !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  display:block !important;
+  margin:0 !important;
+  padding:0 !important;
+  text-align:left !important;
+  word-break:break-word !important;
+  overflow-wrap:anywhere !important;
+}
+.laminate-card > .luny-laminate-text-wrap > :first-child{
+  font-size:15px !important;
+  line-height:1.25 !important;
+  font-weight:950 !important;
+  color:var(--luny-ui-black) !important;
+}
+.laminate-card > .luny-laminate-text-wrap > :nth-child(2){
+  font-size:12px !important;
+  line-height:1.35 !important;
+  font-weight:900 !important;
+  color:var(--luny-ui-brown) !important;
+}
+.laminate-card > .luny-laminate-text-wrap > :nth-child(n+3){
+  font-size:12px !important;
+  line-height:1.45 !important;
+  font-weight:650 !important;
+  color:var(--luny-ui-gray-700) !important;
+}
+@media (max-width:720px){
+  .laminate-card{
+    grid-template-columns:64px minmax(0, 1fr) !important;
+    min-height:122px !important;
+    column-gap:12px !important;
+  }
+  .laminate-card > img.luny-laminate-img,
+  .laminate-card > img.laminate-card-img,
+  .laminate-card > img{
+    width:64px !important;
+    height:64px !important;
+    min-width:64px !important;
+    max-width:64px !important;
+    border-radius:13px !important;
+  }
+  .laminate-card > .luny-laminate-text-wrap{
+    padding-right:22px !important;
+  }
+}
