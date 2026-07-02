@@ -1643,3 +1643,125 @@ html,body{
     border-radius:12px !important;
   }
 }
+
+/* =========================================================
+   LUNY v7：疊層修正（不動流程，只重置原工具欄位定位）
+   問題：外部工具 CSS 可能讓 .layout-right / .editor-card sticky/absolute，
+   導致 STEP 2 預覽壓到 STEP 1 報價區。
+   ========================================================= */
+body .page-shell .layout-main{
+  position:relative !important;
+  display:grid !important;
+  grid-template-columns:minmax(0, 1.45fr) minmax(420px, .85fr) !important;
+  grid-template-areas:
+    "visual quote"
+    "visual preview" !important;
+  grid-auto-flow:row !important;
+  grid-auto-rows:auto !important;
+  align-items:start !important;
+  overflow:visible !important;
+  isolation:isolate !important;
+}
+
+body .page-shell .layout-main > .luny-live-visual{
+  grid-area:visual !important;
+  z-index:0 !important;
+}
+
+body .page-shell .layout-main > .layout-left{
+  grid-area:quote !important;
+}
+
+body .page-shell .layout-main > .layout-right{
+  grid-area:preview !important;
+}
+
+body .page-shell .layout-main > .layout-left,
+body .page-shell .layout-main > .layout-right{
+  position:relative !important;
+  inset:auto !important;
+  top:auto !important;
+  right:auto !important;
+  bottom:auto !important;
+  left:auto !important;
+  float:none !important;
+  clear:none !important;
+  width:100% !important;
+  max-width:none !important;
+  min-width:0 !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  overflow:visible !important;
+  transform:none !important;
+  translate:none !important;
+  margin:0 !important;
+  align-self:start !important;
+}
+
+body .page-shell .layout-main > .layout-left{
+  z-index:2 !important;
+}
+
+body .page-shell .layout-main > .layout-right{
+  z-index:1 !important;
+}
+
+body .page-shell .layout-main > .layout-right .editor-card,
+body .page-shell .layout-main > .layout-right #controls,
+body .page-shell .layout-main > .layout-right #previews,
+body .page-shell .layout-main > .layout-right .preview{
+  position:relative !important;
+  inset:auto !important;
+  top:auto !important;
+  right:auto !important;
+  bottom:auto !important;
+  left:auto !important;
+  float:none !important;
+  clear:both !important;
+  width:100% !important;
+  max-width:100% !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  overflow:visible !important;
+  transform:none !important;
+  translate:none !important;
+  z-index:auto !important;
+}
+
+body .page-shell .layout-main > .layout-left .form-container{
+  position:relative !important;
+  inset:auto !important;
+  top:auto !important;
+  right:auto !important;
+  bottom:auto !important;
+  left:auto !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  overflow:visible !important;
+  transform:none !important;
+  z-index:auto !important;
+}
+
+/* 預覽區內容不可蓋到報價欄之外 */
+body .page-shell .layout-main > .layout-right canvas,
+body .page-shell .layout-main > .layout-right img,
+body .page-shell .layout-main > .layout-right video{
+  max-width:100% !important;
+}
+
+@media (max-width:1100px){
+  body .page-shell .layout-main{
+    grid-template-columns:1fr !important;
+    grid-template-areas:
+      "visual"
+      "quote"
+      "preview" !important;
+  }
+  body .page-shell .layout-main > .layout-left,
+  body .page-shell .layout-main > .layout-right{
+    grid-column:1 / -1 !important;
+  }
+}
