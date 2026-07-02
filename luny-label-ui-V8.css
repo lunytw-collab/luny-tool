@@ -1765,3 +1765,263 @@ body .page-shell .layout-main > .layout-right video{
     grid-column:1 / -1 !important;
   }
 }
+
+/* =========================================================
+   LUNY v8：最上方商品視覺改為可替換圖片輪播
+   只影響 .luny-live-visual，不介入報價 / 預覽 / 補圖流程。
+   ========================================================= */
+.luny-live-gallery-track{
+  position:relative !important;
+  overflow:hidden !important;
+}
+
+.luny-live-gallery-slide{
+  position:relative !important;
+  width:100% !important;
+  height:100% !important;
+}
+
+.luny-live-gallery-image-slide{
+  background:#e9e9ec !important;
+}
+
+.luny-live-gallery-img{
+  display:block !important;
+  width:100% !important;
+  height:100% !important;
+  object-fit:cover !important;
+  object-position:center center !important;
+}
+
+.luny-live-gallery-caption{
+  position:absolute !important;
+  left:22px !important;
+  right:22px !important;
+  bottom:28px !important;
+  z-index:6 !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:flex-start !important;
+  gap:4px !important;
+  max-width:min(460px, calc(100% - 44px)) !important;
+  padding:14px 16px !important;
+  border-radius:18px !important;
+  background:rgba(255,255,255,.82) !important;
+  color:var(--luny-ui-black) !important;
+  backdrop-filter:blur(14px) !important;
+  box-shadow:0 16px 40px rgba(17,24,39,.10) !important;
+  pointer-events:none !important;
+}
+
+.luny-live-gallery-caption strong{
+  display:block !important;
+  font-size:16px !important;
+  line-height:1.25 !important;
+  font-weight:950 !important;
+  letter-spacing:.02em !important;
+}
+
+.luny-live-gallery-caption span{
+  display:block !important;
+  font-size:13px !important;
+  line-height:1.45 !important;
+  color:var(--luny-ui-gray-700) !important;
+}
+
+.luny-live-lid-sticker{
+  position:absolute;
+  z-index:3;
+  width:98px;
+  height:98px;
+  border-radius:50%;
+  background:#fff;
+  right:18%;
+  bottom:22%;
+  box-shadow:0 20px 50px rgba(0,0,0,.16);
+}
+
+.luny-live-gallery-arrow{
+  display:grid !important;
+  place-items:center !important;
+  padding:0 !important;
+  font-family:Arial, sans-serif !important;
+  font-weight:400 !important;
+  box-shadow:0 12px 30px rgba(0,0,0,.16) !important;
+}
+
+.luny-live-gallery-arrow:hover{
+  background:rgba(0,0,0,.68) !important;
+}
+
+.luny-live-gallery-dot{
+  transition:width .18s ease, background .18s ease, opacity .18s ease !important;
+}
+
+.luny-live-gallery-dot.is-active{
+  width:26px !important;
+  border-radius:999px !important;
+}
+
+@media (max-width:720px){
+  .luny-live-gallery-caption{
+    left:16px !important;
+    right:16px !important;
+    bottom:20px !important;
+    max-width:calc(100% - 32px) !important;
+    padding:12px 13px !important;
+    border-radius:15px !important;
+  }
+
+  .luny-live-gallery-caption strong{
+    font-size:15px !important;
+  }
+
+  .luny-live-gallery-caption span{
+    font-size:12px !important;
+  }
+
+  .luny-live-gallery-arrow{
+    width:40px !important;
+    height:40px !important;
+    font-size:34px !important;
+  }
+}
+
+
+/* =========================================================
+   LUNY v9：上膜卡片改成與材質卡片一致
+   只調整視覺，不改 #laminate select / 報價邏輯。
+   ========================================================= */
+.laminate-row-card > div{
+  width:100% !important;
+}
+.laminate-card-group{
+  display:grid !important;
+  grid-template-columns:repeat(2, minmax(0, 1fr)) !important;
+  gap:10px !important;
+  margin-top:10px !important;
+}
+.laminate-card{
+  appearance:none !important;
+  position:relative !important;
+  width:100% !important;
+  min-height:104px !important;
+  display:grid !important;
+  grid-template-columns:66px minmax(0, 1fr) !important;
+  grid-template-areas:
+    "thumb title"
+    "thumb subtitle"
+    "thumb desc" !important;
+  column-gap:12px !important;
+  align-items:start !important;
+  padding:12px 13px !important;
+  border:1px solid var(--luny-ui-gray-300) !important;
+  border-radius:16px !important;
+  background:var(--luny-ui-white) !important;
+  color:var(--luny-ui-black) !important;
+  text-align:left !important;
+  box-shadow:0 4px 14px rgba(17,24,39,.035) !important;
+  cursor:pointer !important;
+  overflow:hidden !important;
+  transition:background .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease !important;
+}
+.laminate-card::before{
+  content:'膜' !important;
+  grid-area:thumb !important;
+  width:66px !important;
+  height:66px !important;
+  display:grid !important;
+  place-items:center !important;
+  border-radius:13px !important;
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255,255,255,.92), rgba(255,255,255,0) 32%),
+    linear-gradient(135deg, #fff7e8, #f0f0f2 55%, #e9ddcf) !important;
+  border:1px solid var(--luny-ui-gray-200) !important;
+  color:var(--luny-ui-brown) !important;
+  font-size:18px !important;
+  font-weight:950 !important;
+  line-height:1 !important;
+}
+.laminate-card:hover{
+  transform:translateY(-1px) !important;
+  background:#fbfbfc !important;
+  border-color:#cfcfd6 !important;
+  box-shadow:0 8px 22px rgba(17,24,39,.055) !important;
+}
+.laminate-card.is-active,
+.laminate-card.active{
+  border:2px solid var(--luny-ui-black) !important;
+  background:#fffaf0 !important;
+  box-shadow:0 10px 26px rgba(17,24,39,.08) !important;
+  padding:11px 12px !important;
+}
+.laminate-card.is-active::after,
+.laminate-card.active::after{
+  content:'✓' !important;
+  position:absolute !important;
+  top:9px !important;
+  right:9px !important;
+  width:22px !important;
+  height:22px !important;
+  display:grid !important;
+  place-items:center !important;
+  border-radius:50% !important;
+  background:var(--luny-ui-black) !important;
+  color:#fff !important;
+  font-size:13px !important;
+  font-weight:950 !important;
+  z-index:2 !important;
+}
+.laminate-card-title,
+.laminate-card > strong:first-child{
+  grid-area:title !important;
+  display:block !important;
+  margin:0 28px 3px 0 !important;
+  font-size:15px !important;
+  line-height:1.25 !important;
+  font-weight:950 !important;
+  color:var(--luny-ui-black) !important;
+}
+.laminate-card-subtitle,
+.laminate-card > span:first-of-type{
+  grid-area:subtitle !important;
+  display:block !important;
+  margin:0 0 3px !important;
+  font-size:12px !important;
+  line-height:1.35 !important;
+  font-weight:900 !important;
+  color:var(--luny-ui-brown) !important;
+}
+.laminate-card-desc,
+.laminate-card > small,
+.laminate-card > span:nth-of-type(2){
+  grid-area:desc !important;
+  display:block !important;
+  margin:0 !important;
+  font-size:12px !important;
+  line-height:1.45 !important;
+  font-weight:650 !important;
+  color:var(--luny-ui-gray-700) !important;
+}
+@media (max-width:720px){
+  .laminate-card-group{
+    grid-template-columns:1fr !important;
+    gap:9px !important;
+  }
+  .laminate-card{
+    min-height:96px !important;
+    grid-template-columns:58px minmax(0, 1fr) !important;
+    column-gap:10px !important;
+    padding:11px 12px !important;
+  }
+  .laminate-card.is-active,
+  .laminate-card.active{
+    padding:10px 11px !important;
+  }
+  .laminate-card::before{
+    width:58px !important;
+    height:58px !important;
+    border-radius:12px !important;
+    font-size:16px !important;
+  }
+}
