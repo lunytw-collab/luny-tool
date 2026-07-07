@@ -353,7 +353,7 @@ async function send(){
     }),
     orderStatus:"completed",
     confirmed:true,
-    source:"complete_v20_order_path_fix",
+    source:"complete_v23_boot_fix",
 
     // v20：同時送 root-level 與 page 物件，避免 GAS 端只讀 pagePath 時拿到空值，
     // 造成 /order?l2=... 被誤判為 not_real_complete_page。
@@ -407,7 +407,16 @@ function boot(){
   }catch(e){}
 }
 
-document.readyState==="complete"?boot():addEventListener("load",boot);
+// v25：延長 GAS 查詢等待時間，避免 LockService 造成 v24 6 秒 timeout 後永遠補不到 Drive 連結。
+// v24：快速顯示明細＋手機原生查看檔案攔截＋延後補 Drive 連結。
+// v23：1SHOP 完成頁有時會在 load 事件後才載入外部 JS。
+// 若只等 load，可能整支完成頁程式不啟動，導致 LUNY 訂購明細不顯示。
+if(document.readyState==="loading"){
+  document.addEventListener("DOMContentLoaded",boot);
+  addEventListener("load",boot);
+}else{
+  setTimeout(boot,0);
+}
 })();
 
 (()=>{
@@ -565,15 +574,186 @@ function img(i){
   u=link(i.printFileLink||i.previewFileLink||i.folderLink||"");
 
   return u
-    ? `<a href="${esc(u)}" target="_blank" style="font-size:12px;color:#8b5e3c;text-decoration:underline;">查看檔案</a>`
+    ? `<a data-luny-file-link="1" href="${esc(u)}" target="_blank" rel="noopener" style="font-size:12px;color:#8b5e3c;text-decoration:underline;">查看檔案</a>`
     : `<span style="font-size:12px;color:#999;">無預覽圖</span>`;
 }
 
-function render(d){
+function firstFileLinkFromItems(items){
+  items=Array.isArray(items)?items:[];
+  for(let i of items){
+    let u=link(i.folderLink||i.printFileLink||i.cutFileLink||i.previewFileLink||"");
+    if(u&&/^https?:\/\//i.test(u))return u;
+  }
+  return "";
+}
+
+function fileButtons(i){
+  // 只保留訂單明細下方的「印刷檔 / 切割檔」。
+  // 左側縮圖區的「查看檔案」由 img(i) 產生，這裡不要重複產生「查看資料夾 / 預覽圖」。
+  let links=[
+    ["印刷檔", link(i.printFileLink||"")],
+    ["切割檔", link(i.cutFileLink||"")]
+  ].filter(x=>x[1]&&/^https?:\/\//i.test(x[1]));
+
+  if(!links.length)return "";
+
+  return `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+      ${links.map(x=>`
+        <a data-luny-file-link="1" href="${esc(x[1])}" target="_blank" rel="noopener"
+          style="display:inline-flex;align-items:center;justify-content:center;padding:6px 10px;border-radius:999px;border:1px solid #e5e7eb;background:#fff;color:#8b5e3c;text-decoration:none;font-size:12px;font-weight:700;">
+          ${esc(x[0])}
+        </a>
+      `).join("")}
+    </div>`;
+}
+
+
+function setFirstLunyFileLink(d){
+  try{
+    let first=firstFileLinkFromItems(Array.isArray(d&&d.items)?d.items:[]);
+    if(first&&/^https?:\/\//i.test(first)){
+      window.__LUNY_FIRST_FILE_LINK__=first;
+    }
+  }catch(e){}
+}
+
+function isLunyNativeFileText(el){
+  try{
+    let text=clean((el&&((el.innerText||el.textContent||el.value||el.getAttribute&&el.getAttribute('aria-label'))))||'');
+    return /查看檔案|檔案|設計檔|下載檔案/.test(text);
+  }catch(e){
+    return false;
+  }
+}
+
+function isNativeFileButtonElement(el){
+  try{
+    if(!el || !el.matches)return false;
+
+    // LUNY 自己產生的檔案按鈕，不要攔截，讓它走自己的 href
+    if(el.getAttribute && el.getAttribute("data-luny-file-link")==="1")return false;
+
+    // 只允許真正像按鈕/連結的元素，不要掃整個父層
+    if(!el.matches("a,button,[role='button'],.btn,.button,[onclick],[data-href]"))return false;
+
+    let label="";
+    try{
+      label=(el.getAttribute&&(
+        el.getAttribute("aria-label")||
+        el.getAttribute("title")||
+        ""
+      ))||"";
+    }catch(e){}
+
+    let text=clean(el.innerText||el.textContent||el.value||label||"")
+      .replace(/\s+/g,"")
+      .trim();
+
+    if(!text)return false;
+
+    // 重點：只接受很短、明確的檔案按鈕文字
+    // 避免父層包含「查看檔案」就整區被綁住
+    if(text.length>12)return false;
+
+    return /^(查看檔案|查看資料夾|印刷檔|切割檔|預覽圖|設計檔|下載檔案|檔案)$/.test(text);
+  }catch(e){
+    return false;
+  }
+}
+
+function nativeFileButtonFromEvent(ev){
+  try{
+    let target=ev.target;
+    if(target && target.nodeType!==1)target=target.parentElement;
+    if(!target || !target.closest)return null;
+
+    let el=target.closest("a,button,[role='button'],.btn,.button,[onclick],[data-href]");
+    if(el && isNativeFileButtonElement(el))return el;
+
+    return null;
+  }catch(e){
+    return null;
+  }
+}
+
+function openFirstLunyFileLink(ev){
+  let first=window.__LUNY_FIRST_FILE_LINK__||'';
+  try{
+    if(ev){ev.preventDefault();ev.stopPropagation();ev.stopImmediatePropagation&&ev.stopImmediatePropagation();}
+  }catch(e){}
+
+  if(!first||!/^https?:\/\//i.test(first)){
+    try{
+      if(!window.__LUNY_FILE_LINK_WAIT_ALERTED__){
+        window.__LUNY_FILE_LINK_WAIT_ALERTED__=1;
+        alert('檔案連結還在查詢中，請稍候。若超過 1～2 分鐘仍無法開啟，請確認 GAS 已部署新版，且 orders 表內有 folderLink / printFileLink。');
+        setTimeout(()=>{window.__LUNY_FILE_LINK_WAIT_ALERTED__=0;},8000);
+      }
+    }catch(e){}
+    return false;
+  }
+
+  try{ window.open(first,'_blank','noopener'); }catch(e){ location.href=first; }
+  return true;
+}
+
+function installNativeFileClickInterceptor(){
+  if(window.__LUNY_NATIVE_FILE_CLICK_INTERCEPTOR__)return;
+  window.__LUNY_NATIVE_FILE_CLICK_INTERCEPTOR__=1;
+
+  function handler(ev){
+    let btn=nativeFileButtonFromEvent(ev);
+    if(!btn)return;
+
+    openFirstLunyFileLink(ev);
+  }
+
+  // v26：只攔截 click，不再攔截 pointerdown / touchstart / mousedown
+  // 避免手機或桌機點任何父層區塊時被提前導到雲端資料夾
+  document.addEventListener("click",handler,true);
+}
+function patchNativeFileLinks(d){
+  let items=Array.isArray(d&&d.items)?d.items:[];
+  let first=firstFileLinkFromItems(items);
+  if(!first)return;
+
+  setFirstLunyFileLink(d);
+  installNativeFileClickInterceptor();
+
+  try{
+    document.querySelectorAll("a,button,[role='button'],.btn,.button,[onclick],[data-href]").forEach(el=>{
+      if(!isNativeFileButtonElement(el))return;
+      if(el.dataset && el.dataset.lunyPatchedFileLink==="1")return;
+
+      if(String(el.tagName||"").toUpperCase()==="A"){
+        let href=String(el.getAttribute("href")||el.href||"");
+
+        if(!href || /luny\.tw/i.test(href) || href==="#" || href.indexOf("javascript:")===0){
+          el.setAttribute("href", first);
+          el.setAttribute("target", "_blank");
+          el.setAttribute("rel", "noopener");
+        }
+      }
+
+      el.addEventListener("click",function(ev){
+        openFirstLunyFileLink(ev);
+      },true);
+
+      if(el.dataset)el.dataset.lunyPatchedFileLink="1";
+    });
+  }catch(e){}
+}
+function render(d, force){
+  const oldBox=document.getElementById("lunyOrderDoneSummary");
+  if(oldBox&&force){ try{oldBox.remove();}catch(e){} done=0; }
   if(done||document.getElementById("lunyOrderDoneSummary"))return;
 
   let items=Array.isArray(d.items)?d.items:[];
   if(!items.length)return;
+
+  window.__LUNY_LAST_ORDER_SUMMARY__=d;
+  patchNativeFileLinks(d);
 
   done=1;
 
@@ -611,6 +791,7 @@ function render(d){
           上膜：${esc(q.laminateText||q.laminateLabel||q.laminate||i.laminate||"")}<br>
           數量：${esc(q.quantity||i.quantity||"")} 張<br>
           急件：${esc(q.urgentText||q.urgentLabel||q.urgent||i.urgent||"一般件")}
+          ${fileButtons(i)}
         </div>
       </div>`;
     }).join("");
@@ -647,8 +828,25 @@ function render(d){
     : document.body.prepend(box);
 }
 
+function fetchOrderSummaryWithTimeout(order,ms){
+  // v25：GAS 完成頁可能同時在做 bindOrderNo，會被 LockService 擋 30～60 秒。
+  // v24 的 6 秒 timeout 太短，會導致檔案連結永遠補不上。
+  ms=Number(ms||45000);
+  const controller=(typeof AbortController!=="undefined")?new AbortController():null;
+  const timer=setTimeout(()=>{try{controller&&controller.abort();}catch(e){}},ms);
+  return fetch(GAS_URL,{
+    method:"POST",
+    headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body:JSON.stringify({type:"getOrderSummaryByOrderNo",orderNo:order}),
+    signal:controller?controller.signal:undefined
+  }).then(x=>x.json()).finally(()=>clearTimeout(timer));
+}
+
 async function start(){
-  if(loading||done)return;
+  if(loading)return;
+
+  // 已經拿到 Drive 連結後，就不用再重複查詢。
+  if(done&&window.__LUNY_FIRST_FILE_LINK__)return;
 
   loading=1;
 
@@ -664,25 +862,24 @@ async function start(){
     return;
   }
 
+  // v24：先用本機暫存快速顯示明細，避免 GAS 鎖定時等 30～60 秒才出現。
+  if(!done){
+    let p=localPayload();
+    if(p)render(Object.assign({},p,{orderNo:order,mode:"local_fast"}));
+  }
+
   try{
-    let r=await fetch(GAS_URL,{
-      method:"POST",
-      headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body:JSON.stringify({
-        type:"getOrderSummaryByOrderNo",
-        orderNo:order
-      })
-    }).then(x=>x.json());
+    let r=await fetchOrderSummaryWithTimeout(order,45000);
 
     if(r&&r.ok&&Array.isArray(r.items)&&r.items.length){
-      render(Object.assign({},r,{mode:"GAS"}));
+      setFirstLunyFileLink(r);
+      patchNativeFileLinks(r);
+      // 若先前是 local_fast，GAS 回來後重畫一次，補上查看資料夾 / 印刷檔 / 切割檔。
+      render(Object.assign({},r,{mode:"GAS"}), true);
       loading=0;
       return;
     }
   }catch(e){}
-
-  let p=localPayload();
-  if(p)render(Object.assign({},p,{orderNo:order}));
 
   loading=0;
 }
@@ -691,9 +888,11 @@ let booted=0;
 function boot(){
   if(booted)return;
   booted=1;
+  installNativeFileClickInterceptor();
 
-  [800,1800,3000,4500,6500,9000,12000,16000].forEach(ms=>{
+  [200,800,1800,3000,4500,6500,9000,12000,16000,24000,36000,52000,70000,90000,120000,150000,180000].forEach(ms=>{
     setTimeout(start,ms);
+    setTimeout(()=>{try{ if(window.__LUNY_LAST_ORDER_SUMMARY__) patchNativeFileLinks(window.__LUNY_LAST_ORDER_SUMMARY__); }catch(e){}},ms+250);
   });
 
   try{
@@ -707,5 +906,14 @@ function boot(){
   }catch(e){}
 }
 
-document.readyState==="complete"?boot():addEventListener("load",boot);
+// v25：延長 GAS 查詢等待時間，避免 LockService 造成 v24 6 秒 timeout 後永遠補不到 Drive 連結。
+// v24：快速顯示明細＋手機原生查看檔案攔截＋延後補 Drive 連結。
+// v23：1SHOP 完成頁有時會在 load 事件後才載入外部 JS。
+// 若只等 load，可能整支完成頁程式不啟動，導致 LUNY 訂購明細不顯示。
+if(document.readyState==="loading"){
+  document.addEventListener("DOMContentLoaded",boot);
+  addEventListener("load",boot);
+}else{
+  setTimeout(boot,0);
+}
 })();
