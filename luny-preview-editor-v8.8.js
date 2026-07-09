@@ -797,7 +797,7 @@
 
 
 
-/* LUNY：成品導向 / 裁切風險預覽 v8.7 */
+/* LUNY：成品導向 / 裁切風險預覽 v8.8 safe */
 .luny-risk-intro{
   max-width:420px;
   margin:6px auto 10px;
@@ -864,9 +864,7 @@
   grid-template-columns:repeat(3,minmax(0,1fr)) !important;
   gap:8px !important;
 }
-.edge-choice.luny-edge-methods label{
-  min-width:0;
-}
+.edge-choice.luny-edge-methods label{ min-width:0; }
 .edge-choice.luny-edge-methods .edge-option{
   display:block;
   min-height:44px;
@@ -886,6 +884,7 @@
 @media (max-width:520px){
   .edge-choice.luny-edge-methods{grid-template-columns:1fr !important;}
 }
+
 </style>
 <!-- LUNY SAFE BUILD：以 v6 急件可點＋數量鎖上限版為核心，只套用 V11 視覺與 Hero UI；未載入 v38 pure engine / v7 pure quantity cards，避免改動既有卡片邏輯。 -->
 </head><body><div class="page-shell"><main class="layout-main"><section class="layout-left"><div class="form-container" data-step="checkout"><div class="editor-main-title">1. 取得報價</div><div class="editor-step-bar"><span class="editor-step-pill is-current">STEP 1．設定尺寸與材質，取得報價</span></div><div class="form-row shape-row"><div style="width:100%;"><label>貼紙形狀：</label><div class="shape-button-group"><button class="shape-btn" data-shape="roundrect" type="button"><span class="shape-icon rect"></span> 矩形</button><button class="shape-btn active" data-shape="circle" type="button"><span class="shape-icon circle"></span> 圓形</button><button class="shape-btn" data-shape="ellipse" type="button"><span class="shape-icon roundrect"></span> 橢圓形</button><button class="shape-btn" data-shape="arch" type="button"><span class="shape-icon arch"></span> 拱門形</button><button class="shape-btn" data-shape="custom" type="button"><span class="star-icon">★</span> 客製形狀</button></div><select id="shape" style="display:none;"><option selected="" value="circle">圓形</option><option value="roundrect">矩形(圓角)</option><option value="ellipse">橢圓形</option><option value="arch">拱門型</option><option value="custom">客製化形狀</option></select></div></div><div class="form-row row-2 size-row"><div class="size-field"><label for="widthCm">寬 (cm)：</label><input id="widthCm" inputmode="decimal" max="27" min="1" step="0.5" type="number" value="5"/></div><div class="size-field"><label for="heightCm">高 (cm)：</label><input id="heightCm" inputmode="decimal" max="37" min="1" step="0.5" type="number" value="5"/></div><div class="size-note-row"><div class="size-step-note" id="sizeLimitNote">尺寸以 0.5cm 為單位調整，最大範圍為 27 × 37cm</div></div></div><div class="form-row material-row-card">
@@ -1022,7 +1021,7 @@ window.LUNY_CHECKOUT_CONFIRM_URL = "https://www.luny.tw/checkout-confirm";
 window.LUNY_CONTINUE_SHOPPING_URL = "https://www.luny.tw/#sticker-products";
 </script>
 <script
-  src="https://cdn.jsdelivr.net/gh/lunytw-collab/luny-tool@main/luny-preview-editor-v8.7-risk-preview.js?v=20260709-1"
+  src="https://cdn.jsdelivr.net/gh/lunytw-collab/luny-tool@main/luny-preview-editor-v8.8-safe-risk-preview.js?v=20260709-2"
   onload="console.log('✅ preview editor loaded', typeof drawPreview); if(typeof drawPreview==='function') drawPreview();"
   onerror="console.error('❌ preview editor 載入失敗');"
 ></script>
