@@ -26,25 +26,16 @@
     }
   }
 
-  // 1) 最外圈：成品外側以深灰半透明遮罩壓暗，讓客人明確知道貼紙實際成品範圍。
+  // 1) 成品外側用深灰半透明遮罩，讓實際貼紙成品範圍更明顯。
   ctx.save();
   ctx.beginPath();
   ctx.rect(0,0,ctx.canvas.width,ctx.canvas.height);
   addShapePath(cutW,cutH);
-  ctx.fillStyle='rgba(51,65,85,0.58)';
+  ctx.fillStyle='rgba(51,65,85,0.62)';
   try{ctx.fill('evenodd');}catch(e){ctx.fill();}
   ctx.restore();
 
-  // 2) 安全區外、成品區內：直接遮掉，模擬超過安全區的內容看不到。
-  ctx.save();
-  ctx.beginPath();
-  addShapePath(cutW,cutH);
-  addShapePath(safeW,safeH);
-  ctx.fillStyle='rgba(255,255,255,0.96)';
-  try{ctx.fill('evenodd');}catch(e){ctx.fill();}
-  ctx.restore();
-
-  // 3) 成品邊界：用白色實線明確標示貼紙實際成品範圍。
+  // 2) 成品邊界：用白色實線明確標示貼紙實際成品範圍。
   ctx.save();
   ctx.beginPath();
   addShapePath(cutW,cutH);
@@ -53,7 +44,7 @@
   ctx.stroke();
   ctx.restore();
 
-  // 4) 安全區：綠色虛線。
+  // 3) 預設安全範圍線：綠色虛線。
   ctx.save();
   ctx.beginPath();
   addShapePath(safeW,safeH);
