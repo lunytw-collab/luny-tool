@@ -12,7 +12,9 @@
 (()=>{const PREVIEW_PPI=300,EXPORT_PPI=300;let CM2PX=PREVIEW_PPI/2.54;const BLEED_CM=0.2,GAP_CM=0.2,MIRROR_SOURCE_CM=0.2,MIN_QR_CM=1;const SNAP=10,ZOOM_STEP=1.03;const MOVE_SENSITIVITY=0.1;const MIN_MAIN=0.1,MAX_MAIN=5;const MIN_ICON=0.05,MAX_ICON=5;const MIN_TEXT=0.1,MAX_TEXT=5;const IS_TOUCH=window.matchMedia('(pointer:coarse)').matches;const HANDLE_R=IS_TOUCH?12:8;const HIT=IS_TOUCH?26:12;const TL_HIT=IS_TOUCH?44:18;const ICON_TL_ANCHOR_OPPOSITE=true;const imgInput=document.getElementById('imgFile');const iconInput=document.getElementById('iconFile');const imgMeta=document.getElementById('imgFileMeta');const iconMeta=document.getElementById('iconFileMeta');const shape=document.getElementById('shape');const wIn=document.getElementById('widthCm');const hIn=document.getElementById('heightCm');const bg=document.getElementById('bgColor');const btnDownloadPreview=document.getElementById('downloadPreview');const btnDownloadOriginal=document.getElementById('downloadOriginal');const cG=document.getElementById('canvasGuides');const ctxG=cG.getContext('2d');const txtInput=document.getElementById('textContent');const txtSizeCm=document.getElementById('textSizeCm');const txtColor=document.getElementById('textColor');const btnAddTxt=document.getElementById('addTextBtn');let img=null,imgFull=null,scale=1,offsetX=0,offsetY=0,angle=0;let iconImg=null,iconFull=null,iconScale=0.35,iconOffsetX=0,iconOffsetY=0,iconAngle=0;let showQRTest=false,showTestText=false;let activeTarget='photo';let textStr='';let textSizeCM=0.6;let textScale=1;let textOffsetX=0,textOffsetY=0,textAngle=0;let textFill='#000000';let eyedropperMode=false,eyedropperColor='',backgroundColor='',eyedropperRadiusPx=5,lunyColorToolCollapsed=false;const UPLOAD_PREVIEW_MAX_PX=1800,UPLOAD_ICON_PREVIEW_MAX_PX=1000,UPLOAD_PREVIEW_QUALITY=0.86;function formatBytes(bytes){bytes=Number(bytes)||0;if(bytes<1024)return bytes+' B';if(bytes<1024*1024)return(bytes/1024).toFixed(1)+' KB';return(bytes/1024/1024).toFixed(2)+' MB';}function loadImageFromURL(url){return new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(new Error('圖片載入失敗'));image.src=url;});}async function loadImageFromFile(file){const url=URL.createObjectURL(file);try{return await loadImageFromURL(url);}finally{setTimeout(()=>URL.revokeObjectURL(url),1000);}}function canvasToBlobSafe(canvas,type,quality){return new Promise(resolve=>{if(canvas.toBlob){canvas.toBlob(blob=>resolve(blob),type,quality);}else{resolve(null);}});}async function makePreviewImageFromFile(file,maxSide){const full=await loadImageFromFile(file);const longSide=Math.max(full.width,full.height);const ratio=longSide>maxSide?maxSide/longSide:1;const w=Math.max(1,Math.round(full.width*ratio));const h=Math.max(1,Math.round(full.height*ratio));if(ratio>=1){return{preview:full,full,previewBytes:file.size,compressed:false};}const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const c=canvas.getContext('2d',{alpha:true});c.imageSmoothingEnabled=true;c.imageSmoothingQuality='high';c.drawImage(full,0,0,w,h);let blob=await canvasToBlobSafe(canvas,'image/webp',UPLOAD_PREVIEW_QUALITY);let url;if(blob){url=URL.createObjectURL(blob);}else{url=canvas.toDataURL('image/png');}const preview=await loadImageFromURL(url);if(blob){setTimeout(()=>URL.revokeObjectURL(url),1000);}return{preview,full,previewBytes:blob?blob.size:Math.round((url.length*3)/4),compressed:true};}function setUploadMeta(meta,file,info,isIcon){if(!meta)return;const old=formatBytes(file&&file.size);const now=formatBytes(info&&info.previewBytes);const compressed=info&&info.compressed;meta.textContent=file?`${file.name}｜預覽${compressed?'已壓縮':'未壓縮'}：${old} → ${now}`:'尚未選擇檔案';if(isIcon&&file){const span=document.createElement('span');span.className='badge';span.textContent='建議 ≥ 1.5cm';meta.appendChild(document.createTextNode(' '));meta.appendChild(span);}}const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));const mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);const rot=(x,y,ang)=>{const c=Math.cos(ang),s=Math.sin(ang);return{x:x*c-y*s,y:x*s+y*c};};function toCanvasPoint(e){const r=cG.getBoundingClientRect();const x=(e.clientX-r.left)*(cG.width/r.width);const y=(e.clientY-r.top)*(cG.height/r.height);return{x,y};}function corners(cx,cy,w,h,ang){const hw=w/2,hh=h/2;const base=[{x:-hw,y:-hh},{x:hw,y:-hh},{x:hw,y:hh},{x:-hw,y:hh}];return base.map(p=>{const v=rot(p.x,p.y,ang);return{x:cx+v.x,y:cy+v.y};});}function pointInRotRect(px,py,cx,cy,w,h,ang){const v=rot(px-cx,py-cy,-ang);return Math.abs(v.x)<=w/2&&Math.abs(v.y)<=h/2;}function roundedRectPath(ctx,x,y,w,h,r){const rr=Math.min(r,Math.min(w,h)/2);ctx.moveTo(x+rr,y);ctx.lineTo(x+w-rr,y);ctx.arcTo(x+w,y,x+w,y+rr,rr);ctx.lineTo(x+w,y+h-rr);ctx.arcTo(x+w,y+h,x+w-rr,y+h,rr);ctx.lineTo(x+rr,y+h);ctx.arcTo(x,y+h,x,y+h-rr,rr);ctx.lineTo(x,y+rr);ctx.arcTo(x,y,x+rr,y,rr);}function archPath(ctx,x,y,w,h,cm2px){const r=Math.max(0.5,Math.min(w/2,h));const cx=x+w/2;const cy=y+r;const rr=0.1*cm2px;ctx.moveTo(x+rr,y+h);ctx.arcTo(x,y+h,x,y+h-rr,rr);ctx.lineTo(x,cy);ctx.arc(cx,cy,r,Math.PI,0,false);ctx.lineTo(x+w,y+h-rr);ctx.arcTo(x+w,y+h,x+w-rr,y+h,rr);}function drawCheckerboard(ctx,x,y,w,h,size,c1,c2){const cell=Math.max(6,Math.round(size||16));const endX=x+w,endY=y+h;for(let yy=y;yy<endY;yy+=cell){for(let xx=x;xx<endX;xx+=cell){const odd=((Math.floor((xx-x)/cell)+Math.floor((yy-y)/cell))%2)===1;ctx.fillStyle=odd?(c2||"#ececec"):(c1||"#f7f7f7");ctx.fillRect(xx,yy,Math.min(cell,endX-xx),Math.min(cell,endY-yy));}}}
 
 function measureTextBox(str,fontPx){ctxG.save();ctxG.font=`${fontPx}px "Noto Sans TC", sans-serif`;const m=ctxG.measureText(str||'');const asc=m.actualBoundingBoxAscent||fontPx*0.8;const dsc=m.actualBoundingBoxDescent||fontPx*0.2;const w=Math.max(1,m.width);const h=asc+dsc;ctxG.restore();return{w,h,asc,dsc};}function drawSelection(ctx,cx,cy,w,h,ang){const col='#A36A3A';const pts=corners(cx,cy,w,h,ang);ctx.save();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<4;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.closePath();ctx.stroke();pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.stroke();});const topMid=mid(pts[0],pts[1]);const nx=(topMid.x-cx),ny=(topMid.y-cy);const len=Math.hypot(nx,ny)||1;const ux=nx/len,uy=ny/len;const rx=topMid.x+ux*28,ry=topMid.y+uy*28;ctx.beginPath();ctx.moveTo(topMid.x,topMid.y);ctx.lineTo(rx,ry);ctx.stroke();ctx.beginPath();ctx.arc(rx,ry,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.stroke();ctx.restore();return{corners:pts,rot:{x:rx,y:ry}};}function getEdgeOption(){return 'off';}
-/* v7.9.31：補滿版邊緣＝抓安全範圍外 2mm，以模糊延伸方式補到裁切線，並再延伸到裁切線外 2mm。
+/* v7.9.32：補滿版邊緣＝抓安全範圍外 2mm，以低模糊紋理延伸方式補到裁切線外 2mm。
+   - 降低大範圍 Blur 與過度放大，避免邊緣變成純色框。
+   - 依實際出血距離動態計算延伸倍率，盡量保留原本外框紋理與明暗變化。
    - UI 可維持「補滿版邊緣」，不必讓客戶理解鏡射補邊。
    - 套用時機在印刷內容繪製完成後、輔助線繪製前，避免把紅線/綠線/灰線鏡射進印刷檔。
    - edgeOption=off / mirror / bleed / full 等非白邊值：一律視為補滿版邊緣。 */
@@ -157,23 +159,32 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px){
   addMirrorBleedShapePath(ctx,shapeValue,cx,cy,sourceOuterW,sourceOuterH,cm2px);
   ctx.clip('evenodd');
 
-  const blurBase=Math.max(8, band*1.35);
-  const scales=[1.00,1.015,1.035,1.06,1.09,1.13,1.18,1.24];
-  scales.forEach((s,i)=>{
+  // v7.9.32：依「裁切線 → 出血線」實際距離動態延伸。
+  // 以多層低模糊紋理疊圖取代大範圍 Blur，避免形成像純色外框的效果。
+  const maxScaleX=bleedW/Math.max(1,sourceOuterW);
+  const maxScaleY=bleedH/Math.max(1,sourceOuterH);
+  const maxScale=Math.max(1,Math.max(maxScaleX,maxScaleY));
+  const layerCount=14;
+  const textureBlur=Math.max(0.8,Math.min(2.2,band*0.08));
+
+  for(let i=0;i<layerCount;i++){
+    const t=layerCount<=1?1:i/(layerCount-1);
+    const s=1+(maxScale-1)*t;
     ctx.save();
-    ctx.globalAlpha=Math.min(1,0.72+i*0.04);
-    ctx.filter=`blur(${(blurBase*(1+i*0.42)).toFixed(2)}px)`;
+    ctx.globalAlpha=0.94;
+    ctx.filter=t<0.72?'none':`blur(${(textureBlur*(t-0.72)/0.28).toFixed(2)}px)`;
     ctx.translate(cx,cy);
     ctx.scale(s,s);
     ctx.drawImage(bandCanvas,-cx,-cy,W,H);
     ctx.restore();
-  });
-  // 再補一層低透明度大範圍模糊，避免灰線外 2mm 因為 source band 太窄而看起來沒填滿。
+  }
+
+  // 最外緣只做極輕微柔化，消除像素接縫，不抹掉原始紙紋／外框細節。
   ctx.save();
-  ctx.globalAlpha=0.42;
-  ctx.filter=`blur(${(blurBase*2.7).toFixed(2)}px)`;
+  ctx.globalAlpha=0.18;
+  ctx.filter=`blur(${(textureBlur*1.15).toFixed(2)}px)`;
   ctx.translate(cx,cy);
-  ctx.scale(1.30,1.30);
+  ctx.scale(maxScale,maxScale);
   ctx.drawImage(bandCanvas,-cx,-cy,W,H);
   ctx.restore();
   ctx.restore();
@@ -212,7 +223,7 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px){
     if(danger){
       return{level:1,zone:'safe',title:'有圖文內容碰到裁切線內側 2mm 危險區域，請再往內縮。',important:true};
     }
-    return{level:0,zone:'bleed',title:'已選擇補滿版邊緣，系統會自動抓安全範圍外的 2mm，以模糊填滿方式補到裁切線，並延伸到裁切線外 2mm。',important:false};
+    return{level:0,zone:'bleed',title:'已選擇補滿版邊緣，系統會自動抓安全範圍外的 2mm，以低模糊紋理延伸方式補到裁切線外 2mm，盡量保留原本外框設計。',important:false};
   }
   window.__lunyDangerZoneHit=false;
   const colorApplied=isFullBleedColorApplyEnabled();
