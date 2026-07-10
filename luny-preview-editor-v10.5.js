@@ -331,7 +331,7 @@ window.lunyResetBleedRiskDecision=window.lunyResetBleedRiskDecision||function(){
 function addLunyRiskShapePath(ctx,shapeValue,cx,cy,w,h,cm2px){const s=shapeValue==='custom'?'roundrect':shapeValue;const rpx=0.1*cm2px;if(s==='circle'){const r=Math.min(w,h)/2;ctx.arc(cx,cy,r,0,Math.PI*2);}else if(s==='roundrect'){const x=cx-w/2,y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}else if(s==='ellipse'){ctx.ellipse(cx,cy,w/2,h/2,0,0,Math.PI*2);}else if(s==='arch'){const x=cx-w/2,y=cy-h/2;archPath(ctx,x,y,w,h,cm2px);ctx.closePath();}}function drawProductPreviewCrop(ctx,canvas,cm2px){
   const W=canvas.width,H=canvas.height,b=BLEED_CM*cm2px,cx=W/2,cy=H/2,cutW=W-2*b,cutH=H-2*b;
 
-  // 成品外圍改成透明 PNG 常見棋盤格背景，讓客人明確知道這不是成品本體。
+  // 成品外圍使用透明網格背景，讓客人知道這不是成品本體。
   ctx.save();
   ctx.beginPath();
   ctx.rect(0,0,W,H);
@@ -340,42 +340,12 @@ function addLunyRiskShapePath(ctx,shapeValue,cx,cy,w,h,cm2px){const s=shapeValue
   drawCheckerboard(ctx,0,0,W,H,16,'#f7f7f7','#e9e9e9');
   ctx.restore();
 
-  // 再加一層很淡的白霧，避免棋盤格太搶視覺。
-  ctx.save();
-  ctx.fillStyle='rgba(255,255,255,0.28)';
-  ctx.beginPath();
-  ctx.rect(0,0,W,H);
-  addLunyRiskShapePath(ctx,shape.value,cx,cy,cutW,cutH,cm2px);
-  ctx.fill('evenodd');
-  ctx.restore();
-
-  // 成品輪廓陰影：強化「這裡才是實際成品」的立體感。
-  ctx.save();
-  ctx.beginPath();
-  addLunyRiskShapePath(ctx,shape.value,cx,cy,cutW,cutH,cm2px);
-  ctx.shadowColor='rgba(17,24,39,0.28)';
-  ctx.shadowBlur=Math.max(22,0.20*cm2px);
-  ctx.shadowOffsetX=0;
-  ctx.shadowOffsetY=Math.max(7,0.07*cm2px);
-  ctx.lineWidth=Math.max(8,0.06*cm2px);
-  ctx.strokeStyle='rgba(255,255,255,0.98)';
-  ctx.stroke();
-  ctx.restore();
-
-  // 白色貼紙邊緣 + 灰色細框，更接近實體貼紙展示圖。
-  ctx.save();
-  ctx.beginPath();
-  addLunyRiskShapePath(ctx,shape.value,cx,cy,cutW,cutH,cm2px);
-  ctx.lineWidth=Math.max(3,0.025*cm2px);
-  ctx.strokeStyle='rgba(255,255,255,0.99)';
-  ctx.stroke();
-  ctx.restore();
-
+  // 僅保留灰色外框，不再顯示白邊與陰影。
   ctx.save();
   ctx.beginPath();
   addLunyRiskShapePath(ctx,shape.value,cx,cy,cutW,cutH,cm2px);
   ctx.lineWidth=Math.max(1.6,0.014*cm2px);
-  ctx.strokeStyle='rgba(107,114,128,0.55)';
+  ctx.strokeStyle='rgba(107,114,128,0.78)';
   ctx.stroke();
   ctx.restore();
 }function drawProductWhiteEdgePreview(ctx,canvas,cm2px){if(getEdgeOption()!=='on')return;const W=canvas.width,H=canvas.height,b=BLEED_CM*cm2px,gap=GAP_CM*cm2px,cx=W/2,cy=H/2,cutW=W-2*b,cutH=H-2*b,safeW=Math.max(1,cutW-2*gap),safeH=Math.max(1,cutH-2*gap);ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();addLunyRiskShapePath(ctx,shape.value,cx,cy,cutW,cutH,cm2px);addLunyRiskShapePath(ctx,shape.value,cx,cy,safeW,safeH,cm2px);ctx.fill('evenodd');ctx.restore();}const __lunyIconPixelCache=new WeakMap();function getIconPixelInfo(){if(!iconImg)return null;let cached=__lunyIconPixelCache.get(iconImg);if(cached)return cached;try{const pc=document.createElement('canvas');pc.width=iconImg.width;pc.height=iconImg.height;const pctx=pc.getContext('2d',{willReadFrequently:true});pctx.drawImage(iconImg,0,0,iconImg.width,iconImg.height);cached={w:iconImg.width,h:iconImg.height,data:pctx.getImageData(0,0,iconImg.width,iconImg.height).data};__lunyIconPixelCache.set(iconImg,cached);return cached;}catch(e){return null;}}function previewPointToIconPixel(x,y){if(!iconImg)return null;const cx=cG.width/2+iconOffsetX,cy=cG.height/2+iconOffsetY;const v=rot(x-cx,y-cy,-iconAngle);const ix=v.x/Math.max(0.0001,iconScale)+iconImg.width/2;const iy=v.y/Math.max(0.0001,iconScale)+iconImg.height/2;if(ix<0||iy<0||ix>=iconImg.width||iy>=iconImg.height)return null;return{x:Math.floor(ix),y:Math.floor(iy)};}function iconContainsPreviewPoint(x,y){if(!iconImg)return false;const p=previewPointToIconPixel(x,y);if(!p)return false;const info=getIconPixelInfo();if(!info){return pointInRotRect(x,y,cG.width/2+iconOffsetX,cG.height/2+iconOffsetY,iconImg.width*iconScale,iconImg.height*iconScale,iconAngle);}const idx=(p.y*info.w+p.x)*4;return isVisibleColorPixel(info.data[idx],info.data[idx+1],info.data[idx+2],info.data[idx+3]);}function textContainsPreviewPoint(x,y){if(!textStr)return false;const fontPx=textSizeCM*CM2PX*textScale;const m=measureTextBox(textStr,fontPx);return pointInRotRect(x,y,cG.width/2+textOffsetX,cG.height/2+textOffsetY,m.w,m.h,textAngle);}function makeDangerZoneMaskData(W,H,cx,cy,cutW,cutH,safeW,safeH,cm2px){const m=document.createElement('canvas');m.width=W;m.height=H;const mctx=m.getContext('2d',{willReadFrequently:true});mctx.fillStyle='#000';mctx.beginPath();addLunyRiskShapePath(mctx,shape.value,cx,cy,cutW,cutH,cm2px);mctx.fill();mctx.globalCompositeOperation='destination-out';mctx.beginPath();addLunyRiskShapePath(mctx,shape.value,cx,cy,safeW,safeH,cm2px);mctx.fill();return mctx.getImageData(0,0,W,H).data;}function contentTouchesDangerZone(canvas,cm2px){if(!canvas)return false;const W=canvas.width,H=canvas.height,b=BLEED_CM*cm2px,gap=GAP_CM*cm2px,cx=W/2,cy=H/2,cutW=W-2*b,cutH=H-2*b,safeW=Math.max(1,cutW-2*gap),safeH=Math.max(1,cutH-2*gap);if(W<20||H<20)return false;const mask=makeDangerZoneMaskData(W,H,cx,cy,cutW,cutH,safeW,safeH,cm2px);const step=Math.max(2,Math.floor(Math.min(W,H)/180));for(let y=0;y<H;y+=step){const row=y*W;for(let x=0;x<W;x+=step){const idx=(row+x)*4;if(mask[idx+3]<8)continue;const px=x+0.5,py=y+0.5;if(photoContainsPreviewPoint(px,py)||iconContainsPreviewPoint(px,py)||textContainsPreviewPoint(px,py)){return true;}}}return false;}function drawDangerZoneLabel(ctx,W,H,b,cm2px){const label='⚠ 危險區域';const fontPx=Math.max(12,Math.min(18,0.16*cm2px));ctx.save();ctx.font=`700 ${fontPx}px "Noto Sans TC", sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';const textW=ctx.measureText(label).width;const padX=fontPx*0.75,padY=fontPx*0.35;const boxW=textW+padX*2,boxH=fontPx+padY*2;const x=W/2-boxW/2,y=b+Math.max(4,0.04*cm2px);ctx.fillStyle='#D3162D';ctx.beginPath();roundedRectPath(ctx,x,y,boxW,boxH,boxH/2);ctx.fill();ctx.fillStyle='#fff';ctx.fillText(label,W/2,y+boxH/2);ctx.restore();}function drawImportantSafetyRiskMask(ctx,canvas,cm2px){
