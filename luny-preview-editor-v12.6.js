@@ -1,3 +1,5 @@
+/* LUNY preview editor v18：客製形狀印刷檔四周增加單邊 1mm 白色技術留白，保留完整的出血黑色辨識線 */
+/* v18：技術留白只套用於客製形狀印刷檔；預覽、切割檔、原圖下載與一般形狀皆不變。 */
 /* LUNY preview editor v17：客製形狀印刷檔於最外圈出血線加入內側對齊 0.5pt 黑色辨識線（供 Adobe 腳本建立刀線） */
 /* v17：模擬 Illustrator「筆畫內側對齊」；黑線外緣貼齊出血線，線寬 0.5pt 全部位於出血範圍內。 */
 /* LUNY preview editor v15：正式輸出動態解析度（≤10cm 500PPI／≤20cm 400PPI／>20cm 300PPI）＋輸出像素安全上限 */
@@ -22,6 +24,7 @@
 const LUNY_EXPORT_PPI_SMALL=500,LUNY_EXPORT_PPI_MEDIUM=400,LUNY_EXPORT_PPI_LARGE=300;
 const LUNY_EXPORT_SMALL_MAX_CM=10,LUNY_EXPORT_MEDIUM_MAX_CM=20;
 const LUNY_EXPORT_MAX_SIDE_PX=6000,LUNY_EXPORT_MAX_TOTAL_PIXELS=28000000;
+const LUNY_CUSTOM_PRINT_TECH_MARGIN_CM=0.1; // 客製形狀印刷檔：四周單邊 1mm 白色技術留白
 let CM2PX=PREVIEW_PPI/2.54;
 function lunyGetTargetExportPpi(widthCm,heightCm){
   const longSide=Math.max(Number(widthCm)||0,Number(heightCm)||0);
@@ -48,6 +51,35 @@ function lunyResolveExportSpec(widthCm,heightCm,productionMode){
   return{
     productionMode:!!productionMode,targetPpi,actualPpi,
     pxW,pxH,totalPixels:pxW*pxH,
+    capped:actualPpi<targetPpi-.01,
+    maxSidePx:LUNY_EXPORT_MAX_SIDE_PX,maxTotalPixels:LUNY_EXPORT_MAX_TOTAL_PIXELS
+  };
+}
+function lunyResolveCustomPrintSpec(widthCm,heightCm){
+  const wcm=Math.max(.01,Number(widthCm)||1),hcm=Math.max(.01,Number(heightCm)||1);
+  const targetPpi=lunyGetTargetExportPpi(wcm,hcm);
+  const baseWcm=wcm+2*BLEED_CM,baseHcm=hcm+2*BLEED_CM;
+  const totalWcm=baseWcm+2*LUNY_CUSTOM_PRINT_TECH_MARGIN_CM;
+  const totalHcm=baseHcm+2*LUNY_CUSTOM_PRINT_TECH_MARGIN_CM;
+  const rawW=Math.max(1,Math.round(totalWcm*targetPpi/2.54));
+  const rawH=Math.max(1,Math.round(totalHcm*targetPpi/2.54));
+  let limitScale=1;
+  const maxSide=Math.max(rawW,rawH);
+  if(maxSide>LUNY_EXPORT_MAX_SIDE_PX)limitScale=Math.min(limitScale,LUNY_EXPORT_MAX_SIDE_PX/maxSide);
+  const rawPixels=rawW*rawH;
+  if(rawPixels>LUNY_EXPORT_MAX_TOTAL_PIXELS)limitScale=Math.min(limitScale,Math.sqrt(LUNY_EXPORT_MAX_TOTAL_PIXELS/rawPixels));
+  const actualPpi=Math.max(72,targetPpi*limitScale);
+  const cm2px=actualPpi/2.54;
+  const technicalMarginPx=Math.max(1,Math.round(LUNY_CUSTOM_PRINT_TECH_MARGIN_CM*cm2px));
+  const basePxW=Math.max(1,Math.round(baseWcm*cm2px));
+  const basePxH=Math.max(1,Math.round(baseHcm*cm2px));
+  const pxW=basePxW+technicalMarginPx*2;
+  const pxH=basePxH+technicalMarginPx*2;
+  return{
+    productionMode:true,targetPpi,actualPpi,
+    pxW,pxH,basePxW,basePxH,technicalMarginPx,
+    technicalMarginCm:LUNY_CUSTOM_PRINT_TECH_MARGIN_CM,
+    totalPixels:pxW*pxH,
     capped:actualPpi<targetPpi-.01,
     maxSidePx:LUNY_EXPORT_MAX_SIDE_PX,maxTotalPixels:LUNY_EXPORT_MAX_TOTAL_PIXELS
   };
@@ -956,7 +988,76 @@ function drawPreview(){
   if(qrBtn)qrBtn.setAttribute('aria-pressed',String(!!showQRTest));
   if(txtBtn)txtBtn.setAttribute('aria-pressed',String(!!showTestText));
 }
-window.drawPreview=drawPreview;function resizePreviewCanvas(){const size=lunyGetEffectiveSizeCm();const wcm=size.widthCm;const hcm=size.heightCm;const nextW=Math.round((wcm+2*BLEED_CM)*CM2PX),nextH=Math.round((hcm+2*BLEED_CM)*CM2PX);if(cG.width!==nextW)cG.width=nextW;if(cG.height!==nextH)cG.height=nextH;}function renderExportCanvas(includeGuides,useFullImage,productionMode){const size=lunyGetEffectiveSizeCm();const spec=lunyResolveExportSpec(size.widthCm,size.heightCm,!!productionMode);const exportCm2Px=spec.actualPpi/2.54;const out=document.createElement('canvas');out.width=spec.pxW;out.height=spec.pxH;out.__lunyExportPpi=spec.actualPpi;out.__lunyExportSpec=spec;const octx=out.getContext('2d');octx.imageSmoothingEnabled=true;octx.imageSmoothingQuality='high';drawAll(octx,out,exportCm2Px,{includeGuides:!!includeGuides,includeSelection:false,showQRTestMark:showQRTest,showMinText:showTestText,isPreview:false,useFullImage:!!useFullImage});return out;}function addExportShapePath(ctx,shapeValue,cx,cy,w,h,cm2px){if(shapeValue==='custom'&&lunyCustomAddPath(ctx,w,h,cm2px))return;const s=shapeValue;const rpx=0.1*cm2px;if(s==='circle'){const r=Math.min(w,h)/2;ctx.arc(cx,cy,r,0,Math.PI*2);}else if(s==='roundrect'){const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}else if(s==='ellipse'){ctx.ellipse(cx,cy,w/2,h/2,0,0,Math.PI*2);}else if(s==='arch'){const x=cx-w/2;const y=cy-h/2;archPath(ctx,x,y,w,h,cm2px);ctx.closePath();}else{const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}}function clearOutsideExportShape(ctx,W,H,shapeValue,cx,cy,bleedW,bleedH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();ctx.rect(0,0,W,H);addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);ctx.fill('evenodd');ctx.restore();}function drawPrintWhiteEdgeArea(ctx,shapeValue,cx,cy,bleedW,bleedH,safeW,safeH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);addExportShapePath(ctx,shapeValue,cx,cy,safeW,safeH,cm2px);ctx.fill('evenodd');ctx.restore();}function drawCustomBleedDetectionLine(ctx,bleedW,bleedH,cm2px,exportPpi){if(shape.value!=='custom')return false;ctx.save();ctx.globalCompositeOperation='source-over';ctx.globalAlpha=1;ctx.filter='none';ctx.setLineDash([]);ctx.lineJoin='round';ctx.lineCap='round';ctx.beginPath();const ok=lunyCustomAddPath(ctx,bleedW,bleedH,cm2px);if(ok){/* Canvas 無內側描邊：先裁切在路徑內，再用 1pt 置中描邊，保留的內側半邊即為 Illustrator 內側對齊 0.5pt。 */ctx.save();ctx.clip();ctx.strokeStyle='#000000';ctx.lineWidth=(Number(exportPpi)||300)*(1/72);ctx.beginPath();lunyCustomAddPath(ctx,bleedW,bleedH,cm2px);ctx.stroke();ctx.restore();}ctx.restore();return ok;}function renderPrintCanvas(){const size=lunyGetEffectiveSizeCm();const spec=lunyResolveExportSpec(size.widthCm,size.heightCm,true);const exportCm2Px=spec.actualPpi/2.54;const pxW=spec.pxW,pxH=spec.pxH;const out=document.createElement('canvas');out.width=pxW;out.height=pxH;out.__lunyExportPpi=spec.actualPpi;out.__lunyExportSpec=spec;const octx=out.getContext('2d');octx.imageSmoothingEnabled=true;octx.imageSmoothingQuality='high';drawAll(octx,out,exportCm2Px,{includeGuides:false,includeSelection:false,showQRTestMark:false,showMinText:false,isPreview:false,useFullImage:true,autoBleedForPrint:true});const b=BLEED_CM*exportCm2Px;const gap=GAP_CM*exportCm2Px;const cx=pxW/2;const cy=pxH/2;const cutW=pxW-2*b;const cutH=pxH-2*b;const bleedW=cutW+2*b;const bleedH=cutH+2*b;const safeW=Math.max(1,cutW-2*gap);const safeH=Math.max(1,cutH-2*gap);if(getEdgeOption()==='on'){drawPrintWhiteEdgeArea(octx,shape.value,cx,cy,bleedW,bleedH,safeW,safeH,exportCm2Px);}clearOutsideExportShape(octx,pxW,pxH,shape.value,cx,cy,bleedW,bleedH,exportCm2Px);drawCustomBleedDetectionLine(octx,bleedW,bleedH,exportCm2Px,spec.actualPpi);return out;}function download(c,fn){const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=fn;a.click();}function shapeLabel(){const map={circle:'圓形',roundrect:'矩形',ellipse:'橢圓形',arch:'拱門型',custom:'客製化形狀'};return map[shape.value]||shape.value;}function baseFileName(){const size=lunyGetEffectiveSizeCm();const w=Number(size.widthCm||0).toFixed(2).replace(/0+$/,'').replace(/\.$/,'');const h=Number(size.heightCm||0).toFixed(2).replace(/0+$/,'').replace(/\.$/,'');return`Luny如你所願客製化貼紙_${shapeLabel()}_${w}x${h}cm`;}function bindName(input,meta){input.addEventListener('change',()=>{const f=input.files&&input.files[0];if(meta)meta.textContent=f?`${f.name}｜準備壓縮預覽圖…`:'尚未選擇檔案';});}bindName(imgInput,imgMeta);bindName(iconInput,iconMeta);imgInput.addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(imgMeta)imgMeta.textContent=`${f.name}｜正在產生輕量預覽圖…`;const info=await makePreviewImageFromFile(f,UPLOAD_PREVIEW_MAX_PX);img=info.preview;imgFull=info.full;setUploadMeta(imgMeta,f,info,false);const W=cG.width,H=cG.height;if(shape.value==='custom'){lunyCustomInvalidateCutline();lunyCustomFitMainImage();lunyCustomGenerateAndLockCutline(true);activeTarget=null;}else{let targetH=H;if(shape.value==='circle'){targetH=Math.min(W,H);}scale=targetH/img.height;offsetX=0;offsetY=0;angle=0;lunyCustomInvalidateCutline();}activeTarget='photo';drawPreview();}catch(err){console.error('[LUNY] 主圖壓縮載入失敗：',err);if(imgMeta)imgMeta.textContent='圖片載入失敗，請換一張圖或降低原始檔大小';alert('圖片載入失敗，請換一張圖或降低原始檔大小。');}});iconInput.addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(iconMeta)iconMeta.textContent=`${f.name}｜正在產生輕量預覽圖…`;const info=await makePreviewImageFromFile(f,UPLOAD_ICON_PREVIEW_MAX_PX);iconImg=info.preview;iconFull=info.full;setUploadMeta(iconMeta,f,info,true);const targetPx=2*CM2PX;iconScale=Math.min(targetPx/iconImg.width,targetPx/iconImg.height);iconOffsetX=0;iconOffsetY=0;iconAngle=0;if(shape.value==='custom'){activeTarget=null;lunyCustomScheduleRegenerate();}else{activeTarget='icon';drawPreview();}}catch(err){console.error('[LUNY] QRcode 壓縮載入失敗：',err);if(iconMeta)iconMeta.textContent='QRcode 載入失敗，請換一張圖或降低原始檔大小';alert('QRcode 載入失敗，請換一張圖或降低原始檔大小。');}});function pickTargetAtPoint(px,py){const W=cG.width,H=cG.height,cx=W/2,cy=H/2;function getRectAndHandle(type){if(type==='text'&&textStr){const fontPx=textSizeCM*CM2PX*textScale;const m=measureTextBox(textStr,fontPx);const rc={cx:cx+textOffsetX,cy:cy+textOffsetY,w:m.w,h:m.h,a:textAngle};const pts=corners(rc.cx,rc.cy,rc.w,rc.h,rc.a);const topMid=mid(pts[0],pts[1]);const nx=topMid.x-rc.cx,ny=topMid.y-rc.cy;const len=Math.hypot(nx,ny)||1,ux=nx/len,uy=ny/len;return{rc,rot:{x:topMid.x+ux*28,y:topMid.y+uy*28}};}if(type==='icon'&&iconImg){const rc={cx:cx+iconOffsetX,cy:cy+iconOffsetY,w:iconImg.width*iconScale,h:iconImg.height*iconScale,a:iconAngle};const pts=corners(rc.cx,rc.cy,rc.w,rc.h,rc.a);const topMid=mid(pts[0],pts[1]);const nx=topMid.x-rc.cx,ny=topMid.y-rc.cy;const len=Math.hypot(nx,ny)||1,ux=nx/len,uy=ny/len;return{rc,rot:{x:topMid.x+ux*28,y:topMid.y+uy*28}};}if(type==='photo'&&img){const rc={cx:cx+offsetX,cy:cy+offsetY,w:img.width*scale,h:img.height*scale,a:angle};const pts=corners(rc.cx,rc.cy,rc.w,rc.h,rc.a);const topMid=mid(pts[0],pts[1]);const nx=topMid.x-rc.cx,ny=topMid.y-rc.cy;const len=Math.hypot(nx,ny)||1,ux=nx/len,uy=ny/len;return{rc,rot:{x:topMid.x+ux*28,y:topMid.y+uy*28}};}return null;}const order=['text','icon','photo'];for(const t of order){const info=getRectAndHandle(t);if(!info)continue;const{rc,rot}=info;if(dist({x:px,y:py},rot)<14){activeTarget=t;return t;}if(pointInRotRect(px,py,rc.cx,rc.cy,rc.w,rc.h,rc.a)){activeTarget=t;return t;}}return null;}let mode=null;let scaleCorner=-1;let startPt=null;let startState=null;
+window.drawPreview=drawPreview;function resizePreviewCanvas(){const size=lunyGetEffectiveSizeCm();const wcm=size.widthCm;const hcm=size.heightCm;const nextW=Math.round((wcm+2*BLEED_CM)*CM2PX),nextH=Math.round((hcm+2*BLEED_CM)*CM2PX);if(cG.width!==nextW)cG.width=nextW;if(cG.height!==nextH)cG.height=nextH;}function renderExportCanvas(includeGuides,useFullImage,productionMode){const size=lunyGetEffectiveSizeCm();const spec=lunyResolveExportSpec(size.widthCm,size.heightCm,!!productionMode);const exportCm2Px=spec.actualPpi/2.54;const out=document.createElement('canvas');out.width=spec.pxW;out.height=spec.pxH;out.__lunyExportPpi=spec.actualPpi;out.__lunyExportSpec=spec;const octx=out.getContext('2d');octx.imageSmoothingEnabled=true;octx.imageSmoothingQuality='high';drawAll(octx,out,exportCm2Px,{includeGuides:!!includeGuides,includeSelection:false,showQRTestMark:showQRTest,showMinText:showTestText,isPreview:false,useFullImage:!!useFullImage});return out;}function addExportShapePath(ctx,shapeValue,cx,cy,w,h,cm2px){if(shapeValue==='custom'&&lunyCustomAddPath(ctx,w,h,cm2px))return;const s=shapeValue;const rpx=0.1*cm2px;if(s==='circle'){const r=Math.min(w,h)/2;ctx.arc(cx,cy,r,0,Math.PI*2);}else if(s==='roundrect'){const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}else if(s==='ellipse'){ctx.ellipse(cx,cy,w/2,h/2,0,0,Math.PI*2);}else if(s==='arch'){const x=cx-w/2;const y=cy-h/2;archPath(ctx,x,y,w,h,cm2px);ctx.closePath();}else{const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}}function clearOutsideExportShape(ctx,W,H,shapeValue,cx,cy,bleedW,bleedH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();ctx.rect(0,0,W,H);addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);ctx.fill('evenodd');ctx.restore();}function drawPrintWhiteEdgeArea(ctx,shapeValue,cx,cy,bleedW,bleedH,safeW,safeH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);addExportShapePath(ctx,shapeValue,cx,cy,safeW,safeH,cm2px);ctx.fill('evenodd');ctx.restore();}function lunyCustomAddTechnicalBleedPath(ctx,baseW,baseH,cm2px,technicalMarginPx){
+  const data=lunyCustomComputeCutline();
+  if(!data)return false;
+  const normalized=data.pointsByOffset[4]||data.pointsByOffset[lunyCustomNearestOffset(4)];
+  if(!normalized||normalized.length<3)return false;
+  const b=BLEED_CM*cm2px;
+  const baseCutW=Math.max(1,baseW-2*b),baseCutH=Math.max(1,baseH-2*b);
+  const left=technicalMarginPx+b,top=technicalMarginPx+b;
+  ctx.moveTo(left+normalized[0].x*baseCutW,top+normalized[0].y*baseCutH);
+  for(let i=1;i<normalized.length;i++)ctx.lineTo(left+normalized[i].x*baseCutW,top+normalized[i].y*baseCutH);
+  ctx.closePath();
+  return true;
+}
+function drawCustomBleedDetectionLine(ctx,baseW,baseH,cm2px,exportPpi,technicalMarginPx){
+  if(shape.value!=='custom')return false;
+  ctx.save();
+  ctx.globalCompositeOperation='source-over';ctx.globalAlpha=1;ctx.filter='none';
+  ctx.setLineDash([]);ctx.lineJoin='round';ctx.lineCap='round';
+  ctx.beginPath();
+  const ok=lunyCustomAddTechnicalBleedPath(ctx,baseW,baseH,cm2px,technicalMarginPx);
+  if(ok){
+    /* Canvas 無內側描邊：裁切於出血路徑內，再用 1pt 置中描邊，留下的內側半邊即為 0.5pt。 */
+    ctx.save();ctx.clip();ctx.strokeStyle='#000000';ctx.lineWidth=(Number(exportPpi)||300)*(1/72);
+    ctx.beginPath();lunyCustomAddTechnicalBleedPath(ctx,baseW,baseH,cm2px,technicalMarginPx);ctx.stroke();ctx.restore();
+  }
+  ctx.restore();
+  return ok;
+}
+function renderPrintCanvas(){
+  const size=lunyGetEffectiveSizeCm();
+  const isCustom=shape.value==='custom';
+  const spec=isCustom?lunyResolveCustomPrintSpec(size.widthCm,size.heightCm):lunyResolveExportSpec(size.widthCm,size.heightCm,true);
+  const exportCm2Px=spec.actualPpi/2.54;
+  const basePxW=isCustom?spec.basePxW:spec.pxW;
+  const basePxH=isCustom?spec.basePxH:spec.pxH;
+
+  /* 先維持原本尺寸完成印刷內容，避免技術留白改變成品、裁切線或出血比例。 */
+  const baseCanvas=document.createElement('canvas');
+  baseCanvas.width=basePxW;baseCanvas.height=basePxH;
+  const bctx=baseCanvas.getContext('2d');
+  bctx.imageSmoothingEnabled=true;bctx.imageSmoothingQuality='high';
+  drawAll(bctx,baseCanvas,exportCm2Px,{includeGuides:false,includeSelection:false,showQRTestMark:false,showMinText:false,isPreview:false,useFullImage:true,autoBleedForPrint:true});
+  const b=BLEED_CM*exportCm2Px,gap=GAP_CM*exportCm2Px;
+  const cx=basePxW/2,cy=basePxH/2;
+  const cutW=basePxW-2*b,cutH=basePxH-2*b;
+  const bleedW=cutW+2*b,bleedH=cutH+2*b;
+  const safeW=Math.max(1,cutW-2*gap),safeH=Math.max(1,cutH-2*gap);
+  if(getEdgeOption()==='on')drawPrintWhiteEdgeArea(bctx,shape.value,cx,cy,bleedW,bleedH,safeW,safeH,exportCm2Px);
+  clearOutsideExportShape(bctx,basePxW,basePxH,shape.value,cx,cy,bleedW,bleedH,exportCm2Px);
+
+  if(!isCustom){
+    baseCanvas.__lunyExportPpi=spec.actualPpi;baseCanvas.__lunyExportSpec=spec;
+    return baseCanvas;
+  }
+
+  /* 客製形狀印刷檔：四周增加單邊 1mm 白色技術留白。 */
+  const out=document.createElement('canvas');
+  out.width=spec.pxW;out.height=spec.pxH;
+  out.__lunyExportPpi=spec.actualPpi;out.__lunyExportSpec=spec;
+  out.__lunyTechnicalMarginCm=LUNY_CUSTOM_PRINT_TECH_MARGIN_CM;
+  out.__lunyTechnicalMarginPx=spec.technicalMarginPx;
+  const octx=out.getContext('2d');
+  octx.imageSmoothingEnabled=true;octx.imageSmoothingQuality='high';
+  octx.fillStyle='#ffffff';octx.fillRect(0,0,out.width,out.height);
+  octx.drawImage(baseCanvas,spec.technicalMarginPx,spec.technicalMarginPx);
+  drawCustomBleedDetectionLine(octx,basePxW,basePxH,exportCm2Px,spec.actualPpi,spec.technicalMarginPx);
+  baseCanvas.width=1;baseCanvas.height=1;
+  return out;
+}
+function download(c,fn){const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=fn;a.click();}function shapeLabel(){const map={circle:'圓形',roundrect:'矩形',ellipse:'橢圓形',arch:'拱門型',custom:'客製化形狀'};return map[shape.value]||shape.value;}function baseFileName(){const size=lunyGetEffectiveSizeCm();const w=Number(size.widthCm||0).toFixed(2).replace(/0+$/,'').replace(/\.$/,'');const h=Number(size.heightCm||0).toFixed(2).replace(/0+$/,'').replace(/\.$/,'');return`Luny如你所願客製化貼紙_${shapeLabel()}_${w}x${h}cm`;}function bindName(input,meta){input.addEventListener('change',()=>{const f=input.files&&input.files[0];if(meta)meta.textContent=f?`${f.name}｜準備壓縮預覽圖…`:'尚未選擇檔案';});}bindName(imgInput,imgMeta);bindName(iconInput,iconMeta);imgInput.addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(imgMeta)imgMeta.textContent=`${f.name}｜正在產生輕量預覽圖…`;const info=await makePreviewImageFromFile(f,UPLOAD_PREVIEW_MAX_PX);img=info.preview;imgFull=info.full;setUploadMeta(imgMeta,f,info,false);const W=cG.width,H=cG.height;if(shape.value==='custom'){lunyCustomInvalidateCutline();lunyCustomFitMainImage();lunyCustomGenerateAndLockCutline(true);activeTarget=null;}else{let targetH=H;if(shape.value==='circle'){targetH=Math.min(W,H);}scale=targetH/img.height;offsetX=0;offsetY=0;angle=0;lunyCustomInvalidateCutline();}activeTarget='photo';drawPreview();}catch(err){console.error('[LUNY] 主圖壓縮載入失敗：',err);if(imgMeta)imgMeta.textContent='圖片載入失敗，請換一張圖或降低原始檔大小';alert('圖片載入失敗，請換一張圖或降低原始檔大小。');}});iconInput.addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(iconMeta)iconMeta.textContent=`${f.name}｜正在產生輕量預覽圖…`;const info=await makePreviewImageFromFile(f,UPLOAD_ICON_PREVIEW_MAX_PX);iconImg=info.preview;iconFull=info.full;setUploadMeta(iconMeta,f,info,true);const targetPx=2*CM2PX;iconScale=Math.min(targetPx/iconImg.width,targetPx/iconImg.height);iconOffsetX=0;iconOffsetY=0;iconAngle=0;if(shape.value==='custom'){activeTarget=null;lunyCustomScheduleRegenerate();}else{activeTarget='icon';drawPreview();}}catch(err){console.error('[LUNY] QRcode 壓縮載入失敗：',err);if(iconMeta)iconMeta.textContent='QRcode 載入失敗，請換一張圖或降低原始檔大小';alert('QRcode 載入失敗，請換一張圖或降低原始檔大小。');}});function pickTargetAtPoint(px,py){const W=cG.width,H=cG.height,cx=W/2,cy=H/2;function getRectAndHandle(type){if(type==='text'&&textStr){const fontPx=textSizeCM*CM2PX*textScale;const m=measureTextBox(textStr,fontPx);const rc={cx:cx+textOffsetX,cy:cy+textOffsetY,w:m.w,h:m.h,a:textAngle};const pts=corners(rc.cx,rc.cy,rc.w,rc.h,rc.a);const topMid=mid(pts[0],pts[1]);const nx=topMid.x-rc.cx,ny=topMid.y-rc.cy;const len=Math.hypot(nx,ny)||1,ux=nx/len,uy=ny/len;return{rc,rot:{x:topMid.x+ux*28,y:topMid.y+uy*28}};}if(type==='icon'&&iconImg){const rc={cx:cx+iconOffsetX,cy:cy+iconOffsetY,w:iconImg.width*iconScale,h:iconImg.height*iconScale,a:iconAngle};const pts=corners(rc.cx,rc.cy,rc.w,rc.h,rc.a);const topMid=mid(pts[0],pts[1]);const nx=topMid.x-rc.cx,ny=topMid.y-rc.cy;const len=Math.hypot(nx,ny)||1,ux=nx/len,uy=ny/len;return{rc,rot:{x:topMid.x+ux*28,y:topMid.y+uy*28}};}if(type==='photo'&&img){const rc={cx:cx+offsetX,cy:cy+offsetY,w:img.width*scale,h:img.height*scale,a:angle};const pts=corners(rc.cx,rc.cy,rc.w,rc.h,rc.a);const topMid=mid(pts[0],pts[1]);const nx=topMid.x-rc.cx,ny=topMid.y-rc.cy;const len=Math.hypot(nx,ny)||1,ux=nx/len,uy=ny/len;return{rc,rot:{x:topMid.x+ux*28,y:topMid.y+uy*28}};}return null;}const order=['text','icon','photo'];for(const t of order){const info=getRectAndHandle(t);if(!info)continue;const{rc,rot}=info;if(dist({x:px,y:py},rot)<14){activeTarget=t;return t;}if(pointInRotRect(px,py,rc.cx,rc.cy,rc.w,rc.h,rc.a)){activeTarget=t;return t;}}return null;}let mode=null;let scaleCorner=-1;let startPt=null;let startState=null;
 function lunyDragSensitivity(dx,dy,pointerType){
   const distance=Math.hypot(dx,dy);
   const touch=pointerType==='touch';
