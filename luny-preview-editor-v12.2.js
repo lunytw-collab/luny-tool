@@ -1,4 +1,5 @@
 /* LUNY preview editor v13：客製形狀長邊計價／實際比例尺寸／畫布鎖定／露白檢查 */
+/* LUNY v7.9.39：修正客製形狀長邊模式誤判超出尺寸；移除要求客戶縮放或移動的舊提示 */
 /* LUNY v7.9.38：客製形狀長邊計價／短邊自算＋畫布鎖定＋露白提醒 */
 /* LUNY v7.9.36：客製化形狀自動刀線（平滑／最小角度50°／圖案外至少2mm） */
 /* LUNY v7.9.35：修正邊框顏色即時預覽與印刷輸出 */
@@ -588,7 +589,6 @@ function drawAll(ctx,canvas,cm2px,opts){const{includeGuides=true,includeSelectio
   if(shape.value==='custom'){
     const customData=lunyCustomComputeCutline();
     if(!customData)return{level:2,zone:'custom',title:'客製化形狀需要可辨識的主圖、QR 圖或文字，才能產生刀線。',important:true};
-    if(!customData.fits)return{level:2,zone:'custom',title:'圖案加上四向至少 2mm 刀線後超出目前成品尺寸，請縮小圖案或移回中央。',important:true};
     if(customData.minAngle<LUNY_CUSTOM_MIN_ANGLE_DEG-.25)return{level:2,zone:'custom',title:'客製刀線仍有小於 50° 的銳角，請簡化圖案細節。',important:true};
     return{level:0,zone:'custom',title:`客製刀線已套用：平滑、最小角度 ${customData.minAngle.toFixed(1)}°、圖案外至少 2mm。`,important:false};
   }
