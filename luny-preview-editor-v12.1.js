@@ -1,4 +1,5 @@
-/* LUNY v7.9.37：客製刀線固定＋重新產生刀線＋拖曳／縮放效能與精細操作優化 */
+/* LUNY preview editor v13：客製形狀長邊計價／實際比例尺寸／畫布鎖定／露白檢查 */
+/* LUNY v7.9.38：客製形狀長邊計價／短邊自算＋畫布鎖定＋露白提醒 */
 /* LUNY v7.9.36：客製化形狀自動刀線（平滑／最小角度50°／圖案外至少2mm） */
 /* LUNY v7.9.35：修正邊框顏色即時預覽與印刷輸出 */
 /* LUNY 預覽主程式整合版 v7.9.30-edge-and-bg-color-tool
@@ -29,7 +30,9 @@ let __lunyCustomObjectIdSeed=1;
 let __lunyCustomCutlineCache=null;
 let __lunyCustomCutlineVersion=0;
 let __lunyCustomLastShapeValue=shape?shape.value:'';
-let __lunyCustomControlsReady=false;
+let __lunyCustomLayoutFrame=null;
+let __lunyCustomRegenerateTimer=0;
+let __lunyWhiteEdgeBadge=null;
 
 function lunyCustomObjectId(obj){
   if(!obj)return 0;
@@ -76,6 +79,7 @@ function lunyCustomGetSourceMask(image){
     const toleranceSq=LUNY_CUSTOM_BG_TOLERANCE*LUNY_CUSTOM_BG_TOLERANCE;
     const out=document.createElement('canvas');out.width=w;out.height=h;
     const octx=out.getContext('2d'),mask=octx.createImageData(w,h),md=mask.data;
+    let minX=w,minY=h,maxX=-1,maxY=-1;
     for(let p=0,i=0;p<pixelCount;p++,i+=4){
       const a=data[i+3];let foreground=false;
       if(useAlpha){foreground=a>=20;}
@@ -84,10 +88,17 @@ function lunyCustomGetSourceMask(image){
         const d=.8*dr*dr+1.2*dg*dg+.8*db*db;
         foreground=d>toleranceSq;
       }
-      if(foreground){md[i]=255;md[i+1]=255;md[i+2]=255;md[i+3]=255;}
+      if(foreground){
+        md[i]=255;md[i+1]=255;md[i+2]=255;md[i+3]=255;
+        const x=p%w,y=(p/w)|0;
+        if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+      }
     }
     octx.putImageData(mask,0,0);
-    const result={canvas:out,width:w,height:h,mode:useAlpha?'alpha':'background',background:bg};
+    const bounds=maxX>=minX&&maxY>=minY
+      ?{x:minX,y:minY,width:maxX-minX+1,height:maxY-minY+1}
+      :{x:0,y:0,width:w,height:h};
+    const result={canvas:out,width:w,height:h,mode:useAlpha?'alpha':'background',background:bg,bounds,sourceScaleX:(image.width||w)/w,sourceScaleY:(image.height||h)/h};
     __lunyCustomSourceMaskCache.set(image,result);
     return result;
   }catch(err){console.warn('[LUNY custom] 圖片遮罩建立失敗：',err);return null;}
@@ -223,6 +234,69 @@ function lunyCustomBuildOutline(baseMask,w,h,pxPerMm,offsetMm){
   return lunyCustomConvexHull(lunyCustomBoundarySamples(fallback,w,h));
 }
 function lunyCustomBounds(points){let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;for(const p of points){minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);}return{minX,minY,maxX,maxY};}
+function lunyCustomLongSideCm(){
+  const input=document.getElementById('customLongSideCm');
+  const value=Number(input&&input.value||wIn&&wIn.value||5);
+  return Math.max(1,Math.min(27,Number.isFinite(value)?value:5));
+}
+function lunyCustomRoundSize(value){return Math.max(.01,Math.round(Number(value||0)*100)/100);}
+function lunyCustomResetActualSize(){
+  window.LUNY_CUSTOM_ACTUAL_SIZE=null;
+  const aw=document.getElementById('customActualWidthCm'),ah=document.getElementById('customActualHeightCm');
+  if(aw)aw.value='';if(ah)ah.value='';
+}
+function lunyCustomSetActualSize(aspect){
+  const longSide=lunyCustomLongSideCm();
+  const safeAspect=Math.max(.01,Number(aspect)||1);
+  let widthCm,heightCm;
+  if(safeAspect>=1){widthCm=longSide;heightCm=longSide/safeAspect;}
+  else{heightCm=longSide;widthCm=longSide*safeAspect;}
+  widthCm=lunyCustomRoundSize(widthCm);heightCm=lunyCustomRoundSize(heightCm);
+  const detail={shape:'custom',longSideCm:longSide,widthCm,heightCm,pricingWidthCm:longSide,pricingHeightCm:longSide,aspect:safeAspect};
+  window.LUNY_CUSTOM_ACTUAL_SIZE=detail;
+  const aw=document.getElementById('customActualWidthCm'),ah=document.getElementById('customActualHeightCm');
+  if(aw)aw.value=String(widthCm);if(ah)ah.value=String(heightCm);
+  try{window.dispatchEvent(new CustomEvent('luny:custom-size-updated',{detail}));}catch(e){}
+  return detail;
+}
+function lunyGetEffectiveSizeCm(){
+  if(shape.value==='custom'){
+    const size=window.LUNY_CUSTOM_ACTUAL_SIZE;
+    if(size&&Number(size.widthCm)>0&&Number(size.heightCm)>0)return{widthCm:Number(size.widthCm),heightCm:Number(size.heightCm)};
+    const side=lunyCustomLongSideCm();return{widthCm:side,heightCm:side};
+  }
+  return{widthCm:Math.max(1,Math.min(27,+wIn.value||2)),heightCm:Math.max(1,Math.min(37,+hIn.value||1))};
+}
+window.LUNY_getActualDesignSize=lunyGetEffectiveSizeCm;
+window.LUNY_getCustomPricingSize=function(){const side=lunyCustomLongSideCm();return{widthCm:side,heightCm:side,longSideCm:side};};
+function lunyCustomCaptureLayoutFrame(cutBounds){
+  const cx=cG.width/2,cy=cG.height/2;
+  return{
+    cutBounds:{...cutBounds},canvasWidth:cG.width,canvasHeight:cG.height,
+    photo:img?{cx:cx+offsetX,cy:cy+offsetY,scale,angle}:null,
+    icon:iconImg?{cx:cx+iconOffsetX,cy:cy+iconOffsetY,scale:iconScale,angle:iconAngle}:null,
+    text:textStr?{cx:cx+textOffsetX,cy:cy+textOffsetY,scale:textScale,angle:textAngle}:null
+  };
+}
+function lunyCustomApplyLockedLayout(){
+  const data=__lunyCustomCutlineCache,frame=__lunyCustomLayoutFrame;
+  if(shape.value!=='custom'||!data||!frame)return;
+  resizePreviewCanvas();
+  const b=BLEED_CM*CM2PX,targetW=Math.max(1,cG.width-2*b),targetH=Math.max(1,cG.height-2*b);
+  const sourceW=Math.max(1,frame.cutBounds.maxX-frame.cutBounds.minX),sourceH=Math.max(1,frame.cutBounds.maxY-frame.cutBounds.minY);
+  const sourceCx=(frame.cutBounds.minX+frame.cutBounds.maxX)/2,sourceCy=(frame.cutBounds.minY+frame.cutBounds.maxY)/2;
+  const targetCx=cG.width/2,targetCy=cG.height/2;
+  const factor=Math.min(targetW/sourceW,targetH/sourceH);
+  function apply(base,type){
+    if(!base)return;
+    const nx=targetCx+(base.cx-sourceCx)*factor,ny=targetCy+(base.cy-sourceCy)*factor;
+    if(type==='photo'){scale=base.scale*factor;offsetX=nx-targetCx;offsetY=ny-targetCy;angle=base.angle;}
+    else if(type==='icon'){iconScale=base.scale*factor;iconOffsetX=nx-targetCx;iconOffsetY=ny-targetCy;iconAngle=base.angle;}
+    else{textScale=base.scale*factor;textOffsetX=nx-targetCx;textOffsetY=ny-targetCy;textAngle=base.angle;}
+  }
+  apply(frame.photo,'photo');apply(frame.icon,'icon');apply(frame.text,'text');
+  activeTarget=null;handles=null;
+}
 function lunyCustomGenerateAndLockCutline(force){
   if(shape.value!=='custom'||(!img&&!iconImg&&!textStr))return null;
   if(!force&&__lunyCustomCutlineCache)return __lunyCustomCutlineCache;
@@ -230,50 +304,63 @@ function lunyCustomGenerateAndLockCutline(force){
   const w=Math.max(32,Math.round(cG.width*ratio)),h=Math.max(32,Math.round(cG.height*ratio));
   let base=lunyCustomRenderContentMask(w,h,ratio);base=lunyCustomFillHoles(lunyCustomCleanMask(base,w,h),w,h);
   if(!lunyCustomCountMask(base))return null;
-  const pxPerMm=CM2PX*ratio/10,offsets=[0,1,2,4],pointsByOffset={};
+  const pxPerMm=CM2PX*ratio/10,offsets=[0,1,2,4],absoluteByOffset={};
   let cutAnalysisPoints=null;
   for(const mm of offsets){
     const points=lunyCustomBuildOutline(base,w,h,pxPerMm,mm);
     if(mm===2)cutAnalysisPoints=points;
-    pointsByOffset[mm]=points.map(p=>({x:p.x/w,y:p.y/h}));
+    absoluteByOffset[mm]=points;
   }
-  const cutAbs=pointsByOffset[2].map(p=>({x:p.x*cG.width,y:p.y*cG.height}));
-  const b=BLEED_CM*CM2PX,cutBounds=lunyCustomBounds(cutAbs);
-  const fits=cutBounds.minX>=b-.75&&cutBounds.minY>=b-.75&&cutBounds.maxX<=cG.width-b+.75&&cutBounds.maxY<=cG.height-b+.75;
-  const minAngle=lunyCustomMinAngle(cutAnalysisPoints||[]);
-  const result={
-    key:'locked-'+(++__lunyCustomCutlineVersion),
-    pointsByOffset,minAngle,fits,analysisWidth:w,analysisHeight:h,warnings:[],
-    generatedAt:Date.now(),locked:true
-  };
-  if(!fits)result.warnings.push('圖案加上 2mm 刀線後超出目前成品尺寸，請將圖案縮小或移回中央後重新產生刀線。');
-  if(minAngle<LUNY_CUSTOM_MIN_ANGLE_DEG-.25)result.warnings.push(`刀線仍有 ${minAngle.toFixed(1)}° 的銳角，請縮小細節或改用較簡單圖案。`);
+  if(!cutAnalysisPoints||cutAnalysisPoints.length<3)return null;
+  const cutBounds=lunyCustomBounds(cutAnalysisPoints),boundW=Math.max(1,cutBounds.maxX-cutBounds.minX),boundH=Math.max(1,cutBounds.maxY-cutBounds.minY);
+  const pointsByOffset={};
+  for(const mm of offsets){
+    pointsByOffset[mm]=absoluteByOffset[mm].map(p=>({x:(p.x-cutBounds.minX)/boundW,y:(p.y-cutBounds.minY)/boundH}));
+  }
+  const previewCutBounds={minX:cutBounds.minX/ratio,minY:cutBounds.minY/ratio,maxX:cutBounds.maxX/ratio,maxY:cutBounds.maxY/ratio};
+  const aspect=boundW/boundH,minAngle=lunyCustomMinAngle(cutAnalysisPoints||[]);
+  const result={key:'locked-'+(++__lunyCustomCutlineVersion),pointsByOffset,minAngle,aspect,analysisWidth:w,analysisHeight:h,warnings:[],generatedAt:Date.now(),locked:true};
+  if(minAngle<LUNY_CUSTOM_MIN_ANGLE_DEG-.25)result.warnings.push(`刀線仍有 ${minAngle.toFixed(1)}° 的銳角，請改用較簡單圖案。`);
   __lunyCustomCutlineCache=result;
-  lunyCustomUpdateControlUI();
+  __lunyCustomLayoutFrame=lunyCustomCaptureLayoutFrame(previewCutBounds);
+  lunyCustomSetActualSize(aspect);
+  lunyCustomApplyLockedLayout();
   return result;
 }
-function lunyCustomComputeCutline(){
-  if(shape.value!=='custom')return null;
-  return __lunyCustomCutlineCache||lunyCustomGenerateAndLockCutline(false);
-}
-function lunyCustomInvalidateCutline(){
-  __lunyCustomCutlineCache=null;
-  lunyCustomUpdateControlUI();
-}
+function lunyCustomComputeCutline(){if(shape.value!=='custom')return null;return __lunyCustomCutlineCache||lunyCustomGenerateAndLockCutline(false);}
+function lunyCustomInvalidateCutline(){__lunyCustomCutlineCache=null;__lunyCustomLayoutFrame=null;lunyCustomResetActualSize();}
 function lunyCustomNearestOffset(offsetMm){const values=[0,1,2,4];let best=values[0],distance=Infinity;for(const v of values){const d=Math.abs(v-offsetMm);if(d<distance){distance=d;best=v;}}return best;}
 function lunyCustomRequestedOffsetMm(ctx,w,cm2px){const cutW=ctx.canvas.width-2*BLEED_CM*cm2px;return 2+((w-cutW)/2)/cm2px*10;}
 function lunyCustomGetPoints(ctx,w,h,cm2px){
   const data=lunyCustomComputeCutline();if(!data)return null;
   const requested=lunyCustomRequestedOffsetMm(ctx,w,cm2px),key=lunyCustomNearestOffset(requested),normalized=data.pointsByOffset[key];
-  return normalized.map(p=>({x:p.x*ctx.canvas.width,y:p.y*ctx.canvas.height}));
+  const baseCutW=Math.max(1,ctx.canvas.width-2*BLEED_CM*cm2px),baseCutH=Math.max(1,ctx.canvas.height-2*BLEED_CM*cm2px);
+  const left=(ctx.canvas.width-baseCutW)/2,top=(ctx.canvas.height-baseCutH)/2;
+  return normalized.map(p=>({x:left+p.x*baseCutW,y:top+p.y*baseCutH}));
 }
 function lunyCustomAddPath(ctx,w,h,cm2px){const points=lunyCustomGetPoints(ctx,w,h,cm2px);if(!points||points.length<3)return false;ctx.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)ctx.lineTo(points[i].x,points[i].y);ctx.closePath();return true;}
 function lunyCustomPointInPolygon(x,y,points){let inside=false;for(let i=0,j=points.length-1;i<points.length;j=i++){const a=points[i],b=points[j];if((a.y>y)!==(b.y>y)&&x<(b.x-a.x)*(y-a.y)/(b.y-a.y||1e-9)+a.x)inside=!inside;}return inside;}
 function lunyCustomFitMainImage(){
   if(shape.value!=='custom'||!img)return;
-  resizePreviewCanvas();const b=BLEED_CM*CM2PX,pad=LUNY_CUSTOM_OFFSET_CM*CM2PX;
-  const availableW=Math.max(1,cG.width-2*b-2*pad),availableH=Math.max(1,cG.height-2*b-2*pad);
-  scale=Math.min(availableW/img.width,availableH/img.height);offsetX=0;offsetY=0;angle=0;
+  const side=lunyCustomLongSideCm(),next=Math.round((side+2*BLEED_CM)*CM2PX);
+  if(cG.width!==next)cG.width=next;if(cG.height!==next)cG.height=next;
+  const b=BLEED_CM*CM2PX,pad=.28*CM2PX,availableW=Math.max(1,cG.width-2*b-2*pad),availableH=Math.max(1,cG.height-2*b-2*pad);
+  const source=lunyCustomGetSourceMask(img),sb=source&&source.bounds;
+  if(sb){
+    const bx=sb.x*source.sourceScaleX,by=sb.y*source.sourceScaleY,bw=sb.width*source.sourceScaleX,bh=sb.height*source.sourceScaleY;
+    scale=Math.min(availableW/Math.max(1,bw),availableH/Math.max(1,bh));
+    offsetX=-((bx+bw/2)-img.width/2)*scale;offsetY=-((by+bh/2)-img.height/2)*scale;
+  }else{scale=Math.min(availableW/img.width,availableH/img.height);offsetX=0;offsetY=0;}
+  angle=0;
+}
+function lunyCustomScheduleRegenerate(){
+  if(shape.value!=='custom')return;
+  if(__lunyCustomRegenerateTimer)clearTimeout(__lunyCustomRegenerateTimer);
+  __lunyCustomRegenerateTimer=setTimeout(function(){
+    __lunyCustomRegenerateTimer=0;
+    if(!img&&!iconImg&&!textStr){drawPreview();return;}
+    lunyCustomInvalidateCutline();lunyCustomFitMainImage();lunyCustomGenerateAndLockCutline(true);drawPreview();
+  },140);
 }
 function lunyCustomDrawGuides(ctx,cx,cy,dims,b,gap,cm2px){
   const data=lunyCustomComputeCutline();if(!data)return false;
@@ -286,57 +373,8 @@ function lunyCustomDrawGuides(ctx,cx,cy,dims,b,gap,cm2px){
 }
 window.__lunyAddCustomShapePath=function(ctx,w,h,cm2px){return lunyCustomAddPath(ctx,w,h,cm2px);};
 window.__lunyGetCustomCutlineInfo=function(){return lunyCustomComputeCutline();};
-window.lunyRegenerateCustomCutline=function(){
-  if(shape.value!=='custom')return null;
-  const button=document.getElementById('lunyRegenerateCustomCutline');
-  const status=document.getElementById('lunyCustomCutlineStatus');
-  if(button)button.disabled=true;
-  if(status)status.textContent='正在重新產生刀線…';
-  lunyCustomInvalidateCutline();
-  const result=lunyCustomGenerateAndLockCutline(true);
-  if(button)button.disabled=false;
-  if(status){
-    status.textContent=result
-      ? `刀線已固定｜最小角度 ${result.minAngle.toFixed(1)}°`
-      : '尚無法產生刀線，請先上傳圖片';
-  }
-  drawPreview();
-  return result;
-};
-function lunyCustomEnsureControls(){
-  if(__lunyCustomControlsReady)return;
-  __lunyCustomControlsReady=true;
-  let wrap=document.getElementById('lunyCustomCutlineControls');
-  if(!wrap){
-    wrap=document.createElement('div');
-    wrap.id='lunyCustomCutlineControls';
-    wrap.style.cssText='display:none;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin:10px auto 12px;padding:9px 12px;max-width:420px;border:1px solid #e7d8c8;border-radius:12px;background:#fffaf5;box-sizing:border-box;';
-    wrap.innerHTML='<button id="lunyRegenerateCustomCutline" type="button" style="border:1px solid #a36a3a;border-radius:999px;background:#fff;color:#7a4f2b;padding:8px 16px;font-weight:800;cursor:pointer;touch-action:manipulation;">重新產生刀線</button><span id="lunyCustomCutlineStatus" style="font-size:12px;color:#6b7280;">刀線會固定，不隨圖片移動</span>';
-    const risk=document.getElementById('lunyBleedRiskBox');
-    if(risk&&risk.parentElement)risk.parentElement.insertBefore(wrap,risk);
-    else if(cG&&cG.parentElement)cG.insertAdjacentElement('afterend',wrap);
-  }
-  const button=document.getElementById('lunyRegenerateCustomCutline');
-  if(button&&!button.__lunyBound){
-    button.__lunyBound=true;
-    button.addEventListener('click',function(e){
-      e.preventDefault();e.stopPropagation();
-      window.lunyRegenerateCustomCutline();
-    });
-  }
-}
-function lunyCustomUpdateControlUI(){
-  lunyCustomEnsureControls();
-  const wrap=document.getElementById('lunyCustomCutlineControls');
-  const button=document.getElementById('lunyRegenerateCustomCutline');
-  const status=document.getElementById('lunyCustomCutlineStatus');
-  if(wrap)wrap.style.display=shape.value==='custom'?'flex':'none';
-  if(button)button.disabled=shape.value!=='custom'||(!img&&!iconImg&&!textStr);
-  if(status&&shape.value==='custom'){
-    if(__lunyCustomCutlineCache)status.textContent=`刀線已固定｜最小角度 ${__lunyCustomCutlineCache.minAngle.toFixed(1)}°`;
-    else status.textContent='上傳圖片後會自動產生並固定刀線';
-  }
-}
+function lunyCustomEnsureControls(){}
+function lunyCustomUpdateControlUI(){}
 
 function measureTextBox(str,fontPx){ctxG.save();ctxG.font=`${fontPx}px "Noto Sans TC", sans-serif`;const m=ctxG.measureText(str||'');const asc=m.actualBoundingBoxAscent||fontPx*0.8;const dsc=m.actualBoundingBoxDescent||fontPx*0.2;const w=Math.max(1,m.width);const h=asc+dsc;ctxG.restore();return{w,h,asc,dsc};}function drawSelection(ctx,cx,cy,w,h,ang){const col='#A36A3A';const pts=corners(cx,cy,w,h,ang);ctx.save();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<4;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.closePath();ctx.stroke();pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.stroke();});const topMid=mid(pts[0],pts[1]);const nx=(topMid.x-cx),ny=(topMid.y-cy);const len=Math.hypot(nx,ny)||1;const ux=nx/len,uy=ny/len;const rx=topMid.x+ux*28,ry=topMid.y+uy*28;ctx.beginPath();ctx.moveTo(topMid.x,topMid.y);ctx.lineTo(rx,ry);ctx.stroke();ctx.beginPath();ctx.arc(rx,ry,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.stroke();ctx.restore();return{corners:pts,rot:{x:rx,y:ry}};}function getEdgeOption(){return String(window.LUNY_EDGE_FILL_MODE||'off').toLowerCase();}
 /* v7.9.33：印刷檔自動出血＝抓裁切線內側單邊 1mm，以低模糊紋理延伸方式補到裁切線外 2mm。
@@ -774,22 +812,111 @@ function scheduleDrawPreview(){
     drawPreview();
   });
 }
+function lunyEnsureWhiteEdgeBadge(){
+  if(__lunyWhiteEdgeBadge&&__lunyWhiteEdgeBadge.isConnected)return __lunyWhiteEdgeBadge;
+  const parent=cG&&cG.parentElement;if(!parent)return null;
+  if(getComputedStyle(parent).position==='static')parent.style.position='relative';
+  const badge=document.createElement('div');badge.id='lunyWhiteEdgeBadge';
+  badge.textContent='目前製作範圍將有白邊';
+  badge.style.cssText='display:none;position:absolute;z-index:12;padding:5px 8px;border-radius:8px;border:1px solid #f0c36d;background:rgba(255,248,225,.96);color:#9a5a00;font-size:12px;font-weight:800;line-height:1.25;white-space:nowrap;pointer-events:none;box-shadow:0 3px 10px rgba(154,90,0,.12);';
+  parent.appendChild(badge);__lunyWhiteEdgeBadge=badge;return badge;
+}
+let __lunyWhiteEdgeCheckTimer=0;
+let __lunyWhiteEdgeLastKey='';
+let __lunyWhiteEdgeLastResult=false;
+function lunyWhiteEdgeStateKey(){
+  const custom=__lunyCustomCutlineCache&&__lunyCustomCutlineCache.key||'';
+  return[
+    shape.value,cG.width,cG.height,custom,
+    lunyCustomObjectId(img),Number(scale).toFixed(4),Number(offsetX).toFixed(2),Number(offsetY).toFixed(2),Number(angle).toFixed(4),
+    lunyCustomObjectId(iconImg),Number(iconScale).toFixed(4),Number(iconOffsetX).toFixed(2),Number(iconOffsetY).toFixed(2),Number(iconAngle).toFixed(4),
+    textStr,Number(textSizeCM).toFixed(3),Number(textScale).toFixed(4),Number(textOffsetX).toFixed(2),Number(textOffsetY).toFixed(2),Number(textAngle).toFixed(4),
+    String(bg&&bg.value||''),String(backgroundColor||''),String(eyedropperColor||''),String(getEdgeOption()||'')
+  ].join('|');
+}
+function lunyDetectVisibleWhiteEdge(){
+  if(!img&&!iconImg&&!textStr)return false;
+  if(shape.value==='custom'&&!__lunyCustomCutlineCache)return false;
+  const sourceW=Math.max(1,cG.width),sourceH=Math.max(1,cG.height);
+  const ratio=Math.min(1,260/Math.max(sourceW,sourceH));
+  const W=Math.max(40,Math.round(sourceW*ratio)),H=Math.max(40,Math.round(sourceH*ratio));
+  const cm2px=CM2PX*ratio;
+  const content=document.createElement('canvas');content.width=W;content.height=H;
+  const contentCtx=content.getContext('2d',{willReadFrequently:true});
+  drawAll(contentCtx,content,cm2px,{includeGuides:false,includeSelection:false,showQRTestMark:false,showMinText:false,isPreview:false,useFullImage:false,autoBleedForPrint:false});
+
+  const ring=document.createElement('canvas');ring.width=W;ring.height=H;
+  const rctx=ring.getContext('2d',{willReadFrequently:true});
+  const b=BLEED_CM*cm2px,cx=W/2,cy=H/2,cutW=Math.max(1,W-2*b),cutH=Math.max(1,H-2*b);
+  rctx.save();
+  rctx.beginPath();
+  addExportShapePath(rctx,shape.value,cx,cy,cutW,cutH,cm2px);
+  rctx.clip();
+  rctx.beginPath();
+  addExportShapePath(rctx,shape.value,cx,cy,cutW,cutH,cm2px);
+  rctx.strokeStyle='#000';
+  rctx.lineWidth=Math.max(2,.10*cm2px); // 裁切線內側約 0.5mm 的檢查帶
+  rctx.lineJoin='round';rctx.lineCap='round';rctx.stroke();
+  rctx.restore();
+
+  const pixels=contentCtx.getImageData(0,0,W,H).data;
+  const mask=rctx.getImageData(0,0,W,H).data;
+  let checked=0,white=0;
+  for(let i=0;i<mask.length;i+=4){
+    if(mask[i+3]<24)continue;
+    checked++;
+    const a=pixels[i+3],rr=pixels[i],gg=pixels[i+1],bb=pixels[i+2];
+    if(a<24||(rr>=242&&gg>=242&&bb>=242))white++;
+  }
+  if(checked<20)return false;
+  return white/checked>=.04;
+}
+function lunyPositionWhiteEdgeBadge(badge){
+  if(!badge||badge.style.display==='none'||!cG||!cG.parentElement)return;
+  const parent=cG.parentElement,pr=parent.getBoundingClientRect(),cr=cG.getBoundingClientRect();
+  const left=Math.max(4,cr.right-pr.left-badge.offsetWidth-8),top=Math.max(4,cr.top-pr.top+8);
+  badge.style.left=left+'px';badge.style.top=top+'px';
+}
+function lunyUpdateWhiteEdgeBadge(){
+  const badge=lunyEnsureWhiteEdgeBadge();if(!badge)return;
+  if(__lunyInteractiveDraw){
+    if(__lunyWhiteEdgeCheckTimer)clearTimeout(__lunyWhiteEdgeCheckTimer);
+    __lunyWhiteEdgeCheckTimer=setTimeout(lunyUpdateWhiteEdgeBadge,140);
+    return;
+  }
+  const key=lunyWhiteEdgeStateKey();
+  if(key===__lunyWhiteEdgeLastKey){
+    badge.style.display=__lunyWhiteEdgeLastResult?'block':'none';
+    if(__lunyWhiteEdgeLastResult)requestAnimationFrame(()=>lunyPositionWhiteEdgeBadge(badge));
+    return;
+  }
+  if(__lunyWhiteEdgeCheckTimer)clearTimeout(__lunyWhiteEdgeCheckTimer);
+  __lunyWhiteEdgeCheckTimer=setTimeout(function(){
+    __lunyWhiteEdgeCheckTimer=0;
+    let show=false;
+    try{show=lunyDetectVisibleWhiteEdge();}catch(err){console.warn('[LUNY] 露白檢查失敗：',err);}
+    __lunyWhiteEdgeLastKey=key;__lunyWhiteEdgeLastResult=show;
+    badge.style.display=show?'block':'none';
+    if(show)requestAnimationFrame(()=>lunyPositionWhiteEdgeBadge(badge));
+  },90);
+}
 function drawPreview(){
   resizePreviewCanvas();
   ctxG.imageSmoothingEnabled=true;
   ctxG.imageSmoothingQuality=__lunyInteractiveDraw?'medium':'high';
   const showGuides=shouldShowSafetyGuides();
-  handles=drawAll(ctxG,cG,CM2PX,{includeGuides:showGuides,includeSelection:true,showQRTestMark:showQRTest,showMinText:showTestText,isPreview:true});
+  handles=drawAll(ctxG,cG,CM2PX,{includeGuides:showGuides,includeSelection:shape.value!=='custom',showQRTestMark:showQRTest,showMinText:showTestText,isPreview:true});
   if(!showGuides){drawProductWhiteEdgePreview(ctxG,cG,CM2PX);drawProductPreviewCrop(ctxG,cG,CM2PX);}
   drawImportantSafetyRiskMask(ctxG,cG,CM2PX);
   updateBleedRiskUI();
   lunyCustomUpdateControlUI();
+  lunyUpdateWhiteEdgeBadge();
   const qrBtn=document.getElementById('testQR');
   const txtBtn=document.getElementById('toggleText');
   if(qrBtn)qrBtn.setAttribute('aria-pressed',String(!!showQRTest));
   if(txtBtn)txtBtn.setAttribute('aria-pressed',String(!!showTestText));
 }
-window.drawPreview=drawPreview;function resizePreviewCanvas(){const wcm=Math.max(1,Math.min(37,+wIn.value||2));const hcm=Math.max(1,Math.min(28,+hIn.value||1));const nextW=Math.round((wcm+2*BLEED_CM)*CM2PX),nextH=Math.round((hcm+2*BLEED_CM)*CM2PX);if(cG.width!==nextW)cG.width=nextW;if(cG.height!==nextH)cG.height=nextH;}function renderExportCanvas(includeGuides,useFullImage){const exportCm2Px=EXPORT_PPI/2.54;const wcm=Math.max(1,Math.min(37,+wIn.value||2));const hcm=Math.max(1,Math.min(28,+hIn.value||1));const pxW=Math.round((wcm+2*BLEED_CM)*exportCm2Px);const pxH=Math.round((hcm+2*BLEED_CM)*exportCm2Px);const out=document.createElement('canvas');out.width=pxW;out.height=pxH;const octx=out.getContext('2d');drawAll(octx,out,exportCm2Px,{includeGuides:!!includeGuides,includeSelection:false,showQRTestMark:showQRTest,showMinText:showTestText,isPreview:false,useFullImage:!!useFullImage});return out;}function addExportShapePath(ctx,shapeValue,cx,cy,w,h,cm2px){if(shapeValue==='custom'&&lunyCustomAddPath(ctx,w,h,cm2px))return;const s=shapeValue;const rpx=0.1*cm2px;if(s==='circle'){const r=Math.min(w,h)/2;ctx.arc(cx,cy,r,0,Math.PI*2);}else if(s==='roundrect'){const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}else if(s==='ellipse'){ctx.ellipse(cx,cy,w/2,h/2,0,0,Math.PI*2);}else if(s==='arch'){const x=cx-w/2;const y=cy-h/2;archPath(ctx,x,y,w,h,cm2px);ctx.closePath();}else{const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}}function clearOutsideExportShape(ctx,W,H,shapeValue,cx,cy,bleedW,bleedH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();ctx.rect(0,0,W,H);addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);ctx.fill('evenodd');ctx.restore();}function drawPrintWhiteEdgeArea(ctx,shapeValue,cx,cy,bleedW,bleedH,safeW,safeH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);addExportShapePath(ctx,shapeValue,cx,cy,safeW,safeH,cm2px);ctx.fill('evenodd');ctx.restore();}function renderPrintCanvas(){const exportCm2Px=EXPORT_PPI/2.54;const wcm=Math.max(1,Math.min(37,+wIn.value||2));const hcm=Math.max(1,Math.min(28,+hIn.value||1));const pxW=Math.round((wcm+2*BLEED_CM)*exportCm2Px);const pxH=Math.round((hcm+2*BLEED_CM)*exportCm2Px);const out=document.createElement('canvas');out.width=pxW;out.height=pxH;const octx=out.getContext('2d');drawAll(octx,out,exportCm2Px,{includeGuides:false,includeSelection:false,showQRTestMark:false,showMinText:false,isPreview:false,useFullImage:true,autoBleedForPrint:true});const b=BLEED_CM*exportCm2Px;const gap=GAP_CM*exportCm2Px;const cx=pxW/2;const cy=pxH/2;const cutW=pxW-2*b;const cutH=pxH-2*b;const bleedW=cutW+2*b;const bleedH=cutH+2*b;const safeW=Math.max(1,cutW-2*gap);const safeH=Math.max(1,cutH-2*gap);if(getEdgeOption()==='on'){drawPrintWhiteEdgeArea(octx,shape.value,cx,cy,bleedW,bleedH,safeW,safeH,exportCm2Px);}clearOutsideExportShape(octx,pxW,pxH,shape.value,cx,cy,bleedW,bleedH,exportCm2Px);return out;}function download(c,fn){const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=fn;a.click();}function shapeLabel(){const map={circle:'圓形',roundrect:'矩形',ellipse:'橢圓形',arch:'拱門型',custom:'客製化形狀'};return map[shape.value]||shape.value;}function baseFileName(){const w=(+wIn.value||0).toFixed(1).replace(/\.0$/,'');const h=(+hIn.value||0).toFixed(1).replace(/\.0$/,'');return`Luny如你所願客製化貼紙_${shapeLabel()}_${w}x${h}cm`;}function bindName(input,meta){input.addEventListener('change',()=>{const f=input.files&&input.files[0];if(meta)meta.textContent=f?`${f.name}｜準備壓縮預覽圖…`:'尚未選擇檔案';});}bindName(imgInput,imgMeta);bindName(iconInput,iconMeta);imgInput.addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(imgMeta)imgMeta.textContent=`${f.name}｜正在產生輕量預覽圖…`;const info=await makePreviewImageFromFile(f,UPLOAD_PREVIEW_MAX_PX);img=info.preview;imgFull=info.full;setUploadMeta(imgMeta,f,info,false);const W=cG.width,H=cG.height;if(shape.value==='custom'){lunyCustomFitMainImage();lunyCustomInvalidateCutline();lunyCustomGenerateAndLockCutline(true);}else{let targetH=H;if(shape.value==='circle'){targetH=Math.min(W,H);}scale=targetH/img.height;offsetX=0;offsetY=0;angle=0;lunyCustomInvalidateCutline();}activeTarget='photo';drawPreview();}catch(err){console.error('[LUNY] 主圖壓縮載入失敗：',err);if(imgMeta)imgMeta.textContent='圖片載入失敗，請換一張圖或降低原始檔大小';alert('圖片載入失敗，請換一張圖或降低原始檔大小。');}});iconInput.addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(iconMeta)iconMeta.textContent=`${f.name}｜正在產生輕量預覽圖…`;const info=await makePreviewImageFromFile(f,UPLOAD_ICON_PREVIEW_MAX_PX);iconImg=info.preview;iconFull=info.full;setUploadMeta(iconMeta,f,info,true);const targetPx=2*CM2PX;iconScale=Math.min(targetPx/iconImg.width,targetPx/iconImg.height);iconOffsetX=0;iconOffsetY=0;iconAngle=0;activeTarget='icon';drawPreview();}catch(err){console.error('[LUNY] QRcode 壓縮載入失敗：',err);if(iconMeta)iconMeta.textContent='QRcode 載入失敗，請換一張圖或降低原始檔大小';alert('QRcode 載入失敗，請換一張圖或降低原始檔大小。');}});function pickTargetAtPoint(px,py){const W=cG.width,H=cG.height,cx=W/2,cy=H/2;function getRectAndHandle(type){if(type==='text'&&textStr){const fontPx=textSizeCM*CM2PX*textScale;const m=measureTextBox(textStr,fontPx);const rc={cx:cx+textOffsetX,cy:cy+textOffsetY,w:m.w,h:m.h,a:textAngle};const pts=corners(rc.cx,rc.cy,rc.w,rc.h,rc.a);const topMid=mid(pts[0],pts[1]);const nx=topMid.x-rc.cx,ny=topMid.y-rc.cy;const len=Math.hypot(nx,ny)||1,ux=nx/len,uy=ny/len;return{rc,rot:{x:topMid.x+ux*28,y:topMid.y+uy*28}};}if(type==='icon'&&iconImg){const rc={cx:cx+iconOffsetX,cy:cy+iconOffsetY,w:iconImg.width*iconScale,h:iconImg.height*iconScale,a:iconAngle};const pts=corners(rc.cx,rc.cy,rc.w,rc.h,rc.a);const topMid=mid(pts[0],pts[1]);const nx=topMid.x-rc.cx,ny=topMid.y-rc.cy;const len=Math.hypot(nx,ny)||1,ux=nx/len,uy=ny/len;return{rc,rot:{x:topMid.x+ux*28,y:topMid.y+uy*28}};}if(type==='photo'&&img){const rc={cx:cx+offsetX,cy:cy+offsetY,w:img.width*scale,h:img.height*scale,a:angle};const pts=corners(rc.cx,rc.cy,rc.w,rc.h,rc.a);const topMid=mid(pts[0],pts[1]);const nx=topMid.x-rc.cx,ny=topMid.y-rc.cy;const len=Math.hypot(nx,ny)||1,ux=nx/len,uy=ny/len;return{rc,rot:{x:topMid.x+ux*28,y:topMid.y+uy*28}};}return null;}const order=['text','icon','photo'];for(const t of order){const info=getRectAndHandle(t);if(!info)continue;const{rc,rot}=info;if(dist({x:px,y:py},rot)<14){activeTarget=t;return t;}if(pointInRotRect(px,py,rc.cx,rc.cy,rc.w,rc.h,rc.a)){activeTarget=t;return t;}}return null;}let mode=null;let scaleCorner=-1;let startPt=null;let startState=null;
+window.drawPreview=drawPreview;function resizePreviewCanvas(){const size=lunyGetEffectiveSizeCm();const wcm=size.widthCm;const hcm=size.heightCm;const nextW=Math.round((wcm+2*BLEED_CM)*CM2PX),nextH=Math.round((hcm+2*BLEED_CM)*CM2PX);if(cG.width!==nextW)cG.width=nextW;if(cG.height!==nextH)cG.height=nextH;}function renderExportCanvas(includeGuides,useFullImage){const exportCm2Px=EXPORT_PPI/2.54;const size=lunyGetEffectiveSizeCm();const wcm=size.widthCm;const hcm=size.heightCm;const pxW=Math.round((wcm+2*BLEED_CM)*exportCm2Px);const pxH=Math.round((hcm+2*BLEED_CM)*exportCm2Px);const out=document.createElement('canvas');out.width=pxW;out.height=pxH;const octx=out.getContext('2d');drawAll(octx,out,exportCm2Px,{includeGuides:!!includeGuides,includeSelection:false,showQRTestMark:showQRTest,showMinText:showTestText,isPreview:false,useFullImage:!!useFullImage});return out;}function addExportShapePath(ctx,shapeValue,cx,cy,w,h,cm2px){if(shapeValue==='custom'&&lunyCustomAddPath(ctx,w,h,cm2px))return;const s=shapeValue;const rpx=0.1*cm2px;if(s==='circle'){const r=Math.min(w,h)/2;ctx.arc(cx,cy,r,0,Math.PI*2);}else if(s==='roundrect'){const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}else if(s==='ellipse'){ctx.ellipse(cx,cy,w/2,h/2,0,0,Math.PI*2);}else if(s==='arch'){const x=cx-w/2;const y=cy-h/2;archPath(ctx,x,y,w,h,cm2px);ctx.closePath();}else{const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}}function clearOutsideExportShape(ctx,W,H,shapeValue,cx,cy,bleedW,bleedH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();ctx.rect(0,0,W,H);addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);ctx.fill('evenodd');ctx.restore();}function drawPrintWhiteEdgeArea(ctx,shapeValue,cx,cy,bleedW,bleedH,safeW,safeH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);addExportShapePath(ctx,shapeValue,cx,cy,safeW,safeH,cm2px);ctx.fill('evenodd');ctx.restore();}function renderPrintCanvas(){const exportCm2Px=EXPORT_PPI/2.54;const size=lunyGetEffectiveSizeCm();const wcm=size.widthCm;const hcm=size.heightCm;const pxW=Math.round((wcm+2*BLEED_CM)*exportCm2Px);const pxH=Math.round((hcm+2*BLEED_CM)*exportCm2Px);const out=document.createElement('canvas');out.width=pxW;out.height=pxH;const octx=out.getContext('2d');drawAll(octx,out,exportCm2Px,{includeGuides:false,includeSelection:false,showQRTestMark:false,showMinText:false,isPreview:false,useFullImage:true,autoBleedForPrint:true});const b=BLEED_CM*exportCm2Px;const gap=GAP_CM*exportCm2Px;const cx=pxW/2;const cy=pxH/2;const cutW=pxW-2*b;const cutH=pxH-2*b;const bleedW=cutW+2*b;const bleedH=cutH+2*b;const safeW=Math.max(1,cutW-2*gap);const safeH=Math.max(1,cutH-2*gap);if(getEdgeOption()==='on'){drawPrintWhiteEdgeArea(octx,shape.value,cx,cy,bleedW,bleedH,safeW,safeH,exportCm2Px);}clearOutsideExportShape(octx,pxW,pxH,shape.value,cx,cy,bleedW,bleedH,exportCm2Px);return out;}function download(c,fn){const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download=fn;a.click();}function shapeLabel(){const map={circle:'圓形',roundrect:'矩形',ellipse:'橢圓形',arch:'拱門型',custom:'客製化形狀'};return map[shape.value]||shape.value;}function baseFileName(){const size=lunyGetEffectiveSizeCm();const w=Number(size.widthCm||0).toFixed(2).replace(/0+$/,'').replace(/\.$/,'');const h=Number(size.heightCm||0).toFixed(2).replace(/0+$/,'').replace(/\.$/,'');return`Luny如你所願客製化貼紙_${shapeLabel()}_${w}x${h}cm`;}function bindName(input,meta){input.addEventListener('change',()=>{const f=input.files&&input.files[0];if(meta)meta.textContent=f?`${f.name}｜準備壓縮預覽圖…`:'尚未選擇檔案';});}bindName(imgInput,imgMeta);bindName(iconInput,iconMeta);imgInput.addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(imgMeta)imgMeta.textContent=`${f.name}｜正在產生輕量預覽圖…`;const info=await makePreviewImageFromFile(f,UPLOAD_PREVIEW_MAX_PX);img=info.preview;imgFull=info.full;setUploadMeta(imgMeta,f,info,false);const W=cG.width,H=cG.height;if(shape.value==='custom'){lunyCustomInvalidateCutline();lunyCustomFitMainImage();lunyCustomGenerateAndLockCutline(true);activeTarget=null;}else{let targetH=H;if(shape.value==='circle'){targetH=Math.min(W,H);}scale=targetH/img.height;offsetX=0;offsetY=0;angle=0;lunyCustomInvalidateCutline();}activeTarget='photo';drawPreview();}catch(err){console.error('[LUNY] 主圖壓縮載入失敗：',err);if(imgMeta)imgMeta.textContent='圖片載入失敗，請換一張圖或降低原始檔大小';alert('圖片載入失敗，請換一張圖或降低原始檔大小。');}});iconInput.addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{if(iconMeta)iconMeta.textContent=`${f.name}｜正在產生輕量預覽圖…`;const info=await makePreviewImageFromFile(f,UPLOAD_ICON_PREVIEW_MAX_PX);iconImg=info.preview;iconFull=info.full;setUploadMeta(iconMeta,f,info,true);const targetPx=2*CM2PX;iconScale=Math.min(targetPx/iconImg.width,targetPx/iconImg.height);iconOffsetX=0;iconOffsetY=0;iconAngle=0;if(shape.value==='custom'){activeTarget=null;lunyCustomScheduleRegenerate();}else{activeTarget='icon';drawPreview();}}catch(err){console.error('[LUNY] QRcode 壓縮載入失敗：',err);if(iconMeta)iconMeta.textContent='QRcode 載入失敗，請換一張圖或降低原始檔大小';alert('QRcode 載入失敗，請換一張圖或降低原始檔大小。');}});function pickTargetAtPoint(px,py){const W=cG.width,H=cG.height,cx=W/2,cy=H/2;function getRectAndHandle(type){if(type==='text'&&textStr){const fontPx=textSizeCM*CM2PX*textScale;const m=measureTextBox(textStr,fontPx);const rc={cx:cx+textOffsetX,cy:cy+textOffsetY,w:m.w,h:m.h,a:textAngle};const pts=corners(rc.cx,rc.cy,rc.w,rc.h,rc.a);const topMid=mid(pts[0],pts[1]);const nx=topMid.x-rc.cx,ny=topMid.y-rc.cy;const len=Math.hypot(nx,ny)||1,ux=nx/len,uy=ny/len;return{rc,rot:{x:topMid.x+ux*28,y:topMid.y+uy*28}};}if(type==='icon'&&iconImg){const rc={cx:cx+iconOffsetX,cy:cy+iconOffsetY,w:iconImg.width*iconScale,h:iconImg.height*iconScale,a:iconAngle};const pts=corners(rc.cx,rc.cy,rc.w,rc.h,rc.a);const topMid=mid(pts[0],pts[1]);const nx=topMid.x-rc.cx,ny=topMid.y-rc.cy;const len=Math.hypot(nx,ny)||1,ux=nx/len,uy=ny/len;return{rc,rot:{x:topMid.x+ux*28,y:topMid.y+uy*28}};}if(type==='photo'&&img){const rc={cx:cx+offsetX,cy:cy+offsetY,w:img.width*scale,h:img.height*scale,a:angle};const pts=corners(rc.cx,rc.cy,rc.w,rc.h,rc.a);const topMid=mid(pts[0],pts[1]);const nx=topMid.x-rc.cx,ny=topMid.y-rc.cy;const len=Math.hypot(nx,ny)||1,ux=nx/len,uy=ny/len;return{rc,rot:{x:topMid.x+ux*28,y:topMid.y+uy*28}};}return null;}const order=['text','icon','photo'];for(const t of order){const info=getRectAndHandle(t);if(!info)continue;const{rc,rot}=info;if(dist({x:px,y:py},rot)<14){activeTarget=t;return t;}if(pointInRotRect(px,py,rc.cx,rc.cy,rc.w,rc.h,rc.a)){activeTarget=t;return t;}}return null;}let mode=null;let scaleCorner=-1;let startPt=null;let startState=null;
 function lunyDragSensitivity(dx,dy,pointerType){
   const distance=Math.hypot(dx,dy);
   const touch=pointerType==='touch';
@@ -800,6 +927,7 @@ function lunyDragSensitivity(dx,dy,pointerType){
   return 1;
 }
 cG.addEventListener('pointerdown',(e)=>{
+  if(shape.value==='custom'){activeTarget=null;handles=null;mode=null;return;}
   const p=toCanvasPoint(e);const picked=pickTargetAtPoint(p.x,p.y);
   if(picked){drawPreview();}else{activeTarget=null;handles=null;mode=null;scaleCorner=-1;drawPreview();return;}
   const tgt=getTargetState();if(!tgt)return;
@@ -810,6 +938,7 @@ cG.addEventListener('pointerdown',(e)=>{
   if(pointInRotRect(p.x,p.y,tgt.cx,tgt.cy,tgt.w,tgt.h,tgt.angle)){mode='move';startPt=p;startState={xOff:tgt.xOff,yOff:tgt.yOff,lastPt:p};}
 });
 cG.addEventListener('pointermove',(e)=>{
+  if(shape.value==='custom')return;
   const tgt=getTargetState();if(!tgt||!mode)return;
   const p=toCanvasPoint(e);
   if(mode==='move'){
@@ -834,6 +963,7 @@ function lunyFinishPointerInteraction(){mode=null;scaleCorner=-1;lunyEndInteract
 cG.addEventListener('pointerup',lunyFinishPointerInteraction);
 cG.addEventListener('pointercancel',lunyFinishPointerInteraction);
 cG.addEventListener('wheel',(e)=>{
+  if(shape.value==='custom')return;
   e.preventDefault();const tgt=getTargetState();if(!tgt)return;
   lunyBeginInteractiveDraw();
   const factor=(e.deltaY>0)?(1/ZOOM_STEP):ZOOM_STEP;
@@ -841,21 +971,27 @@ cG.addEventListener('wheel',(e)=>{
 },{passive:false});
 let lastPinchDist=null;
 function tdist(t1,t2){return Math.hypot(t1.clientX-t2.clientX,t1.clientY-t2.clientY);}
-cG.addEventListener('touchstart',(e)=>{if(e.touches.length===2){lastPinchDist=tdist(e.touches[0],e.touches[1]);mode=null;lunyBeginInteractiveDraw();}},{passive:true});
-cG.addEventListener('touchmove',(e)=>{if(e.touches.length===2){e.preventDefault();const d=tdist(e.touches[0],e.touches[1]);if(lastPinchDist){const factor=d/lastPinchDist;const tgt=getTargetState();if(tgt){applyScale(tgt.scale*factor);scheduleDrawPreview();}}lastPinchDist=d;}},{passive:false});
+cG.addEventListener('touchstart',(e)=>{if(shape.value==='custom')return;if(e.touches.length===2){lastPinchDist=tdist(e.touches[0],e.touches[1]);mode=null;lunyBeginInteractiveDraw();}},{passive:true});
+cG.addEventListener('touchmove',(e)=>{if(shape.value==='custom')return;if(e.touches.length===2){e.preventDefault();const d=tdist(e.touches[0],e.touches[1]);if(lastPinchDist){const factor=d/lastPinchDist;const tgt=getTargetState();if(tgt){applyScale(tgt.scale*factor);scheduleDrawPreview();}}lastPinchDist=d;}},{passive:false});
 cG.addEventListener('touchend',()=>{lastPinchDist=null;lunyEndInteractiveDraw(0);},{passive:true});async function downloadCombinedPreview(){const base=baseFileName();const stickerCanvas=renderExportCanvas(false,false);const quoteEl=document.getElementById('quoteArea');if(!quoteEl){alert('找不到報價區（#quoteArea），請確認已加上 id="quoteArea"');return;}if(!window.html2canvas){alert('html2canvas 尚未載入（可能被平台擋外部 CDN）。');return;}const prevPadding=quoteEl.style.padding;const prevTransform=quoteEl.style.transform;quoteEl.style.padding='16px';quoteEl.style.transform='translateZ(0)';let quoteCanvas;try{quoteCanvas=await html2canvas(quoteEl,{backgroundColor:'#ffffff',scale:Math.min(2,window.devicePixelRatio||1),useCORS:true,allowTaint:false,logging:false,scrollX:0,scrollY:-window.scrollY});}catch(err){console.error('[合圖] html2canvas 失敗：',err);alert('合圖下載失敗（截圖失敗），請看 console。');quoteEl.style.padding=prevPadding;quoteEl.style.transform=prevTransform;return;}quoteEl.style.padding=prevPadding;quoteEl.style.transform=prevTransform;const gap=24;const outW=Math.max(quoteCanvas.width,stickerCanvas.width);const outH=quoteCanvas.height+gap+stickerCanvas.height;const out=document.createElement('canvas');out.width=outW;out.height=outH;const octx=out.getContext('2d');octx.fillStyle='#ffffff';octx.fillRect(0,0,outW,outH);const qx=Math.round((outW-quoteCanvas.width)/2);const sx=Math.round((outW-stickerCanvas.width)/2);let y=0;octx.drawImage(quoteCanvas,qx,y);y+=quoteCanvas.height+gap;octx.drawImage(stickerCanvas,sx,y);download(out,`${base}_預覽圖.png`);}function bindExclusiveClick(el,handler){if(!el)return;el.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();handler(e);return false;},true);}bindExclusiveClick(btnDownloadPreview,function(){if(!validateDesignBeforeExport('preview',{manual:true}))return;downloadCombinedPreview();});bindExclusiveClick(btnDownloadOriginal,function(){if(!validateDesignBeforeExport('original',{manual:true}))return;const base=baseFileName();const cleanCanvas=renderExportCanvas(false,true);download(cleanCanvas,`${base}_原圖.png`);});shape.addEventListener('input',()=>{
   const current=shape.value;
   if(current==='custom'&&__lunyCustomLastShapeValue!=='custom'){
-    lunyCustomFitMainImage();
+    setTimeout(function(){
+      lunyCustomInvalidateCutline();
+      if(img){lunyCustomFitMainImage();lunyCustomGenerateAndLockCutline(true);}
+      activeTarget=null;
+      if(cG)cG.style.touchAction='pan-y';
+      drawPreview();
+    },0);
+  }else if(current!=='custom'){
     lunyCustomInvalidateCutline();
-    lunyCustomGenerateAndLockCutline(true);
+    if(cG)cG.style.touchAction='none';
   }
   __lunyCustomLastShapeValue=current;
-  lunyCustomUpdateControlUI();
   drawPreview();
 });
-[wIn,hIn].forEach(el=>el.addEventListener('input',drawPreview));
-bg.addEventListener('input',drawPreview);document.querySelectorAll('input[name="edgeOption"]').forEach(el=>{el.addEventListener('change',drawPreview);});['importantContentMode','safetyGuideToggle'].forEach(id=>{const el=document.getElementById(id);if(el&&!el.__lunyRiskBound){el.__lunyRiskBound=true;el.addEventListener('change',drawPreview);}});const qrBtn=document.getElementById('testQR');const txtBtn=document.getElementById('toggleText');if(qrBtn)qrBtn.addEventListener('click',()=>{showQRTest=!showQRTest;drawPreview();});if(txtBtn)txtBtn.addEventListener('click',()=>{showTestText=!showTestText;drawPreview();});function syncSegmented(){}function getTargetState(){const W=cG.width,H=cG.height,cx=W/2,cy=H/2;if(activeTarget==='photo'&&img){return{type:'photo',cx:cx+offsetX,cy:cy+offsetY,xOff:offsetX,yOff:offsetY,w:img.width*scale,h:img.height*scale,angle,scale,natW:img.width,natH:img.height};}if(activeTarget==='icon'&&iconImg){return{type:'icon',cx:cx+iconOffsetX,cy:cy+iconOffsetY,xOff:iconOffsetX,yOff:iconOffsetY,w:iconImg.width*iconScale,h:iconImg.height*iconScale,angle:iconAngle,scale:iconScale,natW:iconImg.width,natH:iconImg.height};}if(activeTarget==='text'&&textStr){const fontPx=textSizeCM*CM2PX*textScale;const m=measureTextBox(textStr,fontPx);return{type:'text',cx:cx+textOffsetX,cy:cy+textOffsetY,xOff:textOffsetX,yOff:textOffsetY,w:m.w,h:m.h,angle:textAngle,scale:textScale,natW:m.w,natH:m.h};}return null;}function setTargetOffset(x,y){if(activeTarget==='photo'){offsetX=x;offsetY=y;}else if(activeTarget==='icon'){iconOffsetX=x;iconOffsetY=y;}else{textOffsetX=x;textOffsetY=y;}}function getTargetOffset(){return(activeTarget==='photo')?{x:offsetX,y:offsetY}:(activeTarget==='icon'?{x:iconOffsetX,y:iconOffsetY}:{x:textOffsetX,y:textOffsetY});}function setTargetAngle(a){if(activeTarget==='photo'){angle=a;}else if(activeTarget==='icon'){iconAngle=a;}else{textAngle=a;}}function applyScale(s){if(activeTarget==='photo'){scale=clamp(s,MIN_MAIN,MAX_MAIN);}else if(activeTarget==='icon'){const natW=iconImg.width,natH=iconImg.height;const minPx=MIN_QR_CM*CM2PX;const minS=Math.max(minPx/natW,minPx/natH);iconScale=Math.max(minS,Math.min(s,MAX_ICON));}else{textScale=clamp(s,MIN_TEXT,MAX_TEXT);}}function commitText(forceToText=false){textStr=(txtInput.value||'').trim();textSizeCM=Math.max(0.2,Math.min(10,+txtSizeCm.value||0.6));textFill=txtColor.value||'#000000';if((textStr&&forceToText)||(textStr&&document.activeElement&&(document.activeElement===txtInput||document.activeElement===txtSizeCm||document.activeElement===txtColor))){activeTarget='text';}drawPreview();}['input','change'].forEach(ev=>{txtInput.addEventListener(ev,()=>commitText(true));txtSizeCm.addEventListener(ev,()=>commitText(true));txtColor.addEventListener(ev,()=>commitText(true));});if(btnAddTxt)btnAddTxt.addEventListener('click',()=>commitText(true));syncSegmented();ensureEyedropperUI();lunyCustomEnsureControls();lunyCustomUpdateControlUI();if(cG){cG.style.touchAction='none';cG.style.overscrollBehavior='contain';}drawPreview();window.getPrintAndCutDataURLs=function(){
+[wIn,hIn].forEach(el=>el.addEventListener('input',()=>{if(shape.value==='custom')lunyCustomScheduleRegenerate();else drawPreview();}));
+bg.addEventListener('input',drawPreview);document.querySelectorAll('input[name="edgeOption"]').forEach(el=>{el.addEventListener('change',drawPreview);});['importantContentMode','safetyGuideToggle'].forEach(id=>{const el=document.getElementById(id);if(el&&!el.__lunyRiskBound){el.__lunyRiskBound=true;el.addEventListener('change',drawPreview);}});const qrBtn=document.getElementById('testQR');const txtBtn=document.getElementById('toggleText');if(qrBtn)qrBtn.addEventListener('click',()=>{showQRTest=!showQRTest;drawPreview();});if(txtBtn)txtBtn.addEventListener('click',()=>{showTestText=!showTestText;drawPreview();});function syncSegmented(){}function getTargetState(){const W=cG.width,H=cG.height,cx=W/2,cy=H/2;if(activeTarget==='photo'&&img){return{type:'photo',cx:cx+offsetX,cy:cy+offsetY,xOff:offsetX,yOff:offsetY,w:img.width*scale,h:img.height*scale,angle,scale,natW:img.width,natH:img.height};}if(activeTarget==='icon'&&iconImg){return{type:'icon',cx:cx+iconOffsetX,cy:cy+iconOffsetY,xOff:iconOffsetX,yOff:iconOffsetY,w:iconImg.width*iconScale,h:iconImg.height*iconScale,angle:iconAngle,scale:iconScale,natW:iconImg.width,natH:iconImg.height};}if(activeTarget==='text'&&textStr){const fontPx=textSizeCM*CM2PX*textScale;const m=measureTextBox(textStr,fontPx);return{type:'text',cx:cx+textOffsetX,cy:cy+textOffsetY,xOff:textOffsetX,yOff:textOffsetY,w:m.w,h:m.h,angle:textAngle,scale:textScale,natW:m.w,natH:m.h};}return null;}function setTargetOffset(x,y){if(activeTarget==='photo'){offsetX=x;offsetY=y;}else if(activeTarget==='icon'){iconOffsetX=x;iconOffsetY=y;}else{textOffsetX=x;textOffsetY=y;}}function getTargetOffset(){return(activeTarget==='photo')?{x:offsetX,y:offsetY}:(activeTarget==='icon'?{x:iconOffsetX,y:iconOffsetY}:{x:textOffsetX,y:textOffsetY});}function setTargetAngle(a){if(activeTarget==='photo'){angle=a;}else if(activeTarget==='icon'){iconAngle=a;}else{textAngle=a;}}function applyScale(s){if(activeTarget==='photo'){scale=clamp(s,MIN_MAIN,MAX_MAIN);}else if(activeTarget==='icon'){const natW=iconImg.width,natH=iconImg.height;const minPx=MIN_QR_CM*CM2PX;const minS=Math.max(minPx/natW,minPx/natH);iconScale=Math.max(minS,Math.min(s,MAX_ICON));}else{textScale=clamp(s,MIN_TEXT,MAX_TEXT);}}function commitText(forceToText=false){textStr=(txtInput.value||'').trim();textSizeCM=Math.max(0.2,Math.min(10,+txtSizeCm.value||0.6));textFill=txtColor.value||'#000000';if(shape.value==='custom'){activeTarget=null;lunyCustomScheduleRegenerate();return;}if((textStr&&forceToText)||(textStr&&document.activeElement&&(document.activeElement===txtInput||document.activeElement===txtSizeCm||document.activeElement===txtColor))){activeTarget='text';}drawPreview();}['input','change'].forEach(ev=>{txtInput.addEventListener(ev,()=>commitText(true));txtSizeCm.addEventListener(ev,()=>commitText(true));txtColor.addEventListener(ev,()=>commitText(true));});if(btnAddTxt)btnAddTxt.addEventListener('click',()=>commitText(true));syncSegmented();ensureEyedropperUI();lunyCustomEnsureControls();lunyCustomUpdateControlUI();if(cG){cG.style.touchAction=shape.value==='custom'?'pan-y':'none';cG.style.overscrollBehavior='contain';}drawPreview();window.getPrintAndCutDataURLs=function(){
   if(!validateDesignBeforeExport('printcut',{manual:false,silent:true})){
     throw new Error("LUNY_BLEED_RISK_USER_CANCELLED");
   }
