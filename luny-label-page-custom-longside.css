@@ -1,0 +1,866 @@
+/* LUNY：V11 視覺安全覆蓋（只換皮，不改卡片邏輯） */
+.luny-live-visual-badge,
+.luny-live-gallery-caption{
+  display:none !important;
+}
+.luny-single-flow-action-grid{
+  display:block !important;
+  grid-template-columns:1fr !important;
+}
+#quoteNextStepBtn.luny-primary-yellow-cta,
+.luny-primary-yellow-cta{
+  width:100% !important;
+  min-height:54px !important;
+  border-radius:14px !important;
+  border:1px solid #f2c300 !important;
+  background:#ffd84d !important;
+  color:#3b2a16 !important;
+  font-size:17px !important;
+  font-weight:800 !important;
+  box-shadow:0 8px 18px rgba(189,132,0,.22) !important;
+  cursor:pointer !important;
+}
+#quoteNextStepBtn.luny-primary-yellow-cta:hover,
+.luny-primary-yellow-cta:hover{
+  background:#ffcf24 !important;
+  transform:translateY(-1px);
+}
+.luny-trust-note{
+  text-align:center;
+}
+
+@media (max-width:720px){
+  .luny-checkout-actions{grid-template-columns:1fr !important;}
+}
+
+.form-row.row-2.size-row{
+  display:grid !important;
+  grid-template-columns:1fr 1fr !important;
+  gap:10px 14px !important;
+  align-items:start;
+}
+
+.form-row.row-2.size-row > .size-field{
+  width:100%;
+  min-width:0;
+}
+
+.form-row.row-2.size-row > .size-note-row{
+  grid-column:1 / -1 !important;
+  width:100%;
+  text-align:center;
+  margin-top:-2px;
+}
+
+.size-step-note{
+  display:inline-block;
+  font-size:12px;
+  color:#8a8a8a;
+  line-height:1.4;
+  white-space:nowrap;
+  letter-spacing:0.1px;
+}
+
+@media (max-width:480px){
+  .form-row.row-2.size-row{
+    gap:8px 10px !important;
+  }
+
+  .size-step-note{
+    font-size:11px;
+  }
+}
+
+#lunyFullBleedOverlayCanvas{
+  background:transparent !important;
+  background-color:transparent !important;
+  border:0 !important;
+  box-shadow:none !important;
+  outline:0 !important;
+  pointer-events:none !important;
+}
+
+/* LUNY：預計出貨日提醒 */
+.luny-ship-date-box{
+  margin-top:10px;
+  padding:12px 14px;
+  border-radius:14px;
+  background:#f7fbff;
+  border:1px solid #cfe3f8;
+  font-size:14px;
+  line-height:1.6;
+  color:#234;
+}
+.luny-ship-date-box .ship-date-title{
+  font-weight:700;
+  margin-bottom:4px;
+}
+.luny-ship-date-box .ship-date-main{
+  font-weight:700;
+}
+.luny-ship-date-box .ship-date-rush{
+  margin-top:2px;
+  color:#e65100;
+  font-weight:700;
+}
+.luny-ship-date-box .ship-date-superrush{
+  margin-top:2px;
+  color:#b45309;
+  font-weight:700;
+}
+.luny-ship-date-box .ship-date-sub{
+  margin-top:4px;
+  color:#666;
+  font-size:13px;
+}
+
+
+/* LUNY：轉換率優化 UI v1（只調整前端呈現，不更動報價邏輯） */
+.luny-quote-card{
+  margin-top:14px;
+  padding:16px;
+  border-radius:18px;
+  background:#fff;
+  border:1px solid #eadfd4;
+  box-shadow:0 8px 22px rgba(80, 54, 32, .08);
+}
+.luny-quote-card .luny-quote-label{
+  font-size:13px;
+  color:#8a6a52;
+  font-weight:700;
+  letter-spacing:.02em;
+}
+.luny-quote-price{
+  margin-top:3px;
+  font-size:32px;
+  line-height:1.15;
+  font-weight:800;
+  color:#2b211b;
+}
+.luny-quote-spec{
+  margin-top:8px;
+  font-size:13px;
+  line-height:1.55;
+  color:#5f5148;
+}
+.luny-quote-next-btn{
+  width:100%;
+  margin-top:12px;
+  border:0;
+  border-radius:999px;
+  padding:12px 16px;
+  background:#111827;
+  color:#fff;
+  font-size:15px;
+  font-weight:800;
+  cursor:pointer;
+}
+.luny-trust-note{
+  margin-top:9px;
+  text-align:center;
+  font-size:12px;
+  line-height:1.5;
+  color:#7a6f68;
+}
+.luny-main-upload-card{
+  border:1px solid #eadfd4;
+  background:#fffdfa;
+}
+.luny-upload-helper{
+  margin:4px 0 10px;
+  font-size:13px;
+  line-height:1.55;
+  color:#6b625c;
+}
+.luny-advanced-panel summary{
+  font-weight:800;
+}
+.luny-advanced-list{
+  display:grid;
+  gap:10px;
+}
+.luny-notice-panel{
+  margin-top:18px;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  background:#fff;
+  color:#666;
+  font-size:14px;
+  line-height:1.5;
+  overflow:hidden;
+}
+.luny-notice-panel summary{
+  cursor:pointer;
+  padding:12px 14px;
+  font-weight:800;
+  color:#4b5563;
+  list-style:none;
+}
+.luny-notice-panel summary::-webkit-details-marker{display:none;}
+.luny-notice-panel summary::after{
+  content:'＋';
+  float:right;
+  color:#9ca3af;
+}
+.luny-notice-panel[open] summary::after{content:'－';}
+.luny-notice-panel ol{
+  margin:0 14px 14px 30px;
+  padding:0;
+}
+.luny-legend-simple .legend-note{
+  display:grid;
+  gap:4px;
+  text-align:left;
+  max-width:420px;
+  margin:0 auto;
+}
+@media (max-width:720px){
+  .luny-quote-price{font-size:30px;}
+}
+
+
+
+/* LUNY：數量列表（保留原 select 給報價邏輯使用） */
+.quantity-hidden-select{
+  position:absolute !important;
+  width:1px !important;
+  height:1px !important;
+  opacity:0 !important;
+  pointer-events:none !important;
+}
+.quantity-card-wrap label{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:#1f2937;
+}
+.luny-quantity-currency{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.08em;
+  color:#9ca3af;
+}
+.luny-quantity-list{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  margin-top:8px;
+  padding:5px;
+  border:1px solid #e5e7eb;
+  border-radius:16px;
+  background:#ffffff;
+  box-shadow:0 4px 14px rgba(17, 24, 39, 0.035);
+}
+.luny-quantity-row{
+  appearance:none;
+  display:grid;
+  grid-template-columns:90px minmax(0, 1fr) auto;
+  align-items:center;
+  gap:10px;
+  width:100%;
+  min-height:38px;
+  border:1px solid transparent;
+  border-radius:10px;
+  background:transparent;
+  padding:7px 9px;
+  text-align:left;
+  cursor:pointer;
+  color:#374151;
+  transition:background .16s ease, transform .16s ease, color .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.luny-quantity-row:hover{
+  background:#f9fafb;
+}
+.luny-quantity-row.is-active{
+  border-color:#b8875a;
+  background:#fffaf4;
+  color:#8a552b;
+  box-shadow:0 5px 14px rgba(184, 135, 90, 0.10);
+}
+.luny-quantity-main{
+  font-size:14px;
+  font-weight:900;
+  line-height:1.2;
+  white-space:nowrap;
+}
+.luny-quantity-price-wrap{
+  display:flex;
+  align-items:center;
+  min-width:0;
+}
+.luny-quantity-price{
+  display:block;
+  font-size:14px;
+  font-weight:800;
+  color:#111827;
+  line-height:1.2;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.luny-quantity-total{
+  display:none !important;
+}
+.luny-quantity-row.is-active .luny-quantity-main,
+.luny-quantity-row.is-active .luny-quantity-price{
+  color:#8a552b;
+}
+.luny-quantity-discount{
+  justify-self:end;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:42px;
+  min-height:20px;
+  padding:2px 7px;
+  border-radius:999px;
+  background:#8a552b;
+  color:#fff;
+  font-size:11px;
+  font-weight:900;
+  line-height:1;
+  white-space:nowrap;
+  box-shadow:0 3px 8px rgba(138, 85, 43, 0.16);
+}
+.luny-quantity-discount:empty{
+  visibility:hidden;
+}
+.luny-quantity-row.is-disabled,
+.luny-quantity-row:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+  transform:none;
+}
+.luny-quantity-row.is-disabled .luny-quantity-discount,
+.luny-quantity-row:disabled .luny-quantity-discount{
+  visibility:hidden;
+}
+.luny-quantity-limit-note{
+  margin-top:8px;
+  font-size:13px;
+  color:#6b7280;
+  line-height:1.5;
+}
+.luny-quantity-limit-note strong{
+  color:#6b4b2f;
+  font-weight:700;
+}
+@media (max-width:720px){
+  .luny-quantity-list{
+    padding:4px;
+  }
+  .luny-quantity-row{
+    grid-template-columns:74px minmax(0, 1fr) auto;
+    gap:7px;
+    min-height:36px;
+    padding:7px 8px;
+  }
+  .luny-quantity-main,
+  .luny-quantity-price{
+    font-size:13px;
+  }
+  .luny-quantity-discount{
+    min-width:38px;
+    font-size:10px;
+    padding:2px 6px;
+  }
+}
+@media (max-width:360px){
+  .luny-quantity-row{
+    grid-template-columns:64px minmax(0, 1fr) auto;
+  }
+  .luny-quantity-price{
+    font-size:12px;
+  }
+}
+
+/* LUNY：出貨速度直式卡片（保留原 select 給報價邏輯使用） */
+.urgent-hidden-select{
+  position:absolute !important;
+  width:1px !important;
+  height:1px !important;
+  opacity:0 !important;
+  pointer-events:none !important;
+}
+.luny-urgent-card-group{
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  margin-top:8px;
+}
+.luny-urgent-card{
+  appearance:none;
+  display:grid;
+  grid-template-columns:76px minmax(0, 1fr);
+  align-items:center;
+  column-gap:10px;
+  width:100%;
+  min-height:62px;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  background:#ffffff;
+  padding:10px 12px;
+  text-align:left;
+  cursor:pointer;
+  box-shadow:0 4px 14px rgba(17, 24, 39, 0.035);
+  transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
+}
+.luny-urgent-card:hover{
+  transform:translateY(-1px);
+  border-color:#d1d5db;
+  background:#f9fafb;
+  box-shadow:0 8px 22px rgba(17, 24, 39, 0.06);
+}
+.luny-urgent-card.is-active{
+  border-color:#b8875a;
+  background:#fffaf4;
+  box-shadow:0 8px 22px rgba(184, 135, 90, 0.10);
+}
+.luny-urgent-card.is-disabled,
+.luny-urgent-card:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+  transform:none;
+  box-shadow:none;
+}
+.luny-urgent-card-title{
+  grid-row:1 / span 2;
+  font-size:15px;
+  font-weight:900;
+  color:#111827;
+  line-height:1.25;
+  white-space:nowrap;
+}
+.luny-urgent-card.is-active .luny-urgent-card-title{
+  color:#8a552b;
+}
+.luny-urgent-card-time{
+  margin-top:0;
+  font-size:13px;
+  font-weight:800;
+  color:#374151;
+  line-height:1.35;
+}
+.luny-urgent-card-desc{
+  margin-top:2px;
+  font-size:12px;
+  color:#6b7280;
+  line-height:1.35;
+}
+.luny-urgent-card.is-active .luny-urgent-card-time{
+  color:#8a552b;
+}
+@media (max-width:520px){
+  .luny-urgent-card{
+    grid-template-columns:72px minmax(0, 1fr);
+    min-height:58px;
+    padding:10px 11px;
+  }
+}
+
+
+/* LUNY：桌機 / 手機版出貨速度 / 數量各自獨立一行 */
+.speed-quantity-row{
+  display:grid !important;
+  grid-template-columns:1fr !important;
+  gap:16px !important;
+  align-items:start;
+}
+
+.speed-quantity-row > div{
+  width:100% !important;
+  min-width:0 !important;
+  grid-column:1 / -1 !important;
+}
+
+@media (max-width:720px){
+  .speed-quantity-row{
+    gap:16px !important;
+  }
+}
+
+/* LUNY：桌機 / 手機版上傳素材改為全版寬度 */
+.upload-grid{
+  display:grid !important;
+  grid-template-columns:1fr !important;
+  width:100% !important;
+}
+
+.upload-grid > .upload-card,
+.upload-grid > .luny-main-upload-card,
+#card-photo{
+  width:100% !important;
+  max-width:none !important;
+  min-width:0 !important;
+  grid-column:1 / -1 !important;
+  flex:1 1 100% !important;
+}
+
+@media (max-width:720px){
+  .upload-grid{
+    grid-template-columns:1fr !important;
+  }
+}
+
+
+
+/* LUNY：上膜卡片安全視覺覆蓋 v2
+   只調整上膜卡片外觀，讓版型與材質卡片一致；不改 hidden select / 報價 / 卡片點擊邏輯。 */
+.laminate-row-card > div,
+.laminate-row-card .laminate-card-wrap{
+  width:100% !important;
+}
+
+.laminate-card-group{
+  display:grid !important;
+  grid-template-columns:repeat(2, minmax(0, 1fr)) !important;
+  gap:10px !important;
+  margin-top:8px !important;
+  align-items:stretch !important;
+}
+
+.laminate-card-group .laminate-card,
+#laminateCardGroup .laminate-card{
+  width:100% !important;
+  min-height:94px !important;
+  display:grid !important;
+  grid-template-columns:58px minmax(0, 1fr) !important;
+  grid-template-rows:auto auto auto !important;
+  column-gap:10px !important;
+  row-gap:2px !important;
+  align-items:center !important;
+  align-content:center !important;
+  text-align:left !important;
+  padding:10px 12px !important;
+  border-radius:16px !important;
+  border:1px solid #e5e7eb !important;
+  background:#ffffff !important;
+  color:#111827 !important;
+  box-shadow:0 6px 18px rgba(17,24,39,.055) !important;
+  cursor:pointer !important;
+  position:relative !important;
+  overflow:hidden !important;
+  transform:none !important;
+}
+
+.laminate-card-group .laminate-card:hover,
+#laminateCardGroup .laminate-card:hover{
+  border-color:#d1d5db !important;
+  background:#fffdf9 !important;
+  box-shadow:0 10px 24px rgba(17,24,39,.075) !important;
+  transform:translateY(-1px) !important;
+}
+
+.laminate-card-group .laminate-card.is-active,
+.laminate-card-group .laminate-card.active,
+#laminateCardGroup .laminate-card.is-active,
+#laminateCardGroup .laminate-card.active{
+  border-color:#b8875a !important;
+  background:#fffaf4 !important;
+  color:#8a552b !important;
+  box-shadow:0 8px 22px rgba(184,135,90,.12) !important;
+}
+
+.laminate-card-group .laminate-card.is-disabled,
+.laminate-card-group .laminate-card:disabled,
+#laminateCardGroup .laminate-card.is-disabled,
+#laminateCardGroup .laminate-card:disabled{
+  opacity:.45 !important;
+  cursor:not-allowed !important;
+  transform:none !important;
+  box-shadow:none !important;
+}
+
+.laminate-card-group .laminate-card img,
+#laminateCardGroup .laminate-card img,
+.laminate-card-group .laminate-card .laminate-card-img,
+#laminateCardGroup .laminate-card .laminate-card-img{
+  grid-column:1 !important;
+  grid-row:1 / span 3 !important;
+  width:58px !important;
+  height:58px !important;
+  max-width:58px !important;
+  max-height:58px !important;
+  min-width:58px !important;
+  min-height:58px !important;
+  object-fit:cover !important;
+  border-radius:12px !important;
+  background:#f9fafb !important;
+  border:1px solid #eef0f3 !important;
+  margin:0 !important;
+  align-self:center !important;
+}
+
+/* 兼容外部 JS 可能產生的不同文字 class */
+.laminate-card-group .laminate-card > :not(img):not(svg):not(input),
+#laminateCardGroup .laminate-card > :not(img):not(svg):not(input){
+  grid-column:2 !important;
+  min-width:0 !important;
+  text-align:left !important;
+}
+
+.laminate-card-group .laminate-card .laminate-card-title,
+.laminate-card-group .laminate-card .laminate-title,
+.laminate-card-group .laminate-card .card-title,
+#laminateCardGroup .laminate-card .laminate-card-title,
+#laminateCardGroup .laminate-card .laminate-title,
+#laminateCardGroup .laminate-card .card-title,
+.laminate-card-group .laminate-card > div:first-of-type,
+#laminateCardGroup .laminate-card > div:first-of-type{
+  font-size:15px !important;
+  font-weight:900 !important;
+  line-height:1.25 !important;
+  color:#111827 !important;
+  white-space:normal !important;
+}
+
+.laminate-card-group .laminate-card.is-active .laminate-card-title,
+.laminate-card-group .laminate-card.active .laminate-card-title,
+.laminate-card-group .laminate-card.is-active .laminate-title,
+.laminate-card-group .laminate-card.active .laminate-title,
+.laminate-card-group .laminate-card.is-active .card-title,
+.laminate-card-group .laminate-card.active .card-title,
+.laminate-card-group .laminate-card.is-active > div:first-of-type,
+.laminate-card-group .laminate-card.active > div:first-of-type,
+#laminateCardGroup .laminate-card.is-active .laminate-card-title,
+#laminateCardGroup .laminate-card.active .laminate-card-title,
+#laminateCardGroup .laminate-card.is-active .laminate-title,
+#laminateCardGroup .laminate-card.active .laminate-title,
+#laminateCardGroup .laminate-card.is-active .card-title,
+#laminateCardGroup .laminate-card.active .card-title,
+#laminateCardGroup .laminate-card.is-active > div:first-of-type,
+#laminateCardGroup .laminate-card.active > div:first-of-type{
+  color:#8a552b !important;
+}
+
+.laminate-card-group .laminate-card .laminate-card-subtitle,
+.laminate-card-group .laminate-card .laminate-subtitle,
+.laminate-card-group .laminate-card .card-subtitle,
+#laminateCardGroup .laminate-card .laminate-card-subtitle,
+#laminateCardGroup .laminate-card .laminate-subtitle,
+#laminateCardGroup .laminate-card .card-subtitle,
+.laminate-card-group .laminate-card > div:nth-of-type(2),
+#laminateCardGroup .laminate-card > div:nth-of-type(2){
+  font-size:12px !important;
+  font-weight:800 !important;
+  line-height:1.35 !important;
+  color:#8a552b !important;
+  margin-top:2px !important;
+}
+
+.laminate-card-group .laminate-card .laminate-card-desc,
+.laminate-card-group .laminate-card .laminate-desc,
+.laminate-card-group .laminate-card .card-desc,
+#laminateCardGroup .laminate-card .laminate-card-desc,
+#laminateCardGroup .laminate-card .laminate-desc,
+#laminateCardGroup .laminate-card .card-desc,
+.laminate-card-group .laminate-card > div:nth-of-type(n+3),
+#laminateCardGroup .laminate-card > div:nth-of-type(n+3){
+  font-size:12px !important;
+  font-weight:600 !important;
+  line-height:1.45 !important;
+  color:#64748b !important;
+  margin-top:1px !important;
+}
+
+/* 選取勾勾維持右上角，不影響內容排版 */
+.laminate-card-group .laminate-card .check,
+.laminate-card-group .laminate-card .selected-mark,
+.laminate-card-group .laminate-card .luny-check,
+#laminateCardGroup .laminate-card .check,
+#laminateCardGroup .laminate-card .selected-mark,
+#laminateCardGroup .laminate-card .luny-check{
+  position:absolute !important;
+  right:10px !important;
+  top:10px !important;
+  margin:0 !important;
+  grid-column:auto !important;
+}
+
+@media (max-width:520px){
+  .laminate-card-group{
+    grid-template-columns:1fr 1fr !important;
+    gap:9px !important;
+  }
+  .laminate-card-group .laminate-card,
+  #laminateCardGroup .laminate-card{
+    grid-template-columns:52px minmax(0, 1fr) !important;
+    min-height:88px !important;
+    padding:9px 10px !important;
+    border-radius:15px !important;
+  }
+  .laminate-card-group .laminate-card img,
+  #laminateCardGroup .laminate-card img,
+  .laminate-card-group .laminate-card .laminate-card-img,
+  #laminateCardGroup .laminate-card .laminate-card-img{
+    width:52px !important;
+    height:52px !important;
+    max-width:52px !important;
+    max-height:52px !important;
+    min-width:52px !important;
+    min-height:52px !important;
+  }
+  .laminate-card-group .laminate-card .laminate-card-title,
+  .laminate-card-group .laminate-card .laminate-title,
+  .laminate-card-group .laminate-card .card-title,
+  #laminateCardGroup .laminate-card .laminate-card-title,
+  #laminateCardGroup .laminate-card .laminate-title,
+  #laminateCardGroup .laminate-card .card-title,
+  .laminate-card-group .laminate-card > div:first-of-type,
+  #laminateCardGroup .laminate-card > div:first-of-type{
+    font-size:14px !important;
+  }
+  .laminate-card-group .laminate-card .laminate-card-subtitle,
+  .laminate-card-group .laminate-card .laminate-subtitle,
+  .laminate-card-group .laminate-card .card-subtitle,
+  .laminate-card-group .laminate-card .laminate-card-desc,
+  .laminate-card-group .laminate-card .laminate-desc,
+  .laminate-card-group .laminate-card .card-desc,
+  #laminateCardGroup .laminate-card .laminate-card-subtitle,
+  #laminateCardGroup .laminate-card .laminate-subtitle,
+  #laminateCardGroup .laminate-card .card-subtitle,
+  #laminateCardGroup .laminate-card .laminate-card-desc,
+  #laminateCardGroup .laminate-card .laminate-desc,
+  #laminateCardGroup .laminate-card .card-desc{
+    font-size:11px !important;
+  }
+}
+
+
+
+
+
+/* LUNY：桌機 HERO 寬度調整 v15
+   只動桌機欄位寬度與位置：左側 HERO 48%、右側報價＋預覽 52%；不設定 height / max-height / object-fit，手機版不套用。 */
+@media (min-width:721px){
+  body .page-shell{
+    width:100% !important;
+    max-width:min(1280px, calc(100vw - 48px)) !important;
+    margin-left:auto !important;
+    margin-right:auto !important;
+  }
+
+  body .page-shell > .layout-main{
+    display:grid !important;
+    grid-template-columns:minmax(0, 48fr) minmax(0, 52fr) !important;
+    gap:24px 28px !important;
+    align-items:start !important;
+  }
+
+  body #lunyLiveVisual.luny-live-visual{
+    grid-column:1 / 2 !important;
+    grid-row:1 / span 2 !important;
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+  }
+
+  body .page-shell > .layout-main > .layout-left{
+    grid-column:2 / 3 !important;
+    grid-row:1 !important;
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+  }
+
+  body .page-shell > .layout-main > .layout-right{
+    grid-column:2 / 3 !important;
+    grid-row:2 !important;
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+  }
+
+  body #lunyLiveBenefitStrip{
+    grid-column:1 / -1 !important;
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+  }
+
+  body .layout-left,
+  body .layout-right,
+  body .form-container,
+  body .editor-card{
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+  }
+}
+
+
+
+/* LUNY：成品導向 / 裁切風險預覽 v8.9 minimal */
+.luny-risk-intro{max-width:420px;margin:6px auto 10px;padding:10px 12px;border-radius:14px;background:#f8fafc;border:1px solid #e5e7eb;color:#4b5563;font-size:13px;line-height:1.55;text-align:left;}
+.edge-choice.luny-edge-methods{display:grid !important;grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:8px !important;}
+.edge-choice.luny-edge-methods label{min-width:0;}
+.edge-choice.luny-edge-methods .edge-option{display:block;min-height:44px;padding:9px 8px;border-radius:12px;font-size:13px;font-weight:800;line-height:1.25;}
+.edge-choice.luny-edge-methods .edge-note{display:block;margin-top:4px;font-size:11px;line-height:1.35;color:#6b7280;}
+
+.edge-choice.luny-edge-methods label:has(input[value="mirror"]){display:none !important;}
+@media (max-width:520px){.edge-choice.luny-edge-methods{grid-template-columns:1fr !important;}}
+
+
+
+/* LUNY：移除預覽輔助功能區塊 v1
+   隱藏：裁切風險提示、查看安全範圍線、強制顯示危險區域、補滿版/白邊切換、滿版底色/邊框顏色。 */
+#lunyBleedRiskBox,
+#edgeChoiceUI,
+#edgeColorWrap{
+  display:none !important;
+  visibility:hidden !important;
+  height:0 !important;
+  min-height:0 !important;
+  max-height:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  overflow:hidden !important;
+}
+
+
+
+/* LUNY：預覽區前端精簡 v2
+   1. 移除預覽說明文字
+   2. 移除加入結帳清單上方提示段落
+   3. 保留按鈕與清單流程，不影響儲存 / 結帳功能。 */
+.luny-risk-intro,
+#previewOrderArea > div > p{
+  display:none !important;
+}
+
+
+
+/* LUNY v13：客製形狀只輸入長邊，短邊由刀線比例自動計算 */
+#customLongSideField{
+  display:none;
+  grid-column:1 / -1;
+  width:100%;
+}
+#customLongSideField.is-active{
+  display:block !important;
+}
+#customActualSizeNote{
+  margin-top:7px;
+  padding:9px 11px;
+  border-radius:10px;
+  border:1px solid #e6d6c5;
+  background:#fffaf5;
+  color:#6b4b2f;
+  font-size:12px;
+  line-height:1.55;
+  text-align:left;
+}
+.size-row.is-custom-size{
+  grid-template-columns:1fr !important;
+}
+.size-row.is-custom-size #standardWidthField,
+.size-row.is-custom-size #standardHeightField{
+  display:none !important;
+}
+.size-row.is-custom-size .size-note-row{
+  display:none !important;
+}
