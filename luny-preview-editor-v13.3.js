@@ -1,4 +1,4 @@
-/* LUNY v18.4：客製形狀移除凸包備援，改用形態學閉合連接分離區塊；保留 2mm 外擴並減少雲朵狀外框。 */
+/* LUNY v18.5：客製形狀提高分析精度、加入 0.2mm 遮罩微柔化、縮短閉合範圍並強化輪廓簡化，以減少像素階梯與細波浪。 */
 /* LUNY custom cutline v18.3：分析 900／簡化 0.15／平滑 1／最小角 48°／額外外擴搜尋 0～0.60mm；多區塊未連接時不再直接建立整體凸包。 */
 /* LUNY 客製形狀刀線調整：分析解析度 720／簡化 0.13／平滑 3 次／額外外擴搜尋 0.25～1.5mm。 */
 /* LUNY v7.9.40：白邊警示改為即時狀態；滿版填色後立即消失，並避免延遲偵測寫回舊結果。 */
@@ -99,7 +99,9 @@ window.LUNY_getExportResolutionInfo=function(){
  */
 const LUNY_CUSTOM_OFFSET_CM=0.2;
 const LUNY_CUSTOM_MIN_ANGLE_DEG=48;
-const LUNY_CUSTOM_ANALYSIS_MAX=900;
+const LUNY_CUSTOM_ANALYSIS_MAX=1200;
+const LUNY_CUSTOM_MASK_SMOOTH_MM=0.20;
+const LUNY_CUSTOM_CLOSE_MAX_MM=2.50;
 const LUNY_CUSTOM_BG_TOLERANCE=42;
 const __lunyCustomSourceMaskCache=new WeakMap();
 const __lunyCustomObjectIds=new WeakMap();
@@ -137,7 +139,7 @@ function lunyCustomGetSourceMask(image){
   const cached=__lunyCustomSourceMaskCache.get(image);
   if(cached)return cached;
   try{
-    const maxSide=900;
+    const maxSide=1200;
     const ratio=Math.min(1,maxSide/Math.max(image.width||1,image.height||1));
     const w=Math.max(1,Math.round(image.width*ratio));
     const h=Math.max(1,Math.round(image.height*ratio));
@@ -253,6 +255,16 @@ function lunyCustomClose(mask,w,h,radius){
   if(radius<=0)return mask.slice();
   return lunyCustomErode(lunyCustomDilate(mask,w,h,radius),w,h,radius);
 }
+function lunyCustomOpen(mask,w,h,radius){
+  if(radius<=0)return mask.slice();
+  return lunyCustomDilate(lunyCustomErode(mask,w,h,radius),w,h,radius);
+}
+function lunyCustomSmoothMask(mask,w,h,radius){
+  if(radius<=0)return mask.slice();
+  // 先閉合細小凹口，再開啟移除單像素凸點；半徑約 0.2mm，只處理邊緣抖動。
+  const closed=lunyCustomClose(mask,w,h,radius);
+  return lunyCustomOpen(closed,w,h,radius*.82);
+}
 function lunyCustomTraceLoops(mask,w,h){
   const outgoing=new Map(),edges=[];const key=(x,y)=>x+','+y;
   const add=(x1,y1,x2,y2)=>{const edge={x1,y1,x2,y2,used:false},k=key(x1,y1);if(outgoing.has(k))outgoing.get(k).push(edge);else outgoing.set(k,[edge]);edges.push(edge);};
@@ -311,18 +323,21 @@ function lunyCustomBuildOutline(baseMask,w,h,pxPerMm,offsetMm){
   let safeBest=null;
 
   function buildFromMask(outlineMask){
-    const components=lunyCustomComponents(outlineMask,w,h);
+    const smoothRadius=Math.max(.75,LUNY_CUSTOM_MASK_SMOOTH_MM*pxPerMm);
+    const tracedMask=lunyCustomSmoothMask(outlineMask,w,h,smoothRadius);
+    const components=lunyCustomComponents(tracedMask,w,h);
     if(components.length!==1)return null;
-    const loops=lunyCustomTraceLoops(outlineMask,w,h);
+    const loops=lunyCustomTraceLoops(tracedMask,w,h);
     loops.sort((a,b)=>Math.abs(lunyCustomPolygonArea(b))-Math.abs(lunyCustomPolygonArea(a)));
     const raw=loops[0]||[];
     if(raw.length<3)return null;
 
-    // 先使用正式設定；若簡化／平滑造成輪廓內縮，再逐步降低處理強度，
+    // 正式設定採 0.20 簡化＋1 次平滑；若造成輪廓內縮，再逐步降低處理強度，
     // 最終仍以「完整包住圖案外 2mm」為必要條件。
     const variants=[
-      {simplify:.15,smooth:1,relax:true},
-      {simplify:.11,smooth:1,relax:true},
+      {simplify:.20,smooth:1,relax:true},
+      {simplify:.16,smooth:1,relax:true},
+      {simplify:.12,smooth:1,relax:true},
       {simplify:.08,smooth:0,relax:true},
       {simplify:.04,smooth:0,relax:false}
     ];
@@ -335,7 +350,7 @@ function lunyCustomBuildOutline(baseMask,w,h,pxPerMm,offsetMm){
       if(lunyCustomContainsMask(raster,required))return points;
     }
 
-    // 極端圖案的安全備援：保留追蹤到的原始外輪廓，不再改用凸包。
+    // 極端圖案的安全備援：保留微柔化後追蹤到的外輪廓，不再改用凸包。
     const rawRaster=lunyCustomRasterize(raw,w,h);
     return lunyCustomContainsMask(rawRaster,required)?raw:null;
   }
@@ -349,9 +364,9 @@ function lunyCustomBuildOutline(baseMask,w,h,pxPerMm,offsetMm){
     if(lunyCustomMinAngle(points)>=LUNY_CUSTOM_MIN_ANGLE_DEG-.25)return points;
   }
 
-  // 第二階段：對「正式 2mm 外擴結果」做閉合處理。
-  // 先短暫膨脹、再縮回同距離，只填補區塊間的窄縫，不再把整體做成凸包。
-  for(let closeMm=.25;closeMm<=6.00+.0001;closeMm+=.25){
+  // 第二階段：對「正式 2mm 外擴結果」做有限度閉合處理。
+  // 閉合最多 2.5mm，避免為了連接遠距區塊而把整體撐成雲朵狀外框。
+  for(let closeMm=.25;closeMm<=LUNY_CUSTOM_CLOSE_MAX_MM+.0001;closeMm+=.25){
     const closed=lunyCustomClose(required,w,h,closeMm*pxPerMm);
     const points=buildFromMask(closed);
     if(!points)continue;
