@@ -1,4 +1,4 @@
-/* LUNY custom cutline v18.2：分析 900／簡化 0.20／平滑 2／最小角 48°／額外外擴搜尋 0.10～0.80mm。 */
+/* LUNY custom cutline v18.3：分析 900／簡化 0.15／平滑 1／最小角 48°／額外外擴搜尋 0～0.60mm；多區塊未連接時不再直接建立整體凸包。 */
 /* LUNY 客製形狀刀線調整：分析解析度 720／簡化 0.13／平滑 3 次／額外外擴搜尋 0.25～1.5mm。 */
 /* LUNY v7.9.40：白邊警示改為即時狀態；滿版填色後立即消失，並避免延遲偵測寫回舊結果。 */
 /* LUNY preview editor v18：客製形狀印刷檔四周增加單邊 1mm 白色技術留白，保留完整的出血黑色辨識線 */
@@ -293,13 +293,16 @@ function lunyCustomRasterize(points,w,h){const canvas=document.createElement('ca
 function lunyCustomContainsMask(container,required){for(let i=0;i<required.length;i++)if(required[i]&&!container[i])return false;return true;}
 function lunyCustomBuildOutline(baseMask,w,h,pxPerMm,offsetMm){
   const required=lunyCustomDilate(baseMask,w,h,offsetMm*pxPerMm);let best=null;
-  for(let extraMm=.10;extraMm<=.80;extraMm+=.10){
+  for(let extraMm=0;extraMm<=.60+.0001;extraMm+=.10){
     const expanded=lunyCustomDilate(baseMask,w,h,(offsetMm+extraMm)*pxPerMm),components=lunyCustomComponents(expanded,w,h);let points;
-    if(components.length>1)points=lunyCustomConvexHull(lunyCustomBoundarySamples(expanded,w,h));
-    else{const loops=lunyCustomTraceLoops(expanded,w,h);loops.sort((a,b)=>Math.abs(lunyCustomPolygonArea(b))-Math.abs(lunyCustomPolygonArea(a)));points=loops[0]||[];}
+    // 多個內容區塊尚未自然連接時，繼續以少量外擴搜尋；避免直接用整體凸包包成寬胖外框。
+    if(components.length>1)continue;
+    const loops=lunyCustomTraceLoops(expanded,w,h);
+    loops.sort((a,b)=>Math.abs(lunyCustomPolygonArea(b))-Math.abs(lunyCustomPolygonArea(a)));
+    points=loops[0]||[];
     if(points.length<3)continue;
-    points=lunyCustomSimplifyClosed(points,Math.max(.45,.20*pxPerMm));
-    points=lunyCustomChaikin(points,2);
+    points=lunyCustomSimplifyClosed(points,Math.max(.45,.15*pxPerMm));
+    points=lunyCustomChaikin(points,1);
     points=lunyCustomRelaxAngles(points,LUNY_CUSTOM_MIN_ANGLE_DEG);
     best=points;
     const raster=lunyCustomRasterize(points,w,h);
