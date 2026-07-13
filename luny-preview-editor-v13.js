@@ -1,3 +1,4 @@
+/* LUNY custom cutline v18.2：分析 900／簡化 0.20／平滑 2／最小角 48°／額外外擴搜尋 0.10～0.80mm。 */
 /* LUNY 客製形狀刀線調整：分析解析度 720／簡化 0.13／平滑 3 次／額外外擴搜尋 0.25～1.5mm。 */
 /* LUNY v7.9.40：白邊警示改為即時狀態；滿版填色後立即消失，並避免延遲偵測寫回舊結果。 */
 /* LUNY preview editor v18：客製形狀印刷檔四周增加單邊 1mm 白色技術留白，保留完整的出血黑色辨識線 */
@@ -96,8 +97,8 @@ window.LUNY_getExportResolutionInfo=function(){
  * 刀線由主圖、QR／小圖與文字的可見內容共同生成。
  */
 const LUNY_CUSTOM_OFFSET_CM=0.2;
-const LUNY_CUSTOM_MIN_ANGLE_DEG=50;
-const LUNY_CUSTOM_ANALYSIS_MAX=720;
+const LUNY_CUSTOM_MIN_ANGLE_DEG=48;
+const LUNY_CUSTOM_ANALYSIS_MAX=900;
 const LUNY_CUSTOM_BG_TOLERANCE=42;
 const __lunyCustomSourceMaskCache=new WeakMap();
 const __lunyCustomObjectIds=new WeakMap();
@@ -292,13 +293,13 @@ function lunyCustomRasterize(points,w,h){const canvas=document.createElement('ca
 function lunyCustomContainsMask(container,required){for(let i=0;i<required.length;i++)if(required[i]&&!container[i])return false;return true;}
 function lunyCustomBuildOutline(baseMask,w,h,pxPerMm,offsetMm){
   const required=lunyCustomDilate(baseMask,w,h,offsetMm*pxPerMm);let best=null;
-  for(let extraMm=.25;extraMm<=1.5;extraMm+=.2){
+  for(let extraMm=.10;extraMm<=.80;extraMm+=.10){
     const expanded=lunyCustomDilate(baseMask,w,h,(offsetMm+extraMm)*pxPerMm),components=lunyCustomComponents(expanded,w,h);let points;
     if(components.length>1)points=lunyCustomConvexHull(lunyCustomBoundarySamples(expanded,w,h));
     else{const loops=lunyCustomTraceLoops(expanded,w,h);loops.sort((a,b)=>Math.abs(lunyCustomPolygonArea(b))-Math.abs(lunyCustomPolygonArea(a)));points=loops[0]||[];}
     if(points.length<3)continue;
-    points=lunyCustomSimplifyClosed(points,Math.max(.45,.13*pxPerMm));
-    points=lunyCustomChaikin(points,3);
+    points=lunyCustomSimplifyClosed(points,Math.max(.45,.20*pxPerMm));
+    points=lunyCustomChaikin(points,2);
     points=lunyCustomRelaxAngles(points,LUNY_CUSTOM_MIN_ANGLE_DEG);
     best=points;
     const raster=lunyCustomRasterize(points,w,h);
@@ -663,7 +664,7 @@ function drawAll(ctx,canvas,cm2px,opts){const{includeGuides=true,includeSelectio
   if(shape.value==='custom'){
     const customData=lunyCustomComputeCutline();
     if(!customData)return{level:2,zone:'custom',title:'客製化形狀需要可辨識的主圖、QR 圖或文字，才能產生刀線。',important:true};
-    if(customData.minAngle<LUNY_CUSTOM_MIN_ANGLE_DEG-.25)return{level:2,zone:'custom',title:'客製刀線仍有小於 50° 的銳角，請簡化圖案細節。',important:true};
+    if(customData.minAngle<LUNY_CUSTOM_MIN_ANGLE_DEG-.25)return{level:2,zone:'custom',title:'客製刀線仍有小於 48° 的銳角，請簡化圖案細節。',important:true};
     return{level:0,zone:'custom',title:`客製刀線已套用：平滑、最小角度 ${customData.minAngle.toFixed(1)}°、圖案外至少 2mm。`,important:false};
   }
   const edge=String(getEdgeOption()||'off').toLowerCase();
