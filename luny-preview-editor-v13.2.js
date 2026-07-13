@@ -1,3 +1,4 @@
+/* LUNY v18.4：客製形狀移除凸包備援，改用形態學閉合連接分離區塊；保留 2mm 外擴並減少雲朵狀外框。 */
 /* LUNY custom cutline v18.3：分析 900／簡化 0.15／平滑 1／最小角 48°／額外外擴搜尋 0～0.60mm；多區塊未連接時不再直接建立整體凸包。 */
 /* LUNY 客製形狀刀線調整：分析解析度 720／簡化 0.13／平滑 3 次／額外外擴搜尋 0.25～1.5mm。 */
 /* LUNY v7.9.40：白邊警示改為即時狀態；滿版填色後立即消失，並避免延遲偵測寫回舊結果。 */
@@ -238,6 +239,20 @@ function lunyCustomDilate(mask,w,h,radius){
   for(let y=h-1;y>=0;y--)for(let x=w-1;x>=0;x--){const i=y*w+x;let d=distMap[i];if(x+1<w)d=Math.min(d,distMap[i+1]+1);if(y+1<h)d=Math.min(d,distMap[i+w]+1);if(x+1<w&&y+1<h)d=Math.min(d,distMap[i+w+1]+SQ);if(x>0&&y+1<h)d=Math.min(d,distMap[i+w-1]+SQ);distMap[i]=d;}
   const out=new Uint8Array(mask.length);for(let i=0;i<out.length;i++)out[i]=distMap[i]<=radius?1:0;return out;
 }
+function lunyCustomErode(mask,w,h,radius){
+  if(radius<=0)return mask.slice();const INF=1e20,SQ=Math.SQRT2,distMap=new Float32Array(mask.length);
+  for(let i=0;i<mask.length;i++)distMap[i]=mask[i]?INF:0;
+  // 畫布外視為背景，避免靠近邊界的區域在腐蝕時被錯誤保留。
+  for(let x=0;x<w;x++){if(mask[x])distMap[x]=1;if(h>1&&mask[(h-1)*w+x])distMap[(h-1)*w+x]=1;}
+  for(let y=1;y<h-1;y++){if(mask[y*w])distMap[y*w]=1;if(w>1&&mask[y*w+w-1])distMap[y*w+w-1]=1;}
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=y*w+x;let d=distMap[i];if(x>0)d=Math.min(d,distMap[i-1]+1);if(y>0)d=Math.min(d,distMap[i-w]+1);if(x>0&&y>0)d=Math.min(d,distMap[i-w-1]+SQ);if(x+1<w&&y>0)d=Math.min(d,distMap[i-w+1]+SQ);distMap[i]=d;}
+  for(let y=h-1;y>=0;y--)for(let x=w-1;x>=0;x--){const i=y*w+x;let d=distMap[i];if(x+1<w)d=Math.min(d,distMap[i+1]+1);if(y+1<h)d=Math.min(d,distMap[i+w]+1);if(x+1<w&&y+1<h)d=Math.min(d,distMap[i+w+1]+SQ);if(x>0&&y+1<h)d=Math.min(d,distMap[i+w-1]+SQ);distMap[i]=d;}
+  const out=new Uint8Array(mask.length);for(let i=0;i<out.length;i++)out[i]=mask[i]&&distMap[i]>radius?1:0;return out;
+}
+function lunyCustomClose(mask,w,h,radius){
+  if(radius<=0)return mask.slice();
+  return lunyCustomErode(lunyCustomDilate(mask,w,h,radius),w,h,radius);
+}
 function lunyCustomTraceLoops(mask,w,h){
   const outgoing=new Map(),edges=[];const key=(x,y)=>x+','+y;
   const add=(x1,y1,x2,y2)=>{const edge={x1,y1,x2,y2,used:false},k=key(x1,y1);if(outgoing.has(k))outgoing.get(k).push(edge);else outgoing.set(k,[edge]);edges.push(edge);};
@@ -292,25 +307,60 @@ function lunyCustomRelaxAngles(points,minAngle){
 function lunyCustomRasterize(points,w,h){const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#000';ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)ctx.lineTo(points[i].x,points[i].y);ctx.closePath();ctx.fill();const d=ctx.getImageData(0,0,w,h).data,out=new Uint8Array(w*h);for(let p=0,i=3;p<out.length;p++,i+=4)out[p]=d[i]>20?1:0;return out;}
 function lunyCustomContainsMask(container,required){for(let i=0;i<required.length;i++)if(required[i]&&!container[i])return false;return true;}
 function lunyCustomBuildOutline(baseMask,w,h,pxPerMm,offsetMm){
-  const required=lunyCustomDilate(baseMask,w,h,offsetMm*pxPerMm);let best=null;
-  for(let extraMm=0;extraMm<=.60+.0001;extraMm+=.10){
-    const expanded=lunyCustomDilate(baseMask,w,h,(offsetMm+extraMm)*pxPerMm),components=lunyCustomComponents(expanded,w,h);let points;
-    // 多個內容區塊尚未自然連接時，繼續以少量外擴搜尋；避免直接用整體凸包包成寬胖外框。
-    if(components.length>1)continue;
-    const loops=lunyCustomTraceLoops(expanded,w,h);
+  const required=lunyCustomDilate(baseMask,w,h,offsetMm*pxPerMm);
+  let safeBest=null;
+
+  function buildFromMask(outlineMask){
+    const components=lunyCustomComponents(outlineMask,w,h);
+    if(components.length!==1)return null;
+    const loops=lunyCustomTraceLoops(outlineMask,w,h);
     loops.sort((a,b)=>Math.abs(lunyCustomPolygonArea(b))-Math.abs(lunyCustomPolygonArea(a)));
-    points=loops[0]||[];
-    if(points.length<3)continue;
-    points=lunyCustomSimplifyClosed(points,Math.max(.45,.15*pxPerMm));
-    points=lunyCustomChaikin(points,1);
-    points=lunyCustomRelaxAngles(points,LUNY_CUSTOM_MIN_ANGLE_DEG);
-    best=points;
-    const raster=lunyCustomRasterize(points,w,h);
-    if(lunyCustomContainsMask(raster,required)&&lunyCustomMinAngle(points)>=LUNY_CUSTOM_MIN_ANGLE_DEG-.25)return points;
+    const raw=loops[0]||[];
+    if(raw.length<3)return null;
+
+    // 先使用正式設定；若簡化／平滑造成輪廓內縮，再逐步降低處理強度，
+    // 最終仍以「完整包住圖案外 2mm」為必要條件。
+    const variants=[
+      {simplify:.15,smooth:1,relax:true},
+      {simplify:.11,smooth:1,relax:true},
+      {simplify:.08,smooth:0,relax:true},
+      {simplify:.04,smooth:0,relax:false}
+    ];
+    for(const variant of variants){
+      let points=lunyCustomSimplifyClosed(raw,Math.max(.30,variant.simplify*pxPerMm));
+      if(variant.smooth)points=lunyCustomChaikin(points,variant.smooth);
+      if(variant.relax)points=lunyCustomRelaxAngles(points,LUNY_CUSTOM_MIN_ANGLE_DEG);
+      if(points.length<3)continue;
+      const raster=lunyCustomRasterize(points,w,h);
+      if(lunyCustomContainsMask(raster,required))return points;
+    }
+
+    // 極端圖案的安全備援：保留追蹤到的原始外輪廓，不再改用凸包。
+    const rawRaster=lunyCustomRasterize(raw,w,h);
+    return lunyCustomContainsMask(rawRaster,required)?raw:null;
   }
-  if(best&&best.length>=3)return best;
-  const fallback=lunyCustomDilate(baseMask,w,h,(offsetMm+2.8)*pxPerMm);
-  return lunyCustomConvexHull(lunyCustomBoundarySamples(fallback,w,h));
+
+  // 第一階段：維持原本 2mm 外擴，只允許最多額外 0.6mm 的自然連接。
+  for(let extraMm=0;extraMm<=.60+.0001;extraMm+=.10){
+    const expanded=lunyCustomDilate(baseMask,w,h,(offsetMm+extraMm)*pxPerMm);
+    const points=buildFromMask(expanded);
+    if(!points)continue;
+    safeBest=points;
+    if(lunyCustomMinAngle(points)>=LUNY_CUSTOM_MIN_ANGLE_DEG-.25)return points;
+  }
+
+  // 第二階段：對「正式 2mm 外擴結果」做閉合處理。
+  // 先短暫膨脹、再縮回同距離，只填補區塊間的窄縫，不再把整體做成凸包。
+  for(let closeMm=.25;closeMm<=6.00+.0001;closeMm+=.25){
+    const closed=lunyCustomClose(required,w,h,closeMm*pxPerMm);
+    const points=buildFromMask(closed);
+    if(!points)continue;
+    safeBest=points;
+    if(lunyCustomMinAngle(points)>=LUNY_CUSTOM_MIN_ANGLE_DEG-.25)return points;
+  }
+
+  // 不再使用凸包備援；只回傳通過「完整包住 2mm 外擴」驗證的安全輪廓。
+  return safeBest;
 }
 function lunyCustomBounds(points){let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;for(const p of points){minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);}return{minX,minY,maxX,maxY};}
 function lunyCustomLongSideCm(){
