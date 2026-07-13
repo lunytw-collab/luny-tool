@@ -1,3 +1,4 @@
+/* LUNY v18.6.1：修正客製形狀因部分輪廓偏移層生成失敗而無法預覽；新增低解析輪廓安全外擴、缺失偏移層回退與最終安全輪廓備援。 */
 /* LUNY v18.5：客製形狀提高分析精度、加入 0.2mm 遮罩微柔化、縮短閉合範圍並強化輪廓簡化，以減少像素階梯與細波浪。 */
 /* LUNY custom cutline v18.3：分析 900／簡化 0.15／平滑 1／最小角 48°／額外外擴搜尋 0～0.60mm；多區塊未連接時不再直接建立整體凸包。 */
 /* LUNY 客製形狀刀線調整：分析解析度 720／簡化 0.13／平滑 3 次／額外外擴搜尋 0.25～1.5mm。 */
@@ -101,7 +102,8 @@ const LUNY_CUSTOM_OFFSET_CM=0.2;
 const LUNY_CUSTOM_MIN_ANGLE_DEG=48;
 const LUNY_CUSTOM_ANALYSIS_MAX=900;
 const LUNY_CUSTOM_OUTLINE_MAX=420;
-const LUNY_CUSTOM_OUTLINE_THRESHOLD=110;
+const LUNY_CUSTOM_OUTLINE_THRESHOLD=64;
+const LUNY_CUSTOM_OUTLINE_SAFETY_MM=0.35;
 const LUNY_CUSTOM_OUTLINE_OPEN_MM=0.20;
 const LUNY_CUSTOM_OUTLINE_CLOSE_STEPS_MM=[0,.25,.5,.75,1,1.25,1.5,1.75,2];
 const LUNY_CUSTOM_BG_TOLERANCE=42;
@@ -351,7 +353,8 @@ function lunyCustomBuildOutline(baseMask,w,h,pxPerMm,offsetMm){
   const coarseH=Math.max(64,Math.round(h*coarseScale));
   const coarsePxPerMm=pxPerMm*coarseScale;
   const threshold=LUNY_CUSTOM_OUTLINE_THRESHOLD;
-  let coarseBase=lunyCustomResampleMask(required,w,h,coarseW,coarseH,threshold);
+  const outlineSource=lunyCustomDilate(required,w,h,LUNY_CUSTOM_OUTLINE_SAFETY_MM*pxPerMm);
+  let coarseBase=lunyCustomResampleMask(outlineSource,w,h,coarseW,coarseH,threshold);
   coarseBase=lunyCustomFillHoles(lunyCustomCleanMask(coarseBase,coarseW,coarseH),coarseW,coarseH);
 
   let safeBest=null;
@@ -405,7 +408,35 @@ function lunyCustomBuildOutline(baseMask,w,h,pxPerMm,offsetMm){
     }
   }
 
-  return safeBest;
+  if(safeBest)return safeBest;
+
+  // 最終安全備援：直接以高解析 2mm 必要範圍建立輪廓。
+  // 只在低解析輪廓無法通過包覆驗證時啟用，目的為避免客製形狀整個無法預覽。
+  for(let closeMm=0;closeMm<=3.0+.0001;closeMm+=.25){
+    let fallbackMask=required;
+    if(closeMm>0)fallbackMask=lunyCustomClose(fallbackMask,w,h,closeMm*pxPerMm);
+    fallbackMask=lunyCustomOpen(fallbackMask,w,h,Math.max(.5,.12*pxPerMm));
+    fallbackMask=lunyCustomFillHoles(lunyCustomCleanMask(fallbackMask,w,h),w,h);
+    const components=lunyCustomComponents(fallbackMask,w,h);
+    if(components.length!==1)continue;
+    const loops=lunyCustomTraceLoops(fallbackMask,w,h);
+    loops.sort((a,b)=>Math.abs(lunyCustomPolygonArea(b))-Math.abs(lunyCustomPolygonArea(a)));
+    const raw=loops[0]||[];
+    if(raw.length<3)continue;
+    const attempts=[
+      lunyCustomSimplifyClosed(raw,Math.max(.45,.08*pxPerMm)),
+      lunyCustomSimplifyClosed(raw,Math.max(.35,.04*pxPerMm)),
+      raw
+    ];
+    for(let points of attempts){
+      if(points!==raw)points=lunyCustomChaikin(points,1);
+      if(validateCandidate(points))return points;
+    }
+  }
+
+  // 極端情況仍提供可預覽輪廓，不讓前端因 null 中斷。
+  const hull=lunyCustomConvexHull(lunyCustomBoundarySamples(required,w,h));
+  return hull&&hull.length>=3?hull:null;
 }
 function lunyCustomBounds(points){let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;for(const p of points){minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);}return{minX,minY,maxX,maxY};}
 function lunyCustomLongSideCm(){
@@ -481,15 +512,30 @@ function lunyCustomGenerateAndLockCutline(force){
   const pxPerMm=CM2PX*ratio/10,offsets=[0,1,2,4],absoluteByOffset={};
   let cutAnalysisPoints=null;
   for(const mm of offsets){
-    const points=lunyCustomBuildOutline(base,w,h,pxPerMm,mm);
-    if(mm===2)cutAnalysisPoints=points;
-    absoluteByOffset[mm]=points;
+    let points=null;
+    try{points=lunyCustomBuildOutline(base,w,h,pxPerMm,mm);}catch(err){console.warn(`[LUNY custom] ${mm}mm 輪廓建立失敗：`,err);}
+    if(points&&points.length>=3){
+      absoluteByOffset[mm]=points;
+      if(mm===2)cutAnalysisPoints=points;
+    }else{
+      absoluteByOffset[mm]=null;
+    }
+  }
+  const validOffsets=offsets.filter(mm=>absoluteByOffset[mm]&&absoluteByOffset[mm].length>=3);
+  if(!cutAnalysisPoints){
+    const nearest=validOffsets.slice().sort((a,b)=>Math.abs(a-2)-Math.abs(b-2))[0];
+    cutAnalysisPoints=nearest===undefined?null:absoluteByOffset[nearest];
   }
   if(!cutAnalysisPoints||cutAnalysisPoints.length<3)return null;
   const cutBounds=lunyCustomBounds(cutAnalysisPoints),boundW=Math.max(1,cutBounds.maxX-cutBounds.minX),boundH=Math.max(1,cutBounds.maxY-cutBounds.minY);
   const pointsByOffset={};
   for(const mm of offsets){
-    pointsByOffset[mm]=absoluteByOffset[mm].map(p=>({x:(p.x-cutBounds.minX)/boundW,y:(p.y-cutBounds.minY)/boundH}));
+    let source=absoluteByOffset[mm];
+    if(!source||source.length<3){
+      const nearest=validOffsets.slice().sort((a,b)=>Math.abs(a-mm)-Math.abs(b-mm))[0];
+      source=nearest===undefined?cutAnalysisPoints:absoluteByOffset[nearest];
+    }
+    pointsByOffset[mm]=source.map(p=>({x:(p.x-cutBounds.minX)/boundW,y:(p.y-cutBounds.minY)/boundH}));
   }
   const previewCutBounds={minX:cutBounds.minX/ratio,minY:cutBounds.minY/ratio,maxX:cutBounds.maxX/ratio,maxY:cutBounds.maxY/ratio};
   const aspect=boundW/boundH,minAngle=lunyCustomMinAngle(cutAnalysisPoints||[]);
@@ -507,7 +553,8 @@ function lunyCustomNearestOffset(offsetMm){const values=[0,1,2,4];let best=value
 function lunyCustomRequestedOffsetMm(ctx,w,cm2px){const cutW=ctx.canvas.width-2*BLEED_CM*cm2px;return 2+((w-cutW)/2)/cm2px*10;}
 function lunyCustomGetPoints(ctx,w,h,cm2px){
   const data=lunyCustomComputeCutline();if(!data)return null;
-  const requested=lunyCustomRequestedOffsetMm(ctx,w,cm2px),key=lunyCustomNearestOffset(requested),normalized=data.pointsByOffset[key];
+  const requested=lunyCustomRequestedOffsetMm(ctx,w,cm2px),key=lunyCustomNearestOffset(requested),normalized=data.pointsByOffset[key]||data.pointsByOffset[2]||data.pointsByOffset[0];
+  if(!normalized||normalized.length<3)return null;
   const baseCutW=Math.max(1,ctx.canvas.width-2*BLEED_CM*cm2px),baseCutH=Math.max(1,ctx.canvas.height-2*BLEED_CM*cm2px);
   const left=(ctx.canvas.width-baseCutW)/2,top=(ctx.canvas.height-baseCutH)/2;
   return normalized.map(p=>({x:left+p.x*baseCutW,y:top+p.y*baseCutH}));
