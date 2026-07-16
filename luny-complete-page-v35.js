@@ -3,13 +3,13 @@ LUNY Phase 1 — Order Completion Page Replacement
 Replace all previous completion-page bind/watch scripts with this ONE file.
 The checkout identity must come from an explicit URL token, an order-number mapping,
 or a validated same-tab checkout handoff. Global latest-token guessing is forbidden.
-v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
+v7 keeps the safe binding flow and restores the full grouped order-detail card.
 */
 (function installLunyPhase1CompletionPage(){
   "use strict";
 
   if (window.__LUNY_PHASE1_COMPLETION_PAGE__) return;
-  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.5";
+  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.7";
 
   const GAS_URL =
     window.LUNY_GAS_SAVE_URL ||
@@ -644,9 +644,29 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
     const previous = readRetry(token, orderNo) || {};
     const attempts = Number(previous.attempts || 0) + 1;
 
-    // 真正退避，不再因 DOM 變動連續撞擊 GAS 寫入鎖。
+    // WRITE_BUSY 優先遵守後端回傳的 retryAfterMs；
+    // 其他錯誤才使用較長退避。
     const delays = [3000, 8000, 20000, 45000, 90000, 180000, 300000];
-    const delay = delays[Math.min(attempts - 1, delays.length - 1)];
+    const fallbackDelay = delays[Math.min(attempts - 1, delays.length - 1)];
+
+    const resultCode = clean(
+      resultOrError &&
+      typeof resultOrError === "object" &&
+      (resultOrError.code || resultOrError.status) ||
+      ""
+    ).toUpperCase();
+
+    const serverRetryAfter = Number(
+      resultOrError &&
+      typeof resultOrError === "object" &&
+      resultOrError.retryAfterMs ||
+      0
+    );
+
+    const delay =
+      resultCode === "WRITE_BUSY" && serverRetryAfter > 0
+        ? Math.max(1500, Math.min(12000, serverRetryAfter))
+        : fallbackDelay;
 
     const value = {
       v: 4,
@@ -1136,6 +1156,537 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
         : "");
   }
 
+
+  function summaryMoney(value){
+    const number = Number(value || 0);
+    return Number.isFinite(number)
+      ? Math.round(number).toLocaleString("zh-TW")
+      : "0";
+  }
+
+  function summaryLink(value){
+    const raw = String(value || "").trim();
+    const match = raw.match(/^=HYPERLINK\("([^"]+)"/i);
+    return match && match[1] ? match[1] : raw;
+  }
+
+  function summaryProductType(item, data){
+    const raw = clean(
+      item && item.productType ||
+      data && data.productType ||
+      ""
+    ).toUpperCase();
+
+    const code = clean(
+      item && (
+        item.productName ||
+        item.productCode
+      ) ||
+      ""
+    );
+
+    if (
+      raw === "NAME_STICKER" ||
+      raw === "NAMESTICKER" ||
+      code.indexOf("姓名貼") >= 0
+    ){
+      return "NAME_STICKER";
+    }
+
+    if (
+      raw === "CATALOG" ||
+      code.indexOf("圖鑑") >= 0
+    ){
+      return "CATALOG";
+    }
+
+    if (
+      raw === "FULLCUT" ||
+      code.indexOf("全斷") >= 0
+    ){
+      return "FULLCUT";
+    }
+
+    return "LABEL";
+  }
+
+  function summaryProductName(item, data){
+    const explicit = clean(
+      item && (
+        item.productName ||
+        item.productCode
+      ) ||
+      ""
+    );
+
+    if (explicit) return explicit;
+
+    const type = summaryProductType(item, data);
+
+    if (type === "NAME_STICKER") return "姓名貼";
+    if (type === "CATALOG") return "圖鑑貼紙";
+    if (type === "FULLCUT") return "全斷貼紙";
+    return "標籤貼紙";
+  }
+
+  function summaryShapeText(value){
+    const map = {
+      circle: "圓形",
+      roundrect: "矩形",
+      rounded: "矩形",
+      ellipse: "橢圓形",
+      arch: "拱門型",
+      custom: "客製化形狀"
+    };
+
+    return map[clean(value).toLowerCase()] || clean(value);
+  }
+
+  function summaryMaterialText(value){
+    const map = {
+      artpaper: "銅板貼紙",
+      shtte: "模造貼紙",
+      pearlescent: "冷凍防水珠光貼紙",
+      normalpearlescent: "一般防水珠光貼紙",
+      transparent: "透明貼紙（無白墨）",
+      kraft: "牛皮貼紙",
+      pvc: "PVC 貼紙",
+      fullcutpearlescent: "珠光貼紙"
+    };
+
+    return map[clean(value).toLowerCase()] || clean(value);
+  }
+
+  function summaryLaminateText(value){
+    const map = {
+      none: "無",
+      gloss: "亮膜",
+      matte: "霧膜",
+      film: "上膜"
+    };
+
+    return map[clean(value).toLowerCase()] || clean(value);
+  }
+
+  function summaryUrgentText(value){
+    const map = {
+      normal: "一般件",
+      rush: "急件",
+      superrush: "特急件"
+    };
+
+    return map[clean(value).toLowerCase()] || clean(value);
+  }
+
+  function summaryPreviewUrl(item){
+    const q = item && item.quote || {};
+
+    return clean(
+      item && (
+        item.previewThumb ||
+        item.previewUrl ||
+        item.previewDataUrl ||
+        item.thumbnail ||
+        item.previewFileLink
+      ) ||
+      q.previewThumb ||
+      q.previewUrl ||
+      q.previewDataUrl ||
+      q.thumbnail ||
+      ""
+    );
+  }
+
+  function summaryFirstFileUrl(item){
+    const candidates = [
+      item && item.folderLink,
+      item && item.printFileLink,
+      item && item.cutFileLink,
+      item && item.previewFileLink,
+      item && item.customerSourceFileUrl
+    ];
+
+    for (const value of candidates){
+      const url = summaryLink(value);
+      if (/^https?:\/\//i.test(url)) return url;
+    }
+
+    return "";
+  }
+
+  function summaryPreviewHtml(item){
+    const preview = summaryPreviewUrl(item);
+
+    if (
+      preview &&
+      (
+        /^https?:\/\//i.test(preview) ||
+        /^data:image\//i.test(preview) ||
+        /^blob:/i.test(preview)
+      )
+    ){
+      return (
+        "<img class='luny-summary-preview-image' src='" +
+        escapeHtml(preview) +
+        "' alt='貼紙預覽圖'>"
+      );
+    }
+
+    const fileUrl = summaryFirstFileUrl(item);
+
+    if (fileUrl){
+      return (
+        "<a class='luny-summary-preview-link' " +
+        "data-luny-file-link='1' target='_blank' rel='noopener' href='" +
+        escapeHtml(fileUrl) +
+        "'>查看檔案</a>"
+      );
+    }
+
+    return "<span class='luny-summary-preview-empty'>無預覽圖</span>";
+  }
+
+  function summaryFileButtons(item){
+    const links = [
+      ["查看資料夾", summaryLink(item && item.folderLink)],
+      ["印刷檔", summaryLink(item && item.printFileLink)],
+      ["切割檔", summaryLink(item && item.cutFileLink)],
+      ["客戶原圖", summaryLink(
+        item && (
+          item.customerSourceFileUrl ||
+          item.customerSourceUrl
+        )
+      )]
+    ].filter(function(entry){
+      return /^https?:\/\//i.test(entry[1]);
+    });
+
+    if (!links.length) return "";
+
+    return (
+      "<div class='luny-summary-file-buttons'>" +
+      links.map(function(entry){
+        return (
+          "<a data-luny-file-link='1' target='_blank' rel='noopener' href='" +
+          escapeHtml(entry[1]) +
+          "'>" +
+          escapeHtml(entry[0]) +
+          "</a>"
+        );
+      }).join("") +
+      "</div>"
+    );
+  }
+
+  function summarySizeText(item){
+    const q = item && item.quote || {};
+
+    const explicit = clean(
+      q.sizeText ||
+      q.size ||
+      item && item.sizeText ||
+      ""
+    );
+
+    if (explicit) return explicit;
+
+    const width = clean(
+      q.actualWidthCm ||
+      q.widthCm ||
+      q.width ||
+      item && item.widthCm ||
+      ""
+    );
+
+    const height = clean(
+      q.actualHeightCm ||
+      q.heightCm ||
+      q.height ||
+      item && item.heightCm ||
+      ""
+    );
+
+    if (width && height){
+      return width + " × " + height + " cm";
+    }
+
+    if (width) return width + " cm";
+    return "";
+  }
+
+  function summaryCatalogSizeText(item){
+    const q = item && item.quote || {};
+    const raw = clean(
+      q.catalogSize ||
+      q.size ||
+      q.sizeText ||
+      item && item.catalogSize ||
+      ""
+    );
+
+    const map = {
+      A5: "A5（14.8 × 21 cm）",
+      A6: "A6（10.5 × 14.8 cm）",
+      A7: "A7（7.4 × 10.5 cm）"
+    };
+
+    return map[raw] || raw;
+  }
+
+  function summaryInfoRows(item, data){
+    const q = item && item.quote || {};
+    const type = summaryProductType(item, data);
+    const rows = [];
+
+    function add(label, value){
+      const text = clean(value);
+      if (text){
+        rows.push(
+          "<div><span>" +
+          escapeHtml(label) +
+          "：</span>" +
+          escapeHtml(text) +
+          "</div>"
+        );
+      }
+    }
+
+    if (type === "CATALOG"){
+      add("尺寸", summaryCatalogSizeText(item));
+      add(
+        "材質",
+        q.materialText ||
+        q.materialLabel ||
+        summaryMaterialText(q.material || item.material)
+      );
+      add(
+        "上膜",
+        q.laminateText ||
+        q.laminateLabel ||
+        summaryLaminateText(q.laminate || item.laminate)
+      );
+      add("數量", clean(q.quantity || item.quantity) + (
+        clean(q.quantity || item.quantity) ? " 張" : ""
+      ));
+      add(
+        "急件",
+        q.urgentText ||
+        q.urgentLabel ||
+        summaryUrgentText(q.urgent || item.urgent)
+      );
+      add(
+        "完稿刀線",
+        q.cutlineServiceText ||
+        q.cutlineService ||
+        item.cutlineServiceText ||
+        ""
+      );
+    }else{
+      add("尺寸", summarySizeText(item));
+      add(
+        "形狀",
+        q.shapeText ||
+        q.shapeLabel ||
+        summaryShapeText(q.shape || item.shape)
+      );
+      add(
+        "材質",
+        q.materialText ||
+        q.materialLabel ||
+        summaryMaterialText(q.material || item.material)
+      );
+      add(
+        "上膜",
+        q.laminateText ||
+        q.laminateLabel ||
+        summaryLaminateText(q.laminate || item.laminate)
+      );
+
+      const quantity = clean(q.quantity || item.quantity);
+      add("數量", quantity ? quantity + " 張" : "");
+
+      add(
+        "急件",
+        q.urgentText ||
+        q.urgentLabel ||
+        summaryUrgentText(q.urgent || item.urgent)
+      );
+    }
+
+    if (item && item.designId){
+      rows.push(
+        "<div class='luny-summary-design-id'><span>設計編號：</span>" +
+        escapeHtml(item.designId) +
+        "</div>"
+      );
+    }
+
+    return rows.join("");
+  }
+
+  function ensureSummaryStyle(){
+    if (document.getElementById("lunyPhase1DetailedSummaryStyle")) return;
+
+    const style = document.createElement("style");
+    style.id = "lunyPhase1DetailedSummaryStyle";
+    style.textContent = `
+      #lunyPhase1OrderSummary{
+        width:calc(100% - 32px);
+        max-width:820px;
+        margin:20px auto 28px;
+        padding:20px;
+        border:1px solid #e5e7eb;
+        border-radius:18px;
+        background:#fff;
+        box-shadow:0 8px 24px rgba(0,0,0,.07);
+        box-sizing:border-box;
+        color:#111827;
+        font-family:"Noto Sans TC",Arial,sans-serif;
+      }
+      #lunyPhase1OrderSummary .luny-summary-title{
+        margin:0 0 6px;
+        font-size:20px;
+        line-height:1.4;
+        font-weight:900;
+        text-align:center;
+      }
+      #lunyPhase1OrderSummary .luny-summary-intro{
+        margin:0 0 12px;
+        color:#6b7280;
+        font-size:13px;
+        line-height:1.65;
+        text-align:center;
+      }
+      #lunyPhase1OrderSummary .luny-summary-order-no{
+        margin:0 0 14px;
+        color:#6b7280;
+        font-size:13px;
+        line-height:1.6;
+        text-align:center;
+      }
+      #lunyPhase1OrderSummary .luny-summary-group{
+        margin-top:18px;
+      }
+      #lunyPhase1OrderSummary .luny-summary-group-title{
+        margin:0 0 4px;
+        color:#111827;
+        font-size:16px;
+        font-weight:800;
+      }
+      #lunyPhase1OrderSummary .luny-summary-item{
+        display:grid;
+        grid-template-columns:86px minmax(0,1fr);
+        gap:14px;
+        align-items:center;
+        padding:14px 0;
+        border-top:1px solid #e5e7eb;
+      }
+      #lunyPhase1OrderSummary .luny-summary-preview{
+        width:86px;
+        height:86px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        overflow:hidden;
+        flex:0 0 86px;
+        border:1px solid #f0f1f3;
+        border-radius:12px;
+        background:#f9fafb;
+      }
+      #lunyPhase1OrderSummary .luny-summary-preview-image{
+        width:86px;
+        height:86px;
+        object-fit:contain;
+      }
+      #lunyPhase1OrderSummary .luny-summary-preview-link{
+        color:#8b5e3c;
+        font-size:12px;
+        font-weight:700;
+        text-decoration:underline;
+      }
+      #lunyPhase1OrderSummary .luny-summary-preview-empty{
+        color:#9ca3af;
+        font-size:12px;
+      }
+      #lunyPhase1OrderSummary .luny-summary-item-main{
+        min-width:0;
+        color:#374151;
+        font-size:14px;
+        line-height:1.72;
+        text-align:left;
+      }
+      #lunyPhase1OrderSummary .luny-summary-item-price{
+        margin-bottom:4px;
+        color:#111827;
+        font-weight:800;
+      }
+      #lunyPhase1OrderSummary .luny-summary-item-main span{
+        color:#6b7280;
+      }
+      #lunyPhase1OrderSummary .luny-summary-design-id{
+        margin-top:3px;
+        color:#9ca3af;
+        font-size:12px;
+        overflow-wrap:anywhere;
+      }
+      #lunyPhase1OrderSummary .luny-summary-file-buttons{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+        margin-top:9px;
+      }
+      #lunyPhase1OrderSummary .luny-summary-file-buttons a{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        min-height:30px;
+        padding:5px 10px;
+        border:1px solid #e5e7eb;
+        border-radius:999px;
+        background:#fff;
+        color:#8b5e3c;
+        font-size:12px;
+        font-weight:700;
+        line-height:1.2;
+        text-decoration:none;
+      }
+      #lunyPhase1OrderSummary .luny-summary-total{
+        display:flex;
+        justify-content:space-between;
+        gap:16px;
+        margin-top:12px;
+        padding-top:14px;
+        border-top:2px solid #111827;
+        color:#111827;
+        font-size:20px;
+        font-weight:900;
+      }
+      @media(max-width:560px){
+        #lunyPhase1OrderSummary{
+          width:calc(100% - 20px);
+          padding:16px;
+        }
+        #lunyPhase1OrderSummary .luny-summary-item{
+          grid-template-columns:72px minmax(0,1fr);
+          gap:11px;
+        }
+        #lunyPhase1OrderSummary .luny-summary-preview,
+        #lunyPhase1OrderSummary .luny-summary-preview-image{
+          width:72px;
+          height:72px;
+        }
+        #lunyPhase1OrderSummary .luny-summary-item-main{
+          font-size:13px;
+        }
+        #lunyPhase1OrderSummary .luny-summary-total{
+          font-size:18px;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
   async function loadAndRenderSummary(orderNo, localPayload){
     try{
       const result = await fetchJsonWithTimeout(GAS_URL, {
@@ -1157,61 +1708,108 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
   }
 
   function renderSummary(data){
-    if (!document.body || document.getElementById("lunyPhase1OrderSummary")) return;
+    if (!document.body) return;
 
-    const items = Array.isArray(data.items) ? data.items : [];
+    const items = Array.isArray(data && data.items)
+      ? data.items.filter(Boolean)
+      : [];
+
     if (!items.length) return;
 
-    const box = document.createElement("section");
-    box.id = "lunyPhase1OrderSummary";
-    box.style.cssText = [
-      "max-width:760px",
-      "margin:18px auto",
-      "padding:18px",
-      "border:1px solid rgba(0,0,0,.12)",
-      "border-radius:16px",
-      "background:#fff",
-      "font-family:'Noto Sans TC',sans-serif",
-      "line-height:1.65"
-    ].join(";");
+    ensureSummaryStyle();
 
-    const rows = items.map(function(item, index){
-      const q = item && item.quote || {};
-      const size = [q.widthCm || q.width, q.heightCm || q.height]
-        .filter(Boolean).join(" × ");
-      const info = [
-        size ? size + " cm" : "",
-        q.materialText || q.material || "",
-        q.laminateText || q.laminate || "",
-        q.quantity ? q.quantity + " 張" : "",
-        q.urgentText || q.urgent || ""
-      ].filter(Boolean).join("／");
+    let box = document.getElementById("lunyPhase1OrderSummary");
+
+    if (!box){
+      box = document.createElement("section");
+      box.id = "lunyPhase1OrderSummary";
+
+      const statusBox = ensureStatusBox();
+
+      if (statusBox && statusBox.parentNode){
+        statusBox.parentNode.insertBefore(
+          box,
+          statusBox.nextSibling
+        );
+      }else{
+        document.body.appendChild(box);
+      }
+    }
+
+    const groups = [];
+
+    items.forEach(function(item){
+      const productName = summaryProductName(item, data);
+      let group = groups.find(function(entry){
+        return entry.productName === productName;
+      });
+
+      if (!group){
+        group = {
+          productName,
+          items: []
+        };
+        groups.push(group);
+      }
+
+      group.items.push(item);
+    });
+
+    const total = Number(
+      data.total ||
+      data.checkoutTotal ||
+      items.reduce(function(sum, item){
+        const q = item && item.quote || {};
+        return sum + Number(q.price || item.price || 0);
+      }, 0)
+    ) || 0;
+
+    const groupHtml = groups.map(function(group){
+      const rows = group.items.map(function(item, index){
+        const q = item && item.quote || {};
+        const price = Number(q.price || item.price || 0) || 0;
+
+        return (
+          "<article class='luny-summary-item'>" +
+            "<div class='luny-summary-preview'>" +
+              summaryPreviewHtml(item) +
+            "</div>" +
+            "<div class='luny-summary-item-main'>" +
+              "<div class='luny-summary-item-price'>" +
+                (index + 1) +
+                ". 小計 NT$ " +
+                summaryMoney(price) +
+              "</div>" +
+              summaryInfoRows(item, data) +
+              summaryFileButtons(item) +
+            "</div>" +
+          "</article>"
+        );
+      }).join("");
 
       return (
-        "<div style='padding:10px 0;border-top:" +
-        (index ? "1px solid #eee" : "0") +
-        "'><strong>第 " + (index + 1) + " 款</strong>" +
-        "<div style='color:#555'>" + escapeHtml(info) + "</div>" +
-        (item.designId
-          ? "<div style='font-size:12px;color:#888'>設計編號：" +
-            escapeHtml(item.designId) + "</div>"
-          : "") +
-        "</div>"
+        "<section class='luny-summary-group'>" +
+          "<h3 class='luny-summary-group-title'>" +
+            escapeHtml(group.productName) +
+          "</h3>" +
+          rows +
+        "</section>"
       );
     }).join("");
 
     box.innerHTML =
-      "<h3 style='margin:0 0 8px;font-size:18px'>本次訂購明細</h3>" +
-      "<div style='font-size:13px;color:#666'>訂單編號：" +
-      escapeHtml(data.orderNo || "") +
-      "</div>" + rows;
-
-    const statusBox = ensureStatusBox();
-    if (statusBox && statusBox.parentNode){
-      statusBox.parentNode.insertBefore(box, statusBox.nextSibling);
-    }else{
-      document.body.appendChild(box);
-    }
+      "<h2 class='luny-summary-title'>LUNY 訂購明細</h2>" +
+      "<div class='luny-summary-intro'>" +
+        "以下為您最後確認送出的訂單內容。" +
+      "</div>" +
+      "<div class='luny-summary-order-no'>訂單編號：" +
+        escapeHtml(data.orderNo || lastDetectedOrderNo || "") +
+      "</div>" +
+      groupHtml +
+      "<div class='luny-summary-total'>" +
+        "<span>總金額</span>" +
+        "<span>NT$ " + summaryMoney(total) + "</span>" +
+      "</div>";
   }
 
   function queueAttempt(trigger){
@@ -1245,16 +1843,16 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
         let state = safeParse(localStorage.getItem(key), null);
         if (state && state.retryable !== false){
           // v2 可能因自我監看循環把 attempts 快速堆高。
-          // v4 僅遷移一次，讓既有 WRITE_BUSY 訂單在 2 秒後恢復正常重試。
+          // v6 僅遷移一次，讓既有 WRITE_BUSY 訂單在 2 秒後恢復正常重試。
           if (
-            Number(state.recoveredByCompletionV4 || 0) !== 1 &&
+            Number(state.recoveredByCompletionV6 || 0) !== 1 &&
             getRetryResultCode(state) === "WRITE_BUSY"
           ){
             state = Object.assign({}, state, {
-              v: 3,
+              v: 6,
               attempts: Math.min(Number(state.attempts || 0), 1),
               nextAttemptAt: Date.now() + 2000,
-              recoveredByCompletionV4: 1,
+              recoveredByCompletionV6: 1,
               updatedAt: new Date().toISOString()
             });
 
