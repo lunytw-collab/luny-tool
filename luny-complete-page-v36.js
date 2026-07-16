@@ -9,7 +9,7 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
   "use strict";
 
   if (window.__LUNY_PHASE1_COMPLETION_PAGE__) return;
-  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.7";
+  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.7.1";
 
   const GAS_URL =
     window.LUNY_GAS_SAVE_URL ||
@@ -1348,7 +1348,6 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
 
   function summaryFileButtons(item){
     const links = [
-      ["查看資料夾", summaryLink(item && item.folderLink)],
       ["印刷檔", summaryLink(item && item.printFileLink)],
       ["切割檔", summaryLink(item && item.cutFileLink)],
       ["客戶原圖", summaryLink(
