@@ -9,7 +9,7 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
   "use strict";
 
   if (window.__LUNY_PHASE1_COMPLETION_PAGE__) return;
-  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.4";
+  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.5";
 
   const GAS_URL =
     window.LUNY_GAS_SAVE_URL ||
@@ -21,7 +21,9 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
     retryPrefix: "LUNY_BIND_RETRY::",
     statusPrefix: "LUNY_CHECKOUT_STATUS::",
     sentPrefix: "LUNY_ORDER_SENT_V3::",
-    completionHandoffKey: "LUNY_COMPLETION_HANDOFF_V1",
+    completionHandoffKey: "LUNY_COMPLETION_HANDOFF_V2",
+    legacyCompletionHandoffKey: "LUNY_COMPLETION_HANDOFF_V1",
+    completionWindowMarker: "__LUNY_COMPLETION_HANDOFF_V2__:",
     orderTokenPrefix: "LUNY_COMPLETION_TOKEN_BY_ORDER_V1::",
     handoffMaxAgeMs: 4 * 60 * 60 * 1000,
     bindTimeoutMs: 25000,
@@ -95,6 +97,89 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
     return null;
   }
 
+
+
+  function decodeBase64UrlJson(encoded){
+    try{
+      let base64 = String(encoded || "")
+        .replace(/-/g, "+")
+        .replace(/_/g, "/");
+
+      while(base64.length % 4){
+        base64 += "=";
+      }
+
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+
+      for(let i = 0; i < binary.length; i++){
+        bytes[i] = binary.charCodeAt(i);
+      }
+
+      return safeParse(
+        new TextDecoder().decode(bytes),
+        null
+      );
+    }catch(_){
+      return null;
+    }
+  }
+
+  function readWindowNameCompletionHandoff(){
+    try{
+      const marker = CFG.completionWindowMarker;
+      const current = String(window.name || "");
+      const escapedMarker = marker.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
+
+      const match = current.match(
+        new RegExp(
+          "(?:^|\\\\|)" +
+          escapedMarker +
+          "([A-Za-z0-9_-]+)(?=\\\\||$)"
+        )
+      );
+
+      if(!match || !match[1]) return null;
+      return decodeBase64UrlJson(match[1]);
+    }catch(_){
+      return null;
+    }
+  }
+
+  function removeWindowNameCompletionHandoff(token){
+    try{
+      const marker = CFG.completionWindowMarker;
+      const current = String(window.name || "");
+      const escapedMarker = marker.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
+
+      const pattern = new RegExp(
+        "(^|\\\\|)" +
+        escapedMarker +
+        "[A-Za-z0-9_-]+(?=\\\\||$)",
+        "g"
+      );
+
+      const decoded = readWindowNameCompletionHandoff();
+      if(
+        token &&
+        decoded &&
+        clean(decoded.checkoutToken) !== clean(token)
+      ){
+        return;
+      }
+
+      window.name = current
+        .replace(pattern, "")
+        .replace(/^\|+|\|+$/g, "")
+        .replace(/\|{2,}/g, "|");
+    }catch(_){}
+  }
 
   function orderTokenKey(orderNo){
     return CFG.orderTokenPrefix + clean(orderNo);
@@ -187,13 +272,30 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
 
   function readValidatedCompletionHandoff(orderNo){
     let handoff = null;
+    let handoffSource = "";
 
     try{
       handoff = safeParse(
         sessionStorage.getItem(CFG.completionHandoffKey),
         null
       );
+      if(handoff) handoffSource = "session_handoff_v2";
     }catch(_){}
+
+    if(!handoff){
+      try{
+        handoff = safeParse(
+          sessionStorage.getItem(CFG.legacyCompletionHandoffKey),
+          null
+        );
+        if(handoff) handoffSource = "session_handoff_v1";
+      }catch(_){}
+    }
+
+    if(!handoff){
+      handoff = readWindowNameCompletionHandoff();
+      if(handoff) handoffSource = "window_name_handoff_v2";
+    }
 
     // Backward-compatible recovery for an order that was already started
     // with Phase 1 v2 before the explicit handoff key existed.
@@ -235,7 +337,8 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
                 ) + CFG.handoffMaxAgeMs,
               claimedOrderNo: "",
               claimedAt: "",
-              migratedFrom: key
+              migratedFrom: key,
+              handoffSource: "legacy_phase1_context"
             };
             break;
           }
@@ -275,7 +378,11 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
 
     const claimed = Object.assign({}, handoff, {
       claimedOrderNo: clean(orderNo),
-      claimedAt: new Date().toISOString()
+      claimedAt: new Date().toISOString(),
+      handoffSource:
+        handoff.handoffSource ||
+        handoffSource ||
+        "validated_completion_handoff"
     });
 
     try{
@@ -295,7 +402,9 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
     return {
       token,
       payload,
-      source: "validated_same_tab_handoff"
+      source:
+        claimed.handoffSource ||
+        "validated_completion_handoff"
     };
   }
 
@@ -659,7 +768,7 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
       checkoutPayload: payload,
       orderStatus: "completed",
       confirmed: true,
-      source: "phase1_url_token_completion_v3",
+      source: "phase1_trusted_identity_completion_v5",
       page: {
         href: location.href,
         path: location.pathname,
@@ -696,7 +805,8 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
     [
       "LUNY_PHASE1_RESERVED_CHECKOUT_CONTEXT_V2",
       "LUNY_PHASE1_ACTIVE_CHECKOUT_CONTEXT_V2",
-      CFG.completionHandoffKey
+      CFG.completionHandoffKey,
+      CFG.legacyCompletionHandoffKey
     ].forEach(function(key){
       try{
         const localValue = safeParse(localStorage.getItem(key), null);
@@ -713,6 +823,7 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
       }catch(_){}
     });
 
+    removeWindowNameCompletionHandoff(token);
     removeAllRetryKeysForToken(token);
     saveStatus(token, "complete", {
       orderNo,
@@ -780,6 +891,10 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
       pageText
     );
 
+    request.identitySource = clean(
+      identity && identity.source
+    );
+
     if (!token){
       request.source = "phase1_missing_trusted_token_diagnostic_v4";
       request.clientValidationCode = "MISSING_CHECKOUT_TOKEN";
@@ -792,6 +907,9 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
       orderNo,
       trigger,
       bindStatus: "binding",
+      identitySource: clean(
+        identity && identity.source
+      ),
       message: !token
         ? "完成頁找不到可驗證的 token 交接資料，因此不會猜測或綁定其他訂單。"
         : (!payload
@@ -989,6 +1107,12 @@ v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
     if (data && data.orderNo) details.push("訂單編號：" + escapeHtml(data.orderNo));
     if (data && data.code) details.push("狀態代碼：" + escapeHtml(data.code));
     if (data && data.message) details.push(escapeHtml(data.message));
+    if (data && data.identitySource){
+      details.push(
+        "安全識別來源：" +
+        escapeHtml(data.identitySource)
+      );
+    }
     if (data && data.nextRetrySeconds){
       details.push(
         "預計 " + escapeHtml(data.nextRetrySeconds) +
