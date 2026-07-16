@@ -1,6 +1,6 @@
 /*
  * LUNY 姓名貼專用結帳轉接器 v2
- * 功能：防水／轉印款式分流、套組分開計價、轉印固定無白邊、結帳與 GAS 欄位同步。
+ * 功能：防水／轉印款式分流、套組分開計價、4 款超取免運標記、轉印固定無白邊、結帳與 GAS 欄位同步。
  * 載入順序：請放在姓名貼編輯器主程式、luny-storage-manager、luny-label-order-flow 之後。
  */
 (function installNameStickerCheckoutAdapter(){
@@ -32,10 +32,19 @@
     }
   };
 
-  /* 目前兩種款式先沿用同一組價格；若轉印貼紙價格不同，只需修改 transfer 這一列。 */
+  /*
+   * 2026-07-16 套組價：前台只提供 1 入、2 入、4 入。
+   * 1 入 NT$420、2 入 NT$699、4 入 NT$999；4 入享超取免運。
+   */
   const PACKAGE_PRICE_BY_TYPE = {
-    waterproof:{1:300, 2:499, 3:699, 4:799},
-    transfer:{1:300, 2:499, 3:699, 4:799}
+    waterproof:{1:420, 2:699, 4:999},
+    transfer:{1:420, 2:699, 4:999}
+  };
+
+  const PACKAGE_MARKETING_BY_COUNT = {
+    1:{label:"單款體驗", averageText:"", savingText:"", freeStorePickupShipping:false},
+    2:{label:"", averageText:"平均每入 $350", savingText:"省 $141", freeStorePickupShipping:false},
+    4:{label:"最划算・推薦方案", averageText:"平均每入約 $250", savingText:"現省 $681", freeStorePickupShipping:true}
   };
 
   /* 可直接把正式成品圖／實貼圖網址填入；留空時會顯示內建示意圖。 */
@@ -49,7 +58,8 @@
   const LEGACY_TARGET_KEY = "LUNY_NAME_STICKER_TARGET_COUNT";
   const PACKAGE_KEY = "LUNY_NAME_STICKER_PACKAGE_V2";
   const TYPE_ORDER = ["waterproof","transfer"];
-  const targetCounts = {waterproof:1, transfer:1};
+  /* 新訪客預設顯示 4 款方案；已有選擇或購物車資料者仍沿用原紀錄。 */
+  const targetCounts = {waterproof:4, transfer:4};
   let selectedStickerType = "waterproof";
   window.LUNY_NAME_STICKER_TYPE = selectedStickerType;
 
@@ -60,7 +70,14 @@
   function getTypeConfig(type){
     return NAME_STICKER_TYPES[normalizeStickerType(type)];
   }
+  /* 套組只允許 1、2、4 入；舊的 3 入紀錄會自動升級為 4 入。 */
   function clampCount(value){
+    const n = parseInt(value, 10);
+    if(!Number.isFinite(n) || n <= 1) return 1;
+    if(n <= 2) return 2;
+    return 4;
+  }
+  function clampStyleIndex(value){
     const n = parseInt(value, 10);
     return Math.max(1, Math.min(4, Number.isFinite(n) ? n : 1));
   }
@@ -116,15 +133,40 @@
     const table = PACKAGE_PRICE_BY_TYPE[normalized] || PACKAGE_PRICE_BY_TYPE.waterproof;
     return Number(table[clampCount(count)] || 0);
   }
+  function getPackageMarketing(count){
+    return PACKAGE_MARKETING_BY_COUNT[clampCount(count)] || PACKAGE_MARKETING_BY_COUNT[1];
+  }
+  function isFreeStorePickupShipping(count){
+    return !!getPackageMarketing(count).freeStorePickupShipping;
+  }
+  function getPackageMarketingText(count){
+    const info = getPackageMarketing(count);
+    const parts = [info.label, info.averageText, info.savingText].filter(Boolean);
+    if(info.freeStorePickupShipping) parts.push("超取免運");
+    return parts.join("｜");
+  }
+  function getPackageMarketingHtml(count){
+    const normalized = clampCount(count);
+    if(normalized === 1) return "單款體驗";
+    if(normalized === 2) return "平均每入 $350｜省 $141";
+    return "<strong>最划算・推薦方案</strong><br>平均每入約 $250｜現省 $681";
+  }
   function itemIncrementForIndex(type, index){
-    const i = clampCount(index);
-    return Math.max(0, getPackagePrice(type, i) - (i > 1 ? getPackagePrice(type, i - 1) : 0));
+    const i = clampStyleIndex(index);
+    const onePrice = getPackagePrice(type, 1);
+    const twoPrice = getPackagePrice(type, 2);
+    const fourPrice = getPackagePrice(type, 4);
+    if(i === 1) return onePrice;
+    if(i === 2) return Math.max(0, twoPrice - onePrice);
+    const remaining = Math.max(0, fourPrice - twoPrice);
+    const thirdIncrement = Math.floor(remaining / 2);
+    return i === 3 ? thirdIncrement : remaining - thirdIncrement;
   }
   function getStoredTarget(type, items){
     const normalized = normalizeStickerType(type);
-    let stored = 1;
+    let stored = 4;
     try{
-      stored = clampCount(localStorage.getItem(TARGET_KEY_PREFIX + normalized) || 1);
+      stored = clampCount(localStorage.getItem(TARGET_KEY_PREFIX + normalized) || 4);
       if(normalized === "waterproof" && !localStorage.getItem(TARGET_KEY_PREFIX + normalized)){
         stored = clampCount(localStorage.getItem(LEGACY_TARGET_KEY) || stored);
       }
@@ -145,6 +187,8 @@
         targetCount:target,
         savedCount:count,
         packagePrice:getPackagePrice(type, target),
+        marketingText:getPackageMarketingText(target),
+        freeStorePickupShipping:isFreeStorePickupShipping(target),
         complete:count === target
       };
     });
@@ -342,6 +386,9 @@
         q.nameStickerSavedCount = rows.length;
         q.nameStickerPackageCount = targetCounts[type];
         q.nameStickerPackagePrice = getPackagePrice(type, targetCounts[type]);
+        q.nameStickerPackageMarketingText = getPackageMarketingText(targetCounts[type]);
+        q.freeStorePickupShipping = isFreeStorePickupShipping(targetCounts[type]);
+        q.shippingPromotionText = q.freeStorePickupShipping ? "4 款超取免運" : "";
         q.nameStickerPackageComplete = rows.length === targetCounts[type];
         q.quantity = 144;
         q.widthCm = 2.7;
@@ -381,7 +428,8 @@
       `數量：144 張`,
       `造型：${shapeText}`,
       `成品外觀：${cfg.finishText}`,
-      `本款式套組總價：NT$ ${packagePrice}`
+      `本款式套組總價：NT$ ${packagePrice}`,
+      getPackageMarketingText(targetCount)
     ].join("｜");
     try{ currentSummary = summary; }catch(e){}
 
@@ -415,6 +463,9 @@
         packagePrice,
         nameStickerPackageCount:targetCount,
         nameStickerPackagePrice:packagePrice,
+        nameStickerPackageMarketingText:getPackageMarketingText(targetCount),
+        freeStorePickupShipping:isFreeStorePickupShipping(targetCount),
+        shippingPromotionText:isFreeStorePickupShipping(targetCount) ? "4 款超取免運" : "",
         nameStickerStyleIndex:styleIndex,
         nameStickerSavedCount:existingNameCount + 1,
         nameStickerPackageComplete:(existingNameCount + 1) === targetCount,
@@ -531,7 +582,7 @@
       const isNameGroup = !!group.stickerType;
       const target = isNameGroup ? targetCounts[group.stickerType] : 0;
       const groupHeader = isNameGroup
-        ? `${group.name}｜目前 ${group.items.length} / ${target} 款｜本款式套組 NT$ ${money(getPackagePrice(group.stickerType, target))}`
+        ? `${group.name}｜目前 ${group.items.length} / ${target} 款｜本款式套組 NT$ ${money(getPackagePrice(group.stickerType, target))}｜${getPackageMarketingText(target)}`
         : group.name;
       return `
         <div class="checkout-product-group">
@@ -738,7 +789,13 @@
     document.querySelectorAll("[data-name-style-count]").forEach(btn=>{
       const count = clampCount(btn.dataset.nameStyleCount);
       const priceNode = btn.querySelector(".luny-quantity-price");
+      const discountNode = btn.querySelector(".luny-quantity-discount");
       if(priceNode) priceNode.textContent = `NT$${money(getPackagePrice(selectedStickerType, count))}`;
+      if(discountNode){
+        discountNode.innerHTML = getPackageMarketingHtml(count);
+      }
+      btn.classList.toggle("is-best-value", count === 4);
+      btn.dataset.freeStorePickupShipping = isFreeStorePickupShipping(count) ? "true" : "false";
     });
   }
 
@@ -772,7 +829,7 @@
 
     if(priceEl) priceEl.textContent = money(getPackagePrice(selectedStickerType, targetCount));
     if(hiddenPrice) hiddenPrice.textContent = String(getPackagePrice(selectedStickerType, targetCount));
-    if(specEl) specEl.textContent = `${cfg.name}｜${cfg.finishText}｜${targetCount} 款｜每款 144 張｜共 ${targetCount * 144} 張`;
+    if(specEl) specEl.textContent = `${cfg.name}｜${cfg.finishText}｜${targetCount} 入｜每入 144 張｜共 ${targetCount * 144} 張｜${getPackageMarketingText(targetCount)}`;
     if(finishNoteEl){
       finishNoteEl.textContent = cfg.noWhiteBorder
         ? "轉印貼紙｜固定無白邊，底色延伸至姓名貼外型邊界"
