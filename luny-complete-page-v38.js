@@ -9,7 +9,7 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
   "use strict";
 
   if (window.__LUNY_PHASE1_COMPLETION_PAGE__) return;
-  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.7.2";
+  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.7.3";
 
   const GAS_URL =
     window.LUNY_GAS_SAVE_URL ||
@@ -29,7 +29,10 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
     bindTimeoutMs: 25000,
     summaryTimeoutMs: 45000,
     maxOrderPageText: 12000,
-    maxAutomaticAttempts: 100
+    maxAutomaticAttempts: 100,
+    receiverCaptureMaxWaitMs: 6500,
+    receiverCapturePollMs: 650,
+    maxReceiverSearchText: 80000
   };
 
   let running = false;
@@ -38,6 +41,8 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
   let retryTimer = null;
   let mutationDebounce = null;
   let lastDetectedOrderNo = "";
+  let receiverCaptureStartedAt = 0;
+  let receiverCaptureTimer = null;
 
   function clean(value){
     return String(value == null ? "" : value)
@@ -527,6 +532,86 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
       .slice(0, CFG.maxOrderPageText);
   }
 
+
+  function collectReceiverSearchText(){
+    const pieces = [];
+
+    try{
+      if (document.body){
+        pieces.push(document.body.innerText || "");
+        pieces.push(document.body.textContent || "");
+      }
+    }catch(_){}
+
+    try{
+      document
+        .querySelectorAll("input,textarea,select")
+        .forEach(function(el){
+          const parts = [
+            el.getAttribute("name"),
+            el.id,
+            el.getAttribute("placeholder"),
+            el.getAttribute("aria-label"),
+            el.getAttribute("autocomplete"),
+            el.value
+          ].filter(Boolean);
+
+          if (parts.length){
+            pieces.push(parts.join(" : "));
+          }
+        });
+    }catch(_){}
+
+    try{
+      document
+        .querySelectorAll("[aria-label],[data-label],[data-name],[data-value]")
+        .forEach(function(el){
+          const parts = [
+            el.getAttribute("aria-label"),
+            el.getAttribute("data-label"),
+            el.getAttribute("data-name"),
+            el.getAttribute("data-value")
+          ].filter(Boolean);
+
+          if (
+            parts.length &&
+            /收件|收貨|取件|取貨|recipient|receiver|consignee|customer.?name/i.test(
+              parts.join(" ")
+            )
+          ){
+            pieces.push(parts.join(" : "));
+          }
+        });
+    }catch(_){}
+
+    try{
+      document
+        .querySelectorAll(
+          "script[type='application/json'],script[type='application/ld+json']"
+        )
+        .forEach(function(el){
+          const value = String(el.textContent || "");
+          if (
+            value &&
+            /receiverName|recipientName|consignee|customerName|收件人|取件人/i.test(
+              value
+            )
+          ){
+            pieces.push(value);
+          }
+        });
+    }catch(_){}
+
+    return pieces
+      .join("\n")
+      .replace(/\u00a0/g, " ")
+      .replace(/\r\n?/g, "\n")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n{4,}/g, "\n\n")
+      .trim()
+      .slice(0, CFG.maxReceiverSearchText);
+  }
+
   function isLikelyCompletionPage(text){
     const href = String(location.href || "");
     return (
@@ -614,8 +699,14 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
     if (/如你所願|小嚕|LUNY/i.test(name)) return true;
 
     if (
-      /訂單|付款|金額|超商|宅配|地址|電話|手機|Email|電子郵件|發票|物流|取貨方式|運送方式/i.test(name)
+      /訂單|付款|金額|超商|宅配|地址|電話|手機|Email|電子郵件|發票|物流|取貨方式|運送方式|付款方式|商品|明細/i.test(
+        name
+      )
     ){
+      return true;
+    }
+
+    if (/^(?:09\d{8}|\+?886\d{8,10})$/.test(name.replace(/\D/g, ""))){
       return true;
     }
 
@@ -623,13 +714,176 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
   }
 
   function normalizeReceiverName(value){
-    const name = clean(value)
+    let name = clean(value)
+      .replace(/^(?:姓名|收件人姓名|收件人|收件姓名|收件者|收貨人姓名|收貨人|收貨姓名|取件人姓名|取件人|取件姓名|取貨人姓名|取貨人|取貨姓名|訂購人|顧客姓名|客戶姓名|聯絡人姓名|聯絡人)\s*[:：]?\s*/i, "")
       .replace(/^(?:先生|小姐|女士)\s*/i, "")
       .replace(/\s*(?:先生|小姐|女士)$/i, "")
+      .replace(/\s+(?:手機|電話|地址|Email|電子郵件|取件方式|運送方式|物流)\s*[:：].*$/i, "")
+      .replace(/\s+(?:09\d{8}|\+?886[\d -]{8,14}).*$/i, "")
       .replace(/[，,。；;｜|].*$/, "")
       .trim();
 
     return isBadReceiverName(name) ? "" : name;
+  }
+
+  function receiverLabels(){
+    return [
+      "收件人姓名",
+      "收件人",
+      "收件姓名",
+      "收件者",
+      "收貨人姓名",
+      "收貨人",
+      "收貨姓名",
+      "取件人姓名",
+      "取件人",
+      "取件姓名",
+      "取貨人姓名",
+      "取貨人",
+      "取貨姓名",
+      "訂購人姓名",
+      "訂購人",
+      "顧客姓名",
+      "客戶姓名",
+      "聯絡人姓名",
+      "聯絡人",
+      "姓名"
+    ];
+  }
+
+  function extractReceiverNameFromDom(){
+    const directSelectors = [
+      "[name*='receiver' i]",
+      "[id*='receiver' i]",
+      "[name*='recipient' i]",
+      "[id*='recipient' i]",
+      "[name*='consignee' i]",
+      "[id*='consignee' i]",
+      "[name*='customerName' i]",
+      "[id*='customerName' i]",
+      "[name*='customer_name' i]",
+      "[id*='customer_name' i]",
+      "[autocomplete='name']"
+    ];
+
+    try{
+      const elements = document.querySelectorAll(
+        directSelectors.join(",")
+      );
+
+      for (const el of elements){
+        const candidates = [
+          el.value,
+          el.getAttribute && el.getAttribute("value"),
+          el.getAttribute && el.getAttribute("data-value"),
+          el.textContent
+        ];
+
+        for (const candidate of candidates){
+          const name = normalizeReceiverName(candidate);
+          if (name){
+            return {
+              name,
+              source: "dom_direct_field"
+            };
+          }
+        }
+      }
+    }catch(_){}
+
+    const labels = receiverLabels();
+    const exactLabel = new RegExp(
+      "^(?:" + labels.join("|") + ")\\s*[:：]?$",
+      "i"
+    );
+
+    try{
+      const nodes = document.querySelectorAll(
+        "label,dt,th,strong,b,span,p,div"
+      );
+
+      for (const node of nodes){
+        const labelText = clean(node.textContent || "");
+        if (!exactLabel.test(labelText)) continue;
+
+        const forId = node.getAttribute && node.getAttribute("for");
+        if (forId){
+          const field = document.getElementById(forId);
+          const name = normalizeReceiverName(
+            field && (
+              field.value ||
+              field.getAttribute("value") ||
+              field.textContent
+            )
+          );
+
+          if (name){
+            return {
+              name,
+              source: "dom_label_for"
+            };
+          }
+        }
+
+        const nextCandidates = [
+          node.nextElementSibling,
+          node.parentElement && node.parentElement.querySelector(
+            "input,textarea,select,dd,td,[data-value]"
+          ),
+          node.closest && node.closest("tr,dl,li,.row,.form-group,.field")
+        ].filter(Boolean);
+
+        for (const candidateNode of nextCandidates){
+          const candidateValues = [
+            candidateNode.value,
+            candidateNode.getAttribute &&
+              candidateNode.getAttribute("data-value"),
+            candidateNode.textContent
+          ];
+
+          for (const candidateValue of candidateValues){
+            const candidateText = clean(candidateValue);
+
+            if (
+              candidateNode === node.parentElement ||
+              (
+                candidateNode.textContent &&
+                candidateNode.textContent.indexOf(labelText) >= 0
+              )
+            ){
+              const withoutLabel = candidateText.replace(
+                new RegExp(
+                  "^(?:" + labels.join("|") + ")\\s*[:：]?\\s*",
+                  "i"
+                ),
+                ""
+              );
+
+              const name = normalizeReceiverName(withoutLabel);
+              if (name){
+                return {
+                  name,
+                  source: "dom_label_container"
+                };
+              }
+            }else{
+              const name = normalizeReceiverName(candidateText);
+              if (name){
+                return {
+                  name,
+                  source: "dom_label_sibling"
+                };
+              }
+            }
+          }
+        }
+      }
+    }catch(_){}
+
+    return {
+      name: "",
+      source: ""
+    };
   }
 
   function extractReceiverNameFromPage(text){
@@ -644,23 +898,11 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
       })
       .filter(Boolean);
 
-    const labels = [
-      "收件人",
-      "收件姓名",
-      "收件者",
-      "收貨人",
-      "取件人",
-      "取件姓名",
-      "訂購人",
-      "顧客姓名",
-      "客戶姓名",
-      "聯絡人",
-      "姓名"
-    ];
-
+    const labels = receiverLabels();
     const labelSource = labels.join("|");
+
     const sameLine = new RegExp(
-      "^(?:" + labelSource + ")\\s*[:：]\\s*(.+)$",
+      "^(?:" + labelSource + ")\\s*[:：]?\\s+(.+)$",
       "i"
     );
 
@@ -669,7 +911,12 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
 
       if (match && match[1]){
         const name = normalizeReceiverName(match[1]);
-        if (name) return name;
+        if (name){
+          return {
+            name,
+            source: "page_same_line"
+          };
+        }
       }
     }
 
@@ -683,17 +930,29 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
 
       for (
         let offset = 1;
-        offset <= 2 && index + offset < lines.length;
+        offset <= 4 && index + offset < lines.length;
         offset++
       ){
         const name = normalizeReceiverName(lines[index + offset]);
-        if (name) return name;
+        if (name){
+          return {
+            name,
+            source: "page_next_line"
+          };
+        }
       }
     }
 
     const inlinePatterns = [
-      /(?:收件人|收件姓名|收件者|收貨人|取件人|取件姓名|訂購人|顧客姓名|客戶姓名|聯絡人)\s*[:：]\s*([^\n\r，,。；;｜|]{1,30})/i,
-      /(?:收件人|收件姓名|收件者|收貨人|取件人|取件姓名|訂購人|顧客姓名|客戶姓名|聯絡人)\s+([^\n\r，,。；;｜|]{1,30})/i
+      new RegExp(
+        "(?:" + labelSource + ")\\s*[:：]\\s*([^\\n\\r，,。；;｜|]{1,40})",
+        "i"
+      ),
+      new RegExp(
+        "(?:" + labelSource + ")\\s+([^\\n\\r，,。；;｜|]{1,40})",
+        "i"
+      ),
+      /"(?:receiverName|recipientName|consigneeName|customerName|receiver_name|recipient_name)"\s*:\s*"([^"]{1,40})"/i
     ];
 
     for (const pattern of inlinePatterns){
@@ -701,57 +960,106 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
 
       if (match && match[1]){
         const name = normalizeReceiverName(match[1]);
-        if (name) return name;
+        if (name){
+          return {
+            name,
+            source: "page_inline"
+          };
+        }
       }
     }
 
-    const greeting = source.match(
-      /哈囉\s*[，,]?\s*([^\n\r！!]{1,30})\s*[！!]/i
-    );
+    const greetingPatterns = [
+      /哈囉\s*[！!,，]\s*([^\n\r！!，,]{1,30})\s*[！!，,]?/i,
+      /哈囉\s+([^\n\r！!，,]{1,30})\s*[！!]/i
+    ];
 
-    if (greeting && greeting[1]){
-      const name = normalizeReceiverName(greeting[1]);
-      if (name) return name;
+    for (const pattern of greetingPatterns){
+      const match = source.match(pattern);
+      if (!match || !match[1]) continue;
+
+      const name = normalizeReceiverName(match[1]);
+      if (name){
+        return {
+          name,
+          source: "page_greeting"
+        };
+      }
     }
 
-    return "";
+    return {
+      name: "",
+      source: ""
+    };
   }
 
-  function extractReceiverName(payload, pageText){
-    const pageName = extractReceiverNameFromPage(pageText);
-    if (pageName) return pageName;
+  function extractReceiverIdentity(payload, pageText){
+    const dom = extractReceiverNameFromDom();
+    if (dom.name) return dom;
+
+    const page = extractReceiverNameFromPage(pageText);
+    if (page.name) return page;
 
     const candidates = [
-      payload && payload.receiverName,
-      payload && payload.recipientName,
-      payload && payload.customerName,
-      payload && payload.buyerName,
-      payload && payload.name
+      ["payload.receiverName", payload && payload.receiverName],
+      ["payload.recipientName", payload && payload.recipientName],
+      ["payload.customerName", payload && payload.customerName],
+      ["payload.buyerName", payload && payload.buyerName],
+      ["payload.name", payload && payload.name]
     ];
 
     const items = payload && Array.isArray(payload.items)
       ? payload.items
       : [];
 
-    items.forEach(function(item){
+    items.forEach(function(item, index){
       const q = item && item.quote || {};
 
       candidates.push(
-        item && item.receiverName,
-        item && item.recipientName,
-        item && item.customerName,
-        q.receiverName,
-        q.recipientName,
-        q.customerName
+        ["item[" + index + "].receiverName", item && item.receiverName],
+        ["item[" + index + "].recipientName", item && item.recipientName],
+        ["item[" + index + "].customerName", item && item.customerName],
+        ["item[" + index + "].quote.receiverName", q.receiverName],
+        ["item[" + index + "].quote.recipientName", q.recipientName],
+        ["item[" + index + "].quote.customerName", q.customerName]
       );
     });
 
-    for (const candidate of candidates){
-      const name = normalizeReceiverName(candidate);
-      if (name) return name;
+    for (const entry of candidates){
+      const name = normalizeReceiverName(entry[1]);
+      if (name){
+        return {
+          name,
+          source: entry[0]
+        };
+      }
     }
 
-    return "";
+    return {
+      name: "",
+      source: "not_found"
+    };
+  }
+
+  function shouldWaitForReceiverName(receiverIdentity, trigger){
+    if (receiverIdentity && receiverIdentity.name) return false;
+
+    if (!receiverCaptureStartedAt){
+      receiverCaptureStartedAt = Date.now();
+    }
+
+    const elapsed = Date.now() - receiverCaptureStartedAt;
+
+    if (elapsed >= CFG.receiverCaptureMaxWaitMs){
+      return false;
+    }
+
+    clearTimeout(receiverCaptureTimer);
+    receiverCaptureTimer = setTimeout(function(){
+      attemptBind("receiver_capture_wait");
+    }, CFG.receiverCapturePollMs);
+
+    return true;
   }
 
   function retryKey(token, orderNo){
@@ -925,7 +1233,7 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
     }
   }
 
-  function buildBindRequest(token, payload, orderNo, pageText){
+  function buildBindRequest(token, payload, orderNo, pageText, receiverText, receiverIdentity){
     const items = Array.isArray(payload.items) ? payload.items : [];
     const designIds = Array.from(new Set(
       (payload.designIds || [])
@@ -935,13 +1243,21 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
     ));
 
     const orderTotal = extractMoney(pageText);
-    const logistics = extractLogistics(pageText);
-    const receiverName = extractReceiverName(payload, pageText);
+    const logistics = extractLogistics(receiverText || pageText);
+    const resolvedReceiver = receiverIdentity &&
+      receiverIdentity.name
+      ? receiverIdentity
+      : extractReceiverIdentity(payload, receiverText || pageText);
+    const receiverName = clean(resolvedReceiver.name || "");
+    const receiverNameSource = clean(
+      resolvedReceiver.source || "not_found"
+    );
 
     const checkoutPayload = Object.assign({}, payload, {
       receiverName,
       recipientName: receiverName,
       customerName: receiverName,
+      receiverNameSource,
       logistics,
       shippingMethod: logistics
     });
@@ -959,6 +1275,8 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
       receiverName,
       recipientName: receiverName,
       customerName: receiverName,
+      receiverNameSource,
+      receiverNameMissing: !receiverName,
       groupId: payload.groupId || payload.cartKey || "",
       cartKey: payload.cartKey || payload.groupId || "",
       orderSessionId: payload.orderSessionId || "",
@@ -978,6 +1296,7 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
         detectedOrderNo: orderNo,
         checkoutTokenFromUrl: token,
         detectedReceiverName: receiverName,
+        detectedReceiverNameSource: receiverNameSource,
         detectedLogistics: logistics
       },
       pageUrl: location.href,
@@ -1041,6 +1360,7 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
     }
 
     clearTimeout(retryTimer);
+    clearTimeout(receiverCaptureTimer);
   }
 
   async function attemptBind(trigger){
@@ -1088,11 +1408,45 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
       createdAt: new Date().toISOString()
     };
 
+    const receiverSearchText = collectReceiverSearchText();
+    const receiverIdentity = extractReceiverIdentity(
+      effectivePayload,
+      receiverSearchText
+    );
+
+    if (shouldWaitForReceiverName(receiverIdentity, trigger)){
+      const elapsed = Date.now() - receiverCaptureStartedAt;
+      const remaining = Math.max(
+        1,
+        Math.ceil(
+          (CFG.receiverCaptureMaxWaitMs - elapsed) / 1000
+        )
+      );
+
+      saveStatus(token || "", "binding", {
+        orderNo,
+        trigger,
+        bindStatus: "binding",
+        identitySource: clean(
+          identity && identity.source
+        ),
+        nextRetrySeconds: remaining,
+        code: "WAITING_RECEIVER_NAME",
+        message:
+          "已取得訂單編號，正在等待 1shop 顯示收件人姓名後再送出。"
+      });
+
+      running = false;
+      return;
+    }
+
     const request = buildBindRequest(
       token || "",
       effectivePayload,
       orderNo,
-      pageText
+      pageText,
+      receiverSearchText,
+      receiverIdentity
     );
 
     request.identitySource = clean(
@@ -1113,6 +1467,9 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
       bindStatus: "binding",
       identitySource: clean(
         identity && identity.source
+      ),
+      receiverNameSource: clean(
+        request && request.receiverNameSource
       ),
       message: !token
         ? "完成頁找不到可驗證的 token 交接資料，因此不會猜測或綁定其他訂單。"
