@@ -1,23 +1,24 @@
 /*
 LUNY checkout-confirm Phase 1 loader
-Version: 2026-07-16.2
+Version: 2026-07-16.3
 
 用途：
 1. 僅供 /checkout-confirm 頁面載入。
 2. 等待 checkout-confirm 原本主程式完成後，再載入 phase1-order-flow-patch.js。
-3. 防止重複載入。
+3. v3 會建立同一分頁的完成頁 token 安全交接。
+4. 防止重複載入。
 */
 (function installCheckoutConfirmPhase1Loader(){
   "use strict";
 
   if(window.__LUNY_CHECKOUT_CONFIRM_PHASE1_LOADER__) return;
-  window.__LUNY_CHECKOUT_CONFIRM_PHASE1_LOADER__ = "2026-07-16.2";
+  window.__LUNY_CHECKOUT_CONFIRM_PHASE1_LOADER__ = "2026-07-16.3";
 
   var PATCH_SRC =
-    "https://cdn.jsdelivr.net/gh/lunytw-collab/luny-tool@main/phase1-order-flow-patch.js?v=20260716-2";
+    "https://cdn.jsdelivr.net/gh/lunytw-collab/luny-tool@main/phase1-order-flow-patch.js?v=20260716-3";
 
   function patchAlreadyLoaded(){
-    if(window.__LUNY_PHASE1_ORDER_FLOW_PATCH_V2__) return true;
+    if(window.__LUNY_PHASE1_ORDER_FLOW_PATCH_V3__) return true;
 
     return Array.prototype.some.call(
       document.querySelectorAll("script[src]"),
@@ -31,7 +32,9 @@ Version: 2026-07-16.2
     if(patchAlreadyLoaded()){
       console.log(
         "✅ checkout-confirm Phase 1 loader：patch 已存在",
-        window.__LUNY_PHASE1_ORDER_FLOW_PATCH_V2__ || ""
+        window.__LUNY_PHASE1_ORDER_FLOW_PATCH_V3__ ||
+        window.__LUNY_PHASE1_ORDER_FLOW_PATCH__ ||
+        ""
       );
       return;
     }
@@ -43,14 +46,14 @@ Version: 2026-07-16.2
 
     script.onload = function(){
       console.log(
-        "✅ checkout-confirm Phase 1 loader：patch 載入完成",
-        window.__LUNY_PHASE1_ORDER_FLOW_PATCH_V2__
+        "✅ checkout-confirm Phase 1 loader：patch v3 載入完成",
+        window.__LUNY_PHASE1_ORDER_FLOW_PATCH_V3__
       );
     };
 
     script.onerror = function(){
       console.error(
-        "❌ checkout-confirm Phase 1 loader：phase1-order-flow-patch.js 載入失敗"
+        "❌ checkout-confirm Phase 1 loader：phase1-order-flow-patch.js v3 載入失敗"
       );
     };
 
