@@ -9,7 +9,7 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
   "use strict";
 
   if (window.__LUNY_PHASE1_COMPLETION_PAGE__) return;
-  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.7.1";
+  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.7.2";
 
   const GAS_URL =
     window.LUNY_GAS_SAVE_URL ||
@@ -517,7 +517,14 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
       });
     }catch(_){}
 
-    return clean(pieces.join("\n")).slice(0, CFG.maxOrderPageText);
+    return pieces
+      .join("\n")
+      .replace(/\u00a0/g, " ")
+      .replace(/\r\n?/g, "\n")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+      .slice(0, CFG.maxOrderPageText);
   }
 
   function isLikelyCompletionPage(text){
@@ -567,18 +574,181 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
   }
 
   function extractLogistics(text){
-    const source = String(text || "");
-    const rules = [
-      ["7-11", /7[\s-]*11|統一超商/i],
-      ["全家", /全家/i],
-      ["萊爾富", /萊爾富/i],
-      ["OK", /\bOK\b|OK超商/i],
-      ["宅配", /宅配|黑貓|新竹物流|大榮/i],
-      ["郵寄", /郵寄|中華郵政/i]
+    const source = String(text || "")
+      .replace(/\u00a0/g, " ")
+      .replace(/[ \t]+/g, " ");
+
+    if (/現場自取|門市自取|到店自取|自取/i.test(source)){
+      return "現場自取";
+    }
+
+    if (
+      /宅配到府|宅配|黑貓|新竹物流|大榮|嘉里大榮|順豐/i.test(source)
+    ){
+      return "宅配到府";
+    }
+
+    if (
+      /超商取貨|超商門市|店到店|門市取貨|7[\s-]*11|統一超商|全家|萊爾富|OK超商|蝦皮店到店/i.test(source)
+    ){
+      return "超商取貨";
+    }
+
+    if (/郵寄|中華郵政|郵局/i.test(source)){
+      return "郵寄";
+    }
+
+    return "";
+  }
+
+  function isBadReceiverName(value){
+    const name = clean(value)
+      .replace(/^(?:先生|小姐|女士)\s*/i, "")
+      .replace(/\s*(?:先生|小姐|女士)$/i, "")
+      .replace(/[，,。；;｜|].*$/, "")
+      .trim();
+
+    if (!name) return true;
+    if (/^哈囉/i.test(name)) return true;
+    if (/LUNY\s*TW/i.test(name)) return true;
+    if (/如你所願|小嚕|LUNY/i.test(name)) return true;
+
+    if (
+      /訂單|付款|金額|超商|宅配|地址|電話|手機|Email|電子郵件|發票|物流|取貨方式|運送方式/i.test(name)
+    ){
+      return true;
+    }
+
+    return name.length > 30;
+  }
+
+  function normalizeReceiverName(value){
+    const name = clean(value)
+      .replace(/^(?:先生|小姐|女士)\s*/i, "")
+      .replace(/\s*(?:先生|小姐|女士)$/i, "")
+      .replace(/[，,。；;｜|].*$/, "")
+      .trim();
+
+    return isBadReceiverName(name) ? "" : name;
+  }
+
+  function extractReceiverNameFromPage(text){
+    const source = String(text || "")
+      .replace(/\u00a0/g, " ")
+      .replace(/\r\n?/g, "\n");
+
+    const lines = source
+      .split("\n")
+      .map(function(line){
+        return line.replace(/[ \t]+/g, " ").trim();
+      })
+      .filter(Boolean);
+
+    const labels = [
+      "收件人",
+      "收件姓名",
+      "收件者",
+      "收貨人",
+      "取件人",
+      "取件姓名",
+      "訂購人",
+      "顧客姓名",
+      "客戶姓名",
+      "聯絡人",
+      "姓名"
     ];
 
-    for (const pair of rules){
-      if (pair[1].test(source)) return pair[0];
+    const labelSource = labels.join("|");
+    const sameLine = new RegExp(
+      "^(?:" + labelSource + ")\\s*[:：]\\s*(.+)$",
+      "i"
+    );
+
+    for (const line of lines){
+      const match = line.match(sameLine);
+
+      if (match && match[1]){
+        const name = normalizeReceiverName(match[1]);
+        if (name) return name;
+      }
+    }
+
+    const exactLabel = new RegExp(
+      "^(?:" + labelSource + ")\\s*[:：]?$",
+      "i"
+    );
+
+    for (let index = 0; index < lines.length; index++){
+      if (!exactLabel.test(lines[index])) continue;
+
+      for (
+        let offset = 1;
+        offset <= 2 && index + offset < lines.length;
+        offset++
+      ){
+        const name = normalizeReceiverName(lines[index + offset]);
+        if (name) return name;
+      }
+    }
+
+    const inlinePatterns = [
+      /(?:收件人|收件姓名|收件者|收貨人|取件人|取件姓名|訂購人|顧客姓名|客戶姓名|聯絡人)\s*[:：]\s*([^\n\r，,。；;｜|]{1,30})/i,
+      /(?:收件人|收件姓名|收件者|收貨人|取件人|取件姓名|訂購人|顧客姓名|客戶姓名|聯絡人)\s+([^\n\r，,。；;｜|]{1,30})/i
+    ];
+
+    for (const pattern of inlinePatterns){
+      const match = source.match(pattern);
+
+      if (match && match[1]){
+        const name = normalizeReceiverName(match[1]);
+        if (name) return name;
+      }
+    }
+
+    const greeting = source.match(
+      /哈囉\s*[，,]?\s*([^\n\r！!]{1,30})\s*[！!]/i
+    );
+
+    if (greeting && greeting[1]){
+      const name = normalizeReceiverName(greeting[1]);
+      if (name) return name;
+    }
+
+    return "";
+  }
+
+  function extractReceiverName(payload, pageText){
+    const pageName = extractReceiverNameFromPage(pageText);
+    if (pageName) return pageName;
+
+    const candidates = [
+      payload && payload.receiverName,
+      payload && payload.recipientName,
+      payload && payload.customerName,
+      payload && payload.buyerName,
+      payload && payload.name
+    ];
+
+    const items = payload && Array.isArray(payload.items)
+      ? payload.items
+      : [];
+
+    items.forEach(function(item){
+      const q = item && item.quote || {};
+
+      candidates.push(
+        item && item.receiverName,
+        item && item.recipientName,
+        item && item.customerName,
+        q.receiverName,
+        q.recipientName,
+        q.customerName
+      );
+    });
+
+    for (const candidate of candidates){
+      const name = normalizeReceiverName(candidate);
+      if (name) return name;
     }
 
     return "";
@@ -766,6 +936,15 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
 
     const orderTotal = extractMoney(pageText);
     const logistics = extractLogistics(pageText);
+    const receiverName = extractReceiverName(payload, pageText);
+
+    const checkoutPayload = Object.assign({}, payload, {
+      receiverName,
+      recipientName: receiverName,
+      customerName: receiverName,
+      logistics,
+      shippingMethod: logistics
+    });
 
     return sanitize({
       type: "bindOrderNo",
@@ -777,6 +956,9 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
       oneShopOrderTotal: orderTotal,
       logistics,
       shippingMethod: logistics,
+      receiverName,
+      recipientName: receiverName,
+      customerName: receiverName,
       groupId: payload.groupId || payload.cartKey || "",
       cartKey: payload.cartKey || payload.groupId || "",
       orderSessionId: payload.orderSessionId || "",
@@ -785,7 +967,7 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
       designIdsCount: designIds.length,
       itemsCount: items.length,
       items,
-      checkoutPayload: payload,
+      checkoutPayload,
       orderStatus: "completed",
       confirmed: true,
       source: "phase1_trusted_identity_completion_v5",
@@ -794,7 +976,9 @@ v7 keeps the safe binding flow and restores the full grouped order-detail card.
         path: location.pathname,
         title: document.title || "",
         detectedOrderNo: orderNo,
-        checkoutTokenFromUrl: token
+        checkoutTokenFromUrl: token,
+        detectedReceiverName: receiverName,
+        detectedLogistics: logistics
       },
       pageUrl: location.href,
       orderPageText: pageText.slice(0, CFG.maxOrderPageText),
