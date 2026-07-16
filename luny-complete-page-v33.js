@@ -1,14 +1,15 @@
 /*
 LUNY Phase 1 — Order Completion Page Replacement
 Replace all previous completion-page bind/watch scripts with this ONE file.
-The URL checkoutToken is the only checkout identity source.
-v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRITE_BUSY.
+The checkout identity must come from an explicit URL token, an order-number mapping,
+or a validated same-tab checkout handoff. Global latest-token guessing is forbidden.
+v4 safely handles 1shop completion URLs that do not preserve checkoutToken.
 */
 (function installLunyPhase1CompletionPage(){
   "use strict";
 
   if (window.__LUNY_PHASE1_COMPLETION_PAGE__) return;
-  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.3";
+  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.4";
 
   const GAS_URL =
     window.LUNY_GAS_SAVE_URL ||
@@ -20,6 +21,9 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
     retryPrefix: "LUNY_BIND_RETRY::",
     statusPrefix: "LUNY_CHECKOUT_STATUS::",
     sentPrefix: "LUNY_ORDER_SENT_V3::",
+    completionHandoffKey: "LUNY_COMPLETION_HANDOFF_V1",
+    orderTokenPrefix: "LUNY_COMPLETION_TOKEN_BY_ORDER_V1::",
+    handoffMaxAgeMs: 4 * 60 * 60 * 1000,
     bindTimeoutMs: 25000,
     summaryTimeoutMs: 45000,
     maxOrderPageText: 12000,
@@ -89,6 +93,257 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
     }
 
     return null;
+  }
+
+
+  function orderTokenKey(orderNo){
+    return CFG.orderTokenPrefix + clean(orderNo);
+  }
+
+  function validateTokenPayloadIdentity(token, handoff){
+    if (!token) return null;
+
+    const payload = loadTokenPayload(token);
+    if (!payload) return null;
+
+    if (clean(payload.checkoutToken) !== token) return null;
+
+    if (handoff){
+      const payloadGroup = clean(payload.groupId || payload.cartKey);
+      const handoffGroup = clean(handoff.groupId || handoff.cartKey);
+      const payloadSession = clean(payload.orderSessionId);
+      const handoffSession = clean(handoff.orderSessionId);
+
+      if (
+        handoffGroup &&
+        payloadGroup &&
+        handoffGroup !== payloadGroup
+      ){
+        return null;
+      }
+
+      if (
+        handoffSession &&
+        payloadSession &&
+        handoffSession !== payloadSession
+      ){
+        return null;
+      }
+    }
+
+    return payload;
+  }
+
+  function readOrderTokenMapping(orderNo){
+    if (!orderNo) return "";
+
+    const key = orderTokenKey(orderNo);
+    const stores = [sessionStorage, localStorage];
+
+    for (const store of stores){
+      try{
+        const obj = safeParse(store.getItem(key), null);
+        const token = clean(obj && obj.checkoutToken);
+
+        if (
+          token &&
+          clean(obj.orderNo) === clean(orderNo) &&
+          validateTokenPayloadIdentity(token, obj)
+        ){
+          return token;
+        }
+      }catch(_){}
+    }
+
+    return "";
+  }
+
+  function persistOrderTokenMapping(orderNo, token, payload, source){
+    if (!orderNo || !token || !payload) return false;
+
+    const record = {
+      v: 1,
+      orderNo: clean(orderNo),
+      checkoutToken: clean(token),
+      groupId: clean(payload.groupId || payload.cartKey),
+      cartKey: clean(payload.cartKey || payload.groupId),
+      orderSessionId: clean(payload.orderSessionId),
+      source: clean(source || ""),
+      createdAt: new Date().toISOString()
+    };
+
+    const key = orderTokenKey(orderNo);
+
+    try{
+      sessionStorage.setItem(key, JSON.stringify(record));
+    }catch(_){}
+
+    try{
+      localStorage.setItem(key, JSON.stringify(record));
+    }catch(_){}
+
+    return true;
+  }
+
+  function readValidatedCompletionHandoff(orderNo){
+    let handoff = null;
+
+    try{
+      handoff = safeParse(
+        sessionStorage.getItem(CFG.completionHandoffKey),
+        null
+      );
+    }catch(_){}
+
+    // Backward-compatible recovery for an order that was already started
+    // with Phase 1 v2 before the explicit handoff key existed.
+    // This remains same-tab only and still requires a matching token payload.
+    if (!handoff || typeof handoff !== "object"){
+      const legacyKeys = [
+        "LUNY_PHASE1_ACTIVE_CHECKOUT_CONTEXT_V2",
+        "LUNY_PHASE1_RESERVED_CHECKOUT_CONTEXT_V2"
+      ];
+
+      for (const key of legacyKeys){
+        try{
+          const legacy = safeParse(
+            sessionStorage.getItem(key),
+            null
+          );
+
+          if (
+            legacy &&
+            legacy.checkoutToken &&
+            legacy.groupId &&
+            legacy.orderSessionId
+          ){
+            handoff = {
+              v: 1,
+              checkoutToken: legacy.checkoutToken,
+              groupId: legacy.groupId,
+              cartKey: legacy.groupId,
+              orderSessionId: legacy.orderSessionId,
+              checkoutContextId: legacy.contextId || "",
+              createdAt: legacy.startedAt || legacy.createdAt || "",
+              createdAtMs:
+                Number(legacy.startedAtMs || 0) ||
+                Number(legacy.createdAtMs || 0),
+              expiresAtMs:
+                (
+                  Number(legacy.startedAtMs || 0) ||
+                  Number(legacy.createdAtMs || 0)
+                ) + CFG.handoffMaxAgeMs,
+              claimedOrderNo: "",
+              claimedAt: "",
+              migratedFrom: key
+            };
+            break;
+          }
+        }catch(_){}
+      }
+    }
+
+    if (!handoff || typeof handoff !== "object") return null;
+
+    const token = clean(handoff.checkoutToken);
+    if (!token) return null;
+
+    const createdAtMs =
+      Number(handoff.createdAtMs || 0) ||
+      Date.parse(handoff.createdAt || "") ||
+      0;
+
+    const expiresAtMs =
+      Number(handoff.expiresAtMs || 0) ||
+      (createdAtMs + CFG.handoffMaxAgeMs);
+
+    if (
+      !createdAtMs ||
+      Date.now() > expiresAtMs ||
+      Date.now() - createdAtMs > CFG.handoffMaxAgeMs
+    ){
+      return null;
+    }
+
+    const claimedOrderNo = clean(handoff.claimedOrderNo);
+    if (claimedOrderNo && claimedOrderNo !== clean(orderNo)){
+      return null;
+    }
+
+    const payload = validateTokenPayloadIdentity(token, handoff);
+    if (!payload) return null;
+
+    const claimed = Object.assign({}, handoff, {
+      claimedOrderNo: clean(orderNo),
+      claimedAt: new Date().toISOString()
+    });
+
+    try{
+      sessionStorage.setItem(
+        CFG.completionHandoffKey,
+        JSON.stringify(claimed)
+      );
+    }catch(_){}
+
+    persistOrderTokenMapping(
+      orderNo,
+      token,
+      payload,
+      "validated_same_tab_handoff"
+    );
+
+    return {
+      token,
+      payload,
+      source: "validated_same_tab_handoff"
+    };
+  }
+
+  function getTrustedCheckoutIdentity(orderNo){
+    const urlToken = getUrlCheckoutToken();
+
+    if (urlToken){
+      const payload = validateTokenPayloadIdentity(urlToken, null);
+
+      if (payload){
+        persistOrderTokenMapping(
+          orderNo,
+          urlToken,
+          payload,
+          "url_checkout_token"
+        );
+
+        return {
+          token: urlToken,
+          payload,
+          source: "url_checkout_token"
+        };
+      }
+
+      return {
+        token: urlToken,
+        payload: null,
+        source: "url_token_payload_missing"
+      };
+    }
+
+    const mappedToken = readOrderTokenMapping(orderNo);
+    if (mappedToken){
+      return {
+        token: mappedToken,
+        payload: loadTokenPayload(mappedToken),
+        source: "order_number_mapping"
+      };
+    }
+
+    const handoff = readValidatedCompletionHandoff(orderNo);
+    if (handoff) return handoff;
+
+    return {
+      token: "",
+      payload: null,
+      source: "missing_trusted_checkout_identity"
+    };
   }
 
   function sanitize(value, seen){
@@ -285,7 +540,7 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
     const delay = delays[Math.min(attempts - 1, delays.length - 1)];
 
     const value = {
-      v: 3,
+      v: 4,
       checkoutToken: token,
       orderNo,
       attempts,
@@ -440,7 +695,8 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
     // Only clear the reserved checkout context when it belongs to this token.
     [
       "LUNY_PHASE1_RESERVED_CHECKOUT_CONTEXT_V2",
-      "LUNY_PHASE1_ACTIVE_CHECKOUT_CONTEXT_V2"
+      "LUNY_PHASE1_ACTIVE_CHECKOUT_CONTEXT_V2",
+      CFG.completionHandoffKey
     ].forEach(function(key){
       try{
         const localValue = safeParse(localStorage.getItem(key), null);
@@ -483,9 +739,12 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
 
     lastDetectedOrderNo = orderNo;
 
-    const token = getUrlCheckoutToken();
-    const payload = token ? loadTokenPayload(token) : null;
-    const retryToken = token || "NO_URL_TOKEN";
+    const identity = getTrustedCheckoutIdentity(orderNo);
+    const token = clean(identity && identity.token);
+    const payload = identity && identity.payload
+      ? identity.payload
+      : (token ? loadTokenPayload(token) : null);
+    const retryToken = token || "NO_TRUSTED_TOKEN";
 
     // 所有排程、MutationObserver 與視窗事件都必須遵守同一個退避時間。
     // 這可避免狀態框更新後又立即送出，造成 WRITE_BUSY 永久循環。
@@ -522,10 +781,10 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
     );
 
     if (!token){
-      request.source = "phase1_missing_url_token_diagnostic_v2";
-      request.clientValidationCode = "MISSING_URL_TOKEN";
+      request.source = "phase1_missing_trusted_token_diagnostic_v4";
+      request.clientValidationCode = "MISSING_CHECKOUT_TOKEN";
     }else if (!payload){
-      request.source = "phase1_missing_token_payload_diagnostic_v2";
+      request.source = "phase1_missing_token_payload_diagnostic_v4";
       request.clientValidationCode = "TOKEN_PAYLOAD_NOT_FOUND";
     }
 
@@ -534,7 +793,7 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
       trigger,
       bindStatus: "binding",
       message: !token
-        ? "網址缺少 checkoutToken，正在要求後端回傳 abnormal 並留下稽核紀錄。"
+        ? "完成頁找不到可驗證的 token 交接資料，因此不會猜測或綁定其他訂單。"
         : (!payload
           ? "找不到 token 專屬 payload，正在要求後端依 token 驗證，不會讀取其他訂單。"
           : "")
@@ -572,7 +831,7 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
 
       if (bindStatus === "partial"){
         const state = saveRetry(
-          token || "NO_URL_TOKEN",
+          token || "NO_TRUSTED_TOKEN",
           orderNo,
           request,
           result,
@@ -596,14 +855,14 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
             "訂單已寫入部分資料，系統將持續補送。"
         });
 
-        scheduleRetry(token || "NO_URL_TOKEN", orderNo, state);
+        scheduleRetry(token || "NO_TRUSTED_TOKEN", orderNo, state);
         return;
       }
 
       const retryable = !!(result && result.retryable);
 
       const state = saveRetry(
-        token || "NO_URL_TOKEN",
+        token || "NO_TRUSTED_TOKEN",
         orderNo,
         request,
         result,
@@ -627,10 +886,10 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
           "訂單綁定狀態異常。"
       });
 
-      scheduleRetry(token || "NO_URL_TOKEN", orderNo, state);
+      scheduleRetry(token || "NO_TRUSTED_TOKEN", orderNo, state);
     }catch(err){
       const state = saveRetry(
-        token || "NO_URL_TOKEN",
+        token || "NO_TRUSTED_TOKEN",
         orderNo,
         request,
         err,
@@ -659,7 +918,7 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
         )
       });
 
-      scheduleRetry(token || "NO_URL_TOKEN", orderNo, state);
+      scheduleRetry(token || "NO_TRUSTED_TOKEN", orderNo, state);
     }finally{
       window.__LUNY_PHASE1_COMPLETION_BIND_ACTIVE__ = false;
       running = false;
@@ -837,20 +1096,23 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
   }
 
   function boot(){
-    const token = getUrlCheckoutToken();
+    // 1shop may remove checkoutToken from the final URL.
+    // Do not fail here: wait until the order number is rendered, then resolve
+    // identity from URL, order-number mapping, or validated same-tab handoff.
+    const pageText = collectPageText();
+    const bootOrderNo = extractOrderNo(pageText);
+    const bootIdentity = bootOrderNo
+      ? getTrustedCheckoutIdentity(bootOrderNo)
+      : {
+          token: getUrlCheckoutToken(),
+          payload: null,
+          source: "waiting_for_order_number"
+        };
+    const token = clean(bootIdentity && bootIdentity.token);
 
-    if (!token){
-      saveStatus("", "abnormal", {
-        bindStatus: "abnormal",
-        code: "MISSING_URL_TOKEN",
-        retryable: false,
-        message: "完成頁網址缺少 checkoutToken。"
-      });
-      return;
-    }
-
-    // Resume a persisted retry only for this URL token.
+    // Resume a persisted retry only when a trusted token is already available.
     try{
+      if (!token) throw new Error("trusted token not resolved yet");
       const prefix = CFG.retryPrefix + token + "::";
       for (let i = 0; i < localStorage.length; i++){
         const key = localStorage.key(i);
@@ -859,16 +1121,16 @@ v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRI
         let state = safeParse(localStorage.getItem(key), null);
         if (state && state.retryable !== false){
           // v2 可能因自我監看循環把 attempts 快速堆高。
-          // v3 僅遷移一次，讓既有 WRITE_BUSY 訂單在 2 秒後恢復正常重試。
+          // v4 僅遷移一次，讓既有 WRITE_BUSY 訂單在 2 秒後恢復正常重試。
           if (
-            Number(state.recoveredByCompletionV3 || 0) !== 1 &&
+            Number(state.recoveredByCompletionV4 || 0) !== 1 &&
             getRetryResultCode(state) === "WRITE_BUSY"
           ){
             state = Object.assign({}, state, {
               v: 3,
               attempts: Math.min(Number(state.attempts || 0), 1),
               nextAttemptAt: Date.now() + 2000,
-              recoveredByCompletionV3: 1,
+              recoveredByCompletionV4: 1,
               updatedAt: new Date().toISOString()
             });
 
