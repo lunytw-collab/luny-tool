@@ -7,7 +7,7 @@ The URL checkoutToken is the only checkout identity source.
   "use strict";
 
   if (window.__LUNY_PHASE1_COMPLETION_PAGE__) return;
-  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.1";
+  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.2";
 
   const GAS_URL =
     window.LUNY_GAS_SAVE_URL ||
@@ -358,7 +358,7 @@ The URL checkoutToken is the only checkout identity source.
       checkoutPayload: payload,
       orderStatus: "completed",
       confirmed: true,
-      source: "phase1_url_token_completion_v1",
+      source: "phase1_url_token_completion_v2",
       page: {
         href: location.href,
         path: location.pathname,
@@ -391,6 +391,26 @@ The URL checkoutToken is the only checkout identity source.
       localStorage.setItem("LUNY_LAST_ORDER_COMPLETED_AT", String(Date.now()));
     }catch(_){}
 
+    // Only clear the reserved checkout context when it belongs to this token.
+    [
+      "LUNY_PHASE1_RESERVED_CHECKOUT_CONTEXT_V2",
+      "LUNY_PHASE1_ACTIVE_CHECKOUT_CONTEXT_V2"
+    ].forEach(function(key){
+      try{
+        const localValue = safeParse(localStorage.getItem(key), null);
+        if (!localValue || clean(localValue.checkoutToken) === token){
+          localStorage.removeItem(key);
+        }
+      }catch(_){}
+
+      try{
+        const sessionValue = safeParse(sessionStorage.getItem(key), null);
+        if (!sessionValue || clean(sessionValue.checkoutToken) === token){
+          sessionStorage.removeItem(key);
+        }
+      }catch(_){}
+    });
+
     removeAllRetryKeysForToken(token);
     saveStatus(token, "complete", {
       orderNo,
@@ -409,30 +429,6 @@ The URL checkoutToken is the only checkout identity source.
   async function attemptBind(trigger){
     if (running || completed) return;
 
-    const token = getUrlCheckoutToken();
-
-    if (!token){
-      saveStatus("", "abnormal", {
-        bindStatus: "abnormal",
-        code: "MISSING_URL_TOKEN",
-        retryable: false,
-        message: "完成頁網址缺少 checkoutToken，系統不會讀取其他訂單的全域 token。"
-      });
-      return;
-    }
-
-    const payload = loadTokenPayload(token);
-
-    if (!payload){
-      saveStatus(token, "abnormal", {
-        bindStatus: "abnormal",
-        code: "TOKEN_PAYLOAD_NOT_FOUND",
-        retryable: false,
-        message: "找不到此 URL token 對應的 checkout payload。"
-      });
-      return;
-    }
-
     const pageText = collectPageText();
     if (!isLikelyCompletionPage(pageText)) return;
 
@@ -441,20 +437,55 @@ The URL checkoutToken is the only checkout identity source.
 
     lastDetectedOrderNo = orderNo;
 
-    if (hasAlreadyCompleted(token, orderNo)){
+    const token = getUrlCheckoutToken();
+    const payload = token ? loadTokenPayload(token) : null;
+
+    if (token && payload && hasAlreadyCompleted(token, orderNo)){
       markComplete(token, orderNo, { alreadyComplete: true });
       loadAndRenderSummary(orderNo, payload);
       return;
     }
 
     running = true;
-    saveStatus(token, "binding", {
+
+    const effectivePayload = payload || {
+      v: 6,
+      checkoutToken: token || "",
+      total: 0,
+      checkoutTotal: 0,
+      groupId: "",
+      cartKey: "",
+      orderSessionId: "",
+      designIds: [],
+      items: [],
+      createdAt: new Date().toISOString()
+    };
+
+    const request = buildBindRequest(
+      token || "",
+      effectivePayload,
+      orderNo,
+      pageText
+    );
+
+    if (!token){
+      request.source = "phase1_missing_url_token_diagnostic_v2";
+      request.clientValidationCode = "MISSING_URL_TOKEN";
+    }else if (!payload){
+      request.source = "phase1_missing_token_payload_diagnostic_v2";
+      request.clientValidationCode = "TOKEN_PAYLOAD_NOT_FOUND";
+    }
+
+    saveStatus(token || "", "binding", {
       orderNo,
       trigger,
-      bindStatus: "binding"
+      bindStatus: "binding",
+      message: !token
+        ? "網址缺少 checkoutToken，正在要求後端回傳 abnormal 並留下稽核紀錄。"
+        : (!payload
+          ? "找不到 token 專屬 payload，正在要求後端依 token 驗證，不會讀取其他訂單。"
+          : "")
     });
-
-    const request = buildBindRequest(token, payload, orderNo, pageText);
 
     try{
       window.__LUNY_PHASE1_COMPLETION_BIND_ACTIVE__ = true;
@@ -465,69 +496,112 @@ The URL checkoutToken is the only checkout identity source.
         body: JSON.stringify(request)
       }, CFG.bindTimeoutMs);
 
-      const bindStatus = clean(result && (result.bindStatus || result.status)).toLowerCase();
+      const bindStatus = clean(
+        result && (result.bindStatus || result.status)
+      ).toLowerCase();
 
       if (bindStatus === "complete"){
+        if (!token){
+          saveStatus("", "abnormal", {
+            orderNo,
+            bindStatus: "abnormal",
+            retryable: false,
+            code: "COMPLETE_WITHOUT_URL_TOKEN_REJECTED",
+            message: "後端回傳 complete，但完成頁缺少 URL token，因此前端拒絕標記完成。"
+          });
+          return;
+        }
+
         markComplete(token, orderNo, result);
-        loadAndRenderSummary(orderNo, payload);
+        loadAndRenderSummary(orderNo, payload || effectivePayload);
         return;
       }
 
       if (bindStatus === "partial"){
         const state = saveRetry(
-          token,
+          token || "NO_URL_TOKEN",
           orderNo,
           request,
           result,
           result.retryable !== false
         );
 
-        saveStatus(token, "partial", {
+        saveStatus(token || "", "partial", {
           orderNo,
           bindStatus: "partial",
           retryable: state.retryable,
           missing: result.missing || [],
           code: result.code || "",
-          message: result.error || result.message || "訂單已寫入部分資料，系統將持續補送。"
+          message:
+            result.error ||
+            result.message ||
+            "訂單已寫入部分資料，系統將持續補送。"
         });
 
-        scheduleRetry(token, orderNo, state);
+        scheduleRetry(token || "NO_URL_TOKEN", orderNo, state);
         return;
       }
 
       const retryable = !!(result && result.retryable);
-      const state = saveRetry(token, orderNo, request, result, retryable);
 
-      saveStatus(token, "abnormal", {
+      const state = saveRetry(
+        token || "NO_URL_TOKEN",
+        orderNo,
+        request,
+        result,
+        retryable
+      );
+
+      saveStatus(token || "", "abnormal", {
         orderNo,
         bindStatus: "abnormal",
         retryable,
-        code: result && result.code || "ABNORMAL_BIND_RESULT",
-        message: result && (result.error || result.message) || "訂單綁定狀態異常。"
+        missing: result && result.missing || [],
+        code:
+          result && result.code ||
+          (!token
+            ? "MISSING_URL_TOKEN"
+            : (!payload
+              ? "TOKEN_PAYLOAD_NOT_FOUND"
+              : "ABNORMAL_BIND_RESULT")),
+        message:
+          result && (result.error || result.message) ||
+          "訂單綁定狀態異常。"
       });
 
-      scheduleRetry(token, orderNo, state);
+      scheduleRetry(token || "NO_URL_TOKEN", orderNo, state);
     }catch(err){
-      const state = saveRetry(token, orderNo, request, err, true);
+      const state = saveRetry(
+        token || "NO_URL_TOKEN",
+        orderNo,
+        request,
+        err,
+        true
+      );
 
-      saveStatus(token, "partial", {
+      saveStatus(token || "", "partial", {
         orderNo,
         bindStatus: "partial",
         retryable: true,
-        code: err && err.name === "AbortError" ? "BIND_TIMEOUT" : "BIND_NETWORK_ERROR",
-        message: err && err.name === "AbortError"
-          ? "訂單綁定逾時，系統會保留資料並重試。"
-          : "訂單綁定暫時失敗，系統會保留資料並重試。",
-        error: String(err && (err.message || err) || "")
+        code:
+          err && err.name === "AbortError"
+            ? "BIND_TIMEOUT"
+            : "BIND_NETWORK_ERROR",
+        message:
+          err && err.name === "AbortError"
+            ? "訂單綁定逾時，系統會保留資料並重試。"
+            : "訂單綁定暫時失敗，系統會保留資料並重試。",
+        error: String(
+          err && (err.message || err) || ""
+        )
       });
 
-      scheduleRetry(token, orderNo, state);
+      scheduleRetry(token || "NO_URL_TOKEN", orderNo, state);
     }finally{
       window.__LUNY_PHASE1_COMPLETION_BIND_ACTIVE__ = false;
       running = false;
     }
   }
-
   function escapeHtml(value){
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
