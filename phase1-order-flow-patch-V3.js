@@ -1,6 +1,6 @@
 /*
-LUNY Phase 1 — Order Flow Safety Patch v2
-Version: 2026-07-16.2
+LUNY Phase 1 — Order Flow Safety Patch v3
+Version: 2026-07-16.3
 
 IMPORTANT:
 1. Load this file AFTER the current order-flow / checkout-confirm main script.
@@ -20,12 +20,13 @@ Scope:
 
 Does NOT change preview, print/cut, pricing, product, or production rules.
 */
-(function installLunyPhase1OrderFlowPatchV2(){
+(function installLunyPhase1OrderFlowPatchV3(){
   "use strict";
 
-  if (window.__LUNY_PHASE1_ORDER_FLOW_PATCH_V2__) return;
-  window.__LUNY_PHASE1_ORDER_FLOW_PATCH_V2__ = "2026-07-16.2";
-  window.__LUNY_PHASE1_ORDER_FLOW_PATCH__ = "2026-07-16.2";
+  if (window.__LUNY_PHASE1_ORDER_FLOW_PATCH_V3__) return;
+  window.__LUNY_PHASE1_ORDER_FLOW_PATCH_V3__ = "2026-07-16.3";
+  window.__LUNY_PHASE1_ORDER_FLOW_PATCH_V2__ = "2026-07-16.3";
+  window.__LUNY_PHASE1_ORDER_FLOW_PATCH__ = "2026-07-16.3";
 
   const CFG = {
     reservedContextKey: "LUNY_PHASE1_RESERVED_CHECKOUT_CONTEXT_V2",
@@ -33,6 +34,8 @@ Does NOT change preview, print/cut, pricing, product, or production rules.
     tokenPayloadPrefix: "LUNY_CHECKOUT_PAYLOAD_V3::",
     tokenPayloadCompatPrefix: "LUNY_CHECKOUT_PAYLOAD_V2::",
     tokenStatusPrefix: "LUNY_CHECKOUT_STATUS::",
+    completionHandoffKey: "LUNY_COMPLETION_HANDOFF_V1",
+    completionHandoffMaxAgeMs: 4 * 60 * 60 * 1000,
     activeSaveDesignIdKey: "LUNY_ACTIVE_SAVE_DESIGN_ID_V1",
     maxContextAgeMs: 2 * 60 * 60 * 1000,
     maxOrderPageText: 12000,
@@ -260,6 +263,43 @@ Does NOT change preview, print/cut, pricing, product, or production rules.
     return clean;
   }
 
+
+  function writeCompletionHandoff(payload){
+    if (!payload || !payload.checkoutToken) return null;
+
+    const handoff = {
+      v: 1,
+      checkoutToken: String(payload.checkoutToken || ""),
+      groupId: String(payload.groupId || payload.cartKey || ""),
+      cartKey: String(payload.cartKey || payload.groupId || ""),
+      orderSessionId: String(payload.orderSessionId || ""),
+      checkoutContextId: String(payload.checkoutContextId || ""),
+      payloadKey: CFG.tokenPayloadPrefix + String(payload.checkoutToken || ""),
+      createdAt: new Date().toISOString(),
+      createdAtMs: Date.now(),
+      expiresAtMs: Date.now() + CFG.completionHandoffMaxAgeMs,
+      claimedOrderNo: "",
+      claimedAt: ""
+    };
+
+    // sessionStorage is scoped to the current browser tab.
+    // It survives same-tab redirects to the 1shop payment and completion pages,
+    // but does not allow another tab/order to become an authority source.
+    try{
+      sessionStorage.setItem(
+        CFG.completionHandoffKey,
+        JSON.stringify(handoff)
+      );
+    }catch(err){
+      console.warn(
+        "[LUNY phase1 v3] completion handoff persistence failed",
+        err
+      );
+    }
+
+    return handoff;
+  }
+
   function persistTokenScopedPayload(payload){
     if (!payload || !payload.checkoutToken) return payload;
 
@@ -291,9 +331,10 @@ Does NOT change preview, print/cut, pricing, product, or production rules.
       localStorage.setItem("LUNY_PENDING_ORDER_V1", JSON.stringify(safe));
       localStorage.setItem("LUNY_CHECKOUT_TOKEN", token);
     }catch(err){
-      console.warn("[LUNY phase1 v2] token payload persistence failed", err);
+      console.warn("[LUNY phase1 v3] token payload persistence failed", err);
     }
 
+    writeCompletionHandoff(safe);
     return safe;
   }
 
@@ -309,10 +350,10 @@ Does NOT change preview, print/cut, pricing, product, or production rules.
     const original = window[name];
 
     if (typeof original !== "function") return false;
-    if (original.__lunyPhase1V2Wrapped) return true;
+    if (original.__lunyPhase1V3Wrapped) return true;
 
     const wrapped = factory(original);
-    wrapped.__lunyPhase1V2Wrapped = true;
+    wrapped.__lunyPhase1V3Wrapped = true;
     wrapped.__lunyOriginal = original;
     assignGlobalFunction(name, wrapped);
     return true;
@@ -490,7 +531,7 @@ Does NOT change preview, print/cut, pricing, product, or production rules.
     const originalSave = window.saveDesignToGAS;
     if (
       typeof originalSave !== "function" ||
-      originalSave.__lunyPhase1V2Wrapped
+      originalSave.__lunyPhase1V3Wrapped
     ){
       return typeof originalSave === "function";
     }
@@ -551,7 +592,7 @@ Does NOT change preview, print/cut, pricing, product, or production rules.
       }
     };
 
-    wrappedSave.__lunyPhase1V2Wrapped = true;
+    wrappedSave.__lunyPhase1V3Wrapped = true;
     wrappedSave.__lunyOriginal = originalSave;
     assignGlobalFunction("saveDesignToGAS", wrappedSave);
     return true;
@@ -734,19 +775,21 @@ Does NOT change preview, print/cut, pricing, product, or production rules.
   window.LUNY_PHASE1 = Object.assign(
     window.LUNY_PHASE1 || {},
     {
-      version: "2026-07-16.2",
+      version: "2026-07-16.3",
       reserveFreshCheckoutContext: reserveFreshContext,
       getOrRestoreCheckoutContext: getOrRestoreContext,
       sanitizeCheckoutValue,
       persistTokenScopedPayload,
       payloadKey: token =>
         CFG.tokenPayloadPrefix + String(token || ""),
-      contextKey: CFG.reservedContextKey
+      contextKey: CFG.reservedContextKey,
+      completionHandoffKey: CFG.completionHandoffKey,
+      writeCompletionHandoff
     }
   );
 
   console.log(
-    "✅ LUNY Phase 1 order-flow patch v2 installed",
+    "✅ LUNY Phase 1 order-flow patch v3 installed",
     isCheckoutConfirmPage()
       ? "checkout-confirm"
       : "product/editor"
