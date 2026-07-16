@@ -2,12 +2,13 @@
 LUNY Phase 1 — Order Completion Page Replacement
 Replace all previous completion-page bind/watch scripts with this ONE file.
 The URL checkoutToken is the only checkout identity source.
+v3 fixes a self-triggered MutationObserver retry loop that could keep GAS in WRITE_BUSY.
 */
 (function installLunyPhase1CompletionPage(){
   "use strict";
 
   if (window.__LUNY_PHASE1_COMPLETION_PAGE__) return;
-  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.2";
+  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-07-16.3";
 
   const GAS_URL =
     window.LUNY_GAS_SAVE_URL ||
@@ -22,7 +23,7 @@ The URL checkoutToken is the only checkout identity source.
     bindTimeoutMs: 25000,
     summaryTimeoutMs: 45000,
     maxOrderPageText: 12000,
-    maxAutomaticAttempts: 12
+    maxAutomaticAttempts: 100
   };
 
   let running = false;
@@ -265,19 +266,32 @@ The URL checkoutToken is the only checkout identity source.
     renderBindStatus(status, value);
   }
 
+  function getRetryResultCode(retryState){
+    const result = retryState && retryState.lastResult || {};
+    return clean(
+      result.code ||
+      result.status ||
+      retryState && retryState.code ||
+      ""
+    ).toUpperCase();
+  }
+
   function saveRetry(token, orderNo, request, resultOrError, retryable){
     const previous = readRetry(token, orderNo) || {};
     const attempts = Number(previous.attempts || 0) + 1;
-    const delays = [2000, 5000, 15000, 30000, 60000, 120000, 300000];
+
+    // 真正退避，不再因 DOM 變動連續撞擊 GAS 寫入鎖。
+    const delays = [3000, 8000, 20000, 45000, 90000, 180000, 300000];
     const delay = delays[Math.min(attempts - 1, delays.length - 1)];
 
     const value = {
-      v: 1,
+      v: 3,
       checkoutToken: token,
       orderNo,
       attempts,
       retryable: retryable !== false,
       nextAttemptAt: Date.now() + delay,
+      nextRetryDelayMs: delay,
       request: sanitize(request),
       lastResult: resultOrError && typeof resultOrError === "object"
         ? sanitize(resultOrError)
@@ -301,8 +315,40 @@ The URL checkoutToken is the only checkout identity source.
     if (!retryState || retryState.retryable === false) return;
     if (Number(retryState.attempts || 0) >= CFG.maxAutomaticAttempts) return;
 
-    const wait = Math.max(1000, Number(retryState.nextAttemptAt || 0) - Date.now());
-    retryTimer = setTimeout(function(){ attemptBind("persistent_retry"); }, wait);
+    const wait = Math.max(
+      1000,
+      Number(retryState.nextAttemptAt || 0) - Date.now()
+    );
+
+    retryTimer = setTimeout(function(){
+      attemptBind("persistent_retry");
+    }, wait + 80);
+  }
+
+  function deferToPersistedRetry(token, orderNo, trigger){
+    const state = readRetry(token, orderNo);
+
+    if (!state || state.retryable === false) return false;
+
+    const nextAttemptAt = Number(state.nextAttemptAt || 0);
+    const remaining = nextAttemptAt - Date.now();
+
+    if (remaining <= 150) return false;
+
+    scheduleRetry(token, orderNo, state);
+
+    saveStatus(token, "partial", {
+      orderNo,
+      trigger,
+      bindStatus: "partial",
+      retryable: true,
+      attempts: Number(state.attempts || 0),
+      nextRetrySeconds: Math.max(1, Math.ceil(remaining / 1000)),
+      code: getRetryResultCode(state) || "RETRY_WAIT",
+      message: "系統已保留本筆資料，將依排程自動重試，不會重複進表。"
+    });
+
+    return true;
   }
 
   async function fetchJsonWithTimeout(url, options, timeoutMs){
@@ -358,7 +404,7 @@ The URL checkoutToken is the only checkout identity source.
       checkoutPayload: payload,
       orderStatus: "completed",
       confirmed: true,
-      source: "phase1_url_token_completion_v2",
+      source: "phase1_url_token_completion_v3",
       page: {
         href: location.href,
         path: location.pathname,
@@ -439,6 +485,13 @@ The URL checkoutToken is the only checkout identity source.
 
     const token = getUrlCheckoutToken();
     const payload = token ? loadTokenPayload(token) : null;
+    const retryToken = token || "NO_URL_TOKEN";
+
+    // 所有排程、MutationObserver 與視窗事件都必須遵守同一個退避時間。
+    // 這可避免狀態框更新後又立即送出，造成 WRITE_BUSY 永久循環。
+    if (deferToPersistedRetry(retryToken, orderNo, trigger)){
+      return;
+    }
 
     if (token && payload && hasAlreadyCompleted(token, orderNo)){
       markComplete(token, orderNo, { alreadyComplete: true });
@@ -530,6 +583,11 @@ The URL checkoutToken is the only checkout identity source.
           orderNo,
           bindStatus: "partial",
           retryable: state.retryable,
+          attempts: state.attempts,
+          nextRetrySeconds: Math.max(
+            1,
+            Math.ceil((state.nextAttemptAt - Date.now()) / 1000)
+          ),
           missing: result.missing || [],
           code: result.code || "",
           message:
@@ -583,6 +641,11 @@ The URL checkoutToken is the only checkout identity source.
         orderNo,
         bindStatus: "partial",
         retryable: true,
+        attempts: state.attempts,
+        nextRetrySeconds: Math.max(
+          1,
+          Math.ceil((state.nextAttemptAt - Date.now()) / 1000)
+        ),
         code:
           err && err.name === "AbortError"
             ? "BIND_TIMEOUT"
@@ -667,6 +730,13 @@ The URL checkoutToken is the only checkout identity source.
     if (data && data.orderNo) details.push("訂單編號：" + escapeHtml(data.orderNo));
     if (data && data.code) details.push("狀態代碼：" + escapeHtml(data.code));
     if (data && data.message) details.push(escapeHtml(data.message));
+    if (data && data.nextRetrySeconds){
+      details.push(
+        "預計 " + escapeHtml(data.nextRetrySeconds) +
+        " 秒後自動重試" +
+        (data.attempts ? "（第 " + escapeHtml(data.attempts) + " 次）" : "")
+      );
+    }
     if (data && Array.isArray(data.missing) && data.missing.length){
       details.push("尚缺：" + escapeHtml(data.missing.join("、")));
     }
@@ -786,21 +856,76 @@ The URL checkoutToken is the only checkout identity source.
         const key = localStorage.key(i);
         if (!key || key.indexOf(prefix) !== 0) continue;
 
-        const state = safeParse(localStorage.getItem(key), null);
+        let state = safeParse(localStorage.getItem(key), null);
         if (state && state.retryable !== false){
+          // v2 可能因自我監看循環把 attempts 快速堆高。
+          // v3 僅遷移一次，讓既有 WRITE_BUSY 訂單在 2 秒後恢復正常重試。
+          if (
+            Number(state.recoveredByCompletionV3 || 0) !== 1 &&
+            getRetryResultCode(state) === "WRITE_BUSY"
+          ){
+            state = Object.assign({}, state, {
+              v: 3,
+              attempts: Math.min(Number(state.attempts || 0), 1),
+              nextAttemptAt: Date.now() + 2000,
+              recoveredByCompletionV3: 1,
+              updatedAt: new Date().toISOString()
+            });
+
+            try{
+              localStorage.setItem(key, JSON.stringify(state));
+            }catch(_){}
+          }
+
           scheduleRetry(token, state.orderNo || "", state);
           break;
         }
       }
     }catch(_){}
 
-    [500, 1200, 2500, 5000, 9000, 15000, 25000, 40000].forEach(function(ms){
+    // 只用少量初始偵測等待 1shop 把訂單編號渲染出來。
+    // 一旦已有 retry state，attemptBind 會遵守 nextAttemptAt，不會提前送出。
+    [500, 1500, 4000, 8000].forEach(function(ms){
       setTimeout(function(){ attemptBind("scheduled_" + ms); }, ms);
     });
 
-    // One watcher only. It merely triggers the same idempotent attemptBind.
-    observer = new MutationObserver(function(){
-      queueAttempt("single_mutation_observer");
+    function isOwnCompletionUiMutation(mutation){
+      const rawTarget = mutation && mutation.target;
+      const target = rawTarget && rawTarget.nodeType === 3
+        ? rawTarget.parentElement
+        : rawTarget;
+
+      if (
+        target &&
+        target.closest &&
+        target.closest("#lunyPhase1BindStatus,#lunyPhase1OrderSummary")
+      ){
+        return true;
+      }
+
+      const added = Array.from(mutation && mutation.addedNodes || []);
+      if (!added.length) return false;
+
+      return added.every(function(node){
+        if (!node || node.nodeType !== 1) return true;
+        return (
+          node.id === "lunyPhase1BindStatus" ||
+          node.id === "lunyPhase1OrderSummary" ||
+          (node.closest &&
+            node.closest("#lunyPhase1BindStatus,#lunyPhase1OrderSummary"))
+        );
+      });
+    }
+
+    // 只監看 1shop 完成頁內容，不監看本程式自己的狀態框與訂購明細。
+    observer = new MutationObserver(function(mutations){
+      const hasExternalMutation = (mutations || []).some(function(mutation){
+        return !isOwnCompletionUiMutation(mutation);
+      });
+
+      if (hasExternalMutation){
+        queueAttempt("single_mutation_observer");
+      }
     });
 
     if (document.body){
@@ -814,7 +939,7 @@ The URL checkoutToken is the only checkout identity source.
           observer.disconnect();
           observer = null;
         }
-      }, 60000);
+      }, 30000);
     }
   }
 
