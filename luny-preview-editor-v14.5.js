@@ -1,4 +1,4 @@
-/* LUNY v7.9.45：圓形與橢圓形新增主背景偵測；裁切線附近維持原色，越靠外圈越融合至主背景，降低人物手部與衣服形成的放射色塊。 */
+/* LUNY v7.9.44.1：以 v7.9.44 為基底；矩形補邊取消沿邊緣跨區混色，避免白底與彩色底交界在左右出血區產生小缺口。 */
 /* LUNY v7.9.44：矩形補邊改為沿各邊法線延伸，不再從畫布中心放射；圓形降低鏡射比例並加強外圈平滑。 */
 /* LUNY v7.9.43：印刷檔補邊改為混合式背景延伸；穩定背景使用局部中位數，照片複雜邊緣只混合少量鏡射紋理。 */
 /* LUNY v7.9.42：印刷檔補邊固定取裁切線內側 1mm 像素，向外填滿裁切線外側 2mm；裁切線內成品內容不變。 */
@@ -456,14 +456,13 @@ function lunyCustomEnsureControls(){}
 function lunyCustomUpdateControlUI(){}
 
 function measureTextBox(str,fontPx){ctxG.save();ctxG.font=`${fontPx}px "Noto Sans TC", sans-serif`;const m=ctxG.measureText(str||'');const asc=m.actualBoundingBoxAscent||fontPx*0.8;const dsc=m.actualBoundingBoxDescent||fontPx*0.2;const w=Math.max(1,m.width);const h=asc+dsc;ctxG.restore();return{w,h,asc,dsc};}function drawSelection(ctx,cx,cy,w,h,ang){const col='#A36A3A';const pts=corners(cx,cy,w,h,ang);ctx.save();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<4;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.closePath();ctx.stroke();pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.stroke();});const topMid=mid(pts[0],pts[1]);const nx=(topMid.x-cx),ny=(topMid.y-cy);const len=Math.hypot(nx,ny)||1;const ux=nx/len,uy=ny/len;const rx=topMid.x+ux*28,ry=topMid.y+uy*28;ctx.beginPath();ctx.moveTo(topMid.x,topMid.y);ctx.lineTo(rx,ry);ctx.stroke();ctx.beginPath();ctx.arc(rx,ry,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.stroke();ctx.restore();return{corners:pts,rot:{x:rx,y:ry}};}function getEdgeOption(){return String(window.LUNY_EDGE_FILL_MODE||'off').toLowerCase();}
-/* v7.9.45：印刷檔自動出血＝分析裁切線內側 1mm 的局部區塊，再填滿外側 2mm 出血。
-   - 圓形／橢圓形若邊界存在占比足夠的主背景色，越靠外圈越融合至主背景，避免人物輪廓被放射延伸。
-   - 沒有明顯主背景的多色設計不啟用背景融合，保留原本的局部延伸。
+/* v7.9.44.1：印刷檔自動出血＝分析裁切線內側 1mm 的局部區塊，再填滿外側 2mm 出血。
+   - 矩形直邊只沿法線向內取樣，不跨越白底／彩色底分界；四個圓角仍保留平滑取樣。
    - 矩形沿上、下、左、右與圓角的外法線取樣，不再使用畫布中心放射，避免把框線拖進相鄰邊。
    - 圓形與其他形狀維持輪廓方向取樣，但降低照片鏡射比例並加強最外圈平滑。
    - 白底、灰底、漸層等穩定背景採局部 RGB 中位數延伸，避免複製文字、框線與白色細線。
    - 手、衣服、頭髮等複雜照片邊緣，以中位數為主，只混合最多 12% 鏡射紋理。
-   - 取樣同時涵蓋裁切線方向左右約 0.25mm，降低色塊交界的鋸齒與接縫。
+   - 圓形與其他輪廓取樣涵蓋裁切線方向左右約 0.25mm，降低色塊交界的鋸齒與接縫。
    - 只改裁切線外側 2mm 出血區，不修改裁切線內的成品內容。
    - 預設不套用任何補圖，維持客戶上傳圖片的原始狀態。
    - 套用時機在印刷內容繪製完成後、輔助線繪製前，避免把紅線/綠線/灰線鏡射進印刷檔。
@@ -853,44 +852,9 @@ function lunyMirrorBuildProfiles(sourceData,W,H,shapeValue,cx,cy,cutW,cutH,bleed
     smoothEdgeG[i]=totalWeight?gg/totalWeight:edgeG[i];
     smoothEdgeB[i]=totalWeight?bb/totalWeight:edgeB[i];
   }
-  // 圓形／橢圓形常只有局部碰到人物或文字。若裁切線大部分屬於同一背景，
-  // 辨識該主背景色，讓最外側出血逐步回到背景，避免局部內容被拉成放射色塊。
-  let dominantBackgroundR=0,dominantBackgroundG=0,dominantBackgroundB=0;
-  let dominantBackgroundShare=0;
-  if(shapeValue==='circle'||shapeValue==='ellipse'){
-    const quantizeSize=48;
-    const bins=new Map();
-    let validCount=0,bestKey='',bestCount=0;
-    for(let i=0;i<count;i++){
-      if(valid[i]!==1)continue;
-      const key=Math.floor(edgeR[i]/quantizeSize)+'|'
-        +Math.floor(edgeG[i]/quantizeSize)+'|'+Math.floor(edgeB[i]/quantizeSize);
-      const next=(bins.get(key)||0)+1;
-      bins.set(key,next);
-      validCount++;
-      if(next>bestCount){bestCount=next;bestKey=key;}
-    }
-    dominantBackgroundShare=validCount?bestCount/validCount:0;
-    if(dominantBackgroundShare>=0.38){
-      const reds=[],greens=[],blues=[];
-      for(let i=0;i<count;i++){
-        if(valid[i]!==1)continue;
-        const key=Math.floor(edgeR[i]/quantizeSize)+'|'
-          +Math.floor(edgeG[i]/quantizeSize)+'|'+Math.floor(edgeB[i]/quantizeSize);
-        if(key!==bestKey)continue;
-        reds.push(edgeR[i]);greens.push(edgeG[i]);blues.push(edgeB[i]);
-      }
-      dominantBackgroundR=lunyMirrorMedian(reds);
-      dominantBackgroundG=lunyMirrorMedian(greens);
-      dominantBackgroundB=lunyMirrorMedian(blues);
-    }else{
-      dominantBackgroundShare=0;
-    }
-  }
   return{
     count,colorRadius,bleedRadius,
     edgeR,edgeG,edgeB,smoothEdgeR,smoothEdgeG,smoothEdgeB,textureWeight,
-    dominantBackgroundR,dominantBackgroundG,dominantBackgroundB,dominantBackgroundShare,
     valid,bleedMask,minColorRadius,maxBleedRadius
   };
 }
@@ -901,7 +865,10 @@ function lunyMirrorRoundedRectSdf(x,y,halfW,halfH,corner){
 }
 function lunyMirrorAnalyzeNormalPatch(sourceData,W,H,qx,qy,nx,ny,band,cm2px){
   const tx=-ny,ty=nx;
-  const tangentSteps=[-0.50,-0.25,0,0.25,0.50];
+  // 直邊僅沿法線向內取 1mm，避免白底／彩色底的銳利分界被跨區混色；
+  // 真正的四個圓角仍保留 v7.9.44 平滑取樣，以免角標線形成三角形延伸。
+  const isCornerNormal=Math.abs(nx)>0.01&&Math.abs(ny)>0.01;
+  const tangentSteps=isCornerNormal?[-0.50,-0.25,0,0.25,0.50]:[0];
   const depthSteps=[0.10,0.20,0.32,0.45,0.58,0.72,0.86,1.00];
   const samples=[];
   for(const tangentMm of tangentSteps){
@@ -1073,30 +1040,12 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
       const mirror=bilinearSampleRGBA(pixels,W,H,cx+ux*sourceRadius,cy+uy*sourceRadius);
       const outwardRatio=Math.max(0,Math.min(1,outwardDistance/Math.max(1,2*band)));
       const diffusion=Math.sqrt(outwardRatio);
-      let backgroundR=edgeR*(1-diffusion)+smoothEdgeR*diffusion;
-      let backgroundG=edgeG*(1-diffusion)+smoothEdgeG*diffusion;
-      let backgroundB=edgeB*(1-diffusion)+smoothEdgeB*diffusion;
-      let backgroundPull=0;
-      if(profiles.dominantBackgroundShare>=0.38){
-        const backgroundStrength=Math.max(0,Math.min(1,
-          (profiles.dominantBackgroundShare-0.38)/0.18
-        ));
-        const dr=backgroundR-profiles.dominantBackgroundR;
-        const dg=backgroundG-profiles.dominantBackgroundG;
-        const db=backgroundB-profiles.dominantBackgroundB;
-        const dominantDistance=Math.sqrt(dr*dr+dg*dg+db*db);
-        // 已接近主背景的區段維持原本明暗，只替換人物、文字或衣物等差異明顯的色塊。
-        const replacementNeed=Math.max(0,Math.min(1,(dominantDistance-18)/70));
-        // 裁切線外先保留極窄接縫，再加速融合；人物／文字不會一路被拉到最外圈。
-        backgroundPull=backgroundStrength*replacementNeed*Math.pow(outwardRatio,0.65);
-        backgroundR=backgroundR*(1-backgroundPull)+profiles.dominantBackgroundR*backgroundPull;
-        backgroundG=backgroundG*(1-backgroundPull)+profiles.dominantBackgroundG*backgroundPull;
-        backgroundB=backgroundB*(1-backgroundPull)+profiles.dominantBackgroundB*backgroundPull;
-      }
+      const backgroundR=edgeR*(1-diffusion)+smoothEdgeR*diffusion;
+      const backgroundG=edgeG*(1-diffusion)+smoothEdgeG*diffusion;
+      const backgroundB=edgeB*(1-diffusion)+smoothEdgeB*diffusion;
       const seamFadePx=Math.max(1,0.012*cm2px); // 裁切線外約 0.12mm 內優先保留原始接縫
       const seamWeight=Math.max(0,1-outwardDistance/seamFadePx);
-      const textureOnly=Math.max(0,Math.min(0.12,textureWeight))*(1-backgroundPull*0.85);
-      const weight=Math.max(seamWeight,textureOnly);
+      const weight=Math.max(seamWeight,Math.max(0,Math.min(0.12,textureWeight)));
       pixels[index]=Math.round(backgroundR*(1-weight)+mirror[0]*weight);
       pixels[index+1]=Math.round(backgroundG*(1-weight)+mirror[1]*weight);
       pixels[index+2]=Math.round(backgroundB*(1-weight)+mirror[2]*weight);
