@@ -1,4 +1,5 @@
-/* LUNY v7.9.41：印刷檔補邊改為從有色邊界起算；裁切線內 1mm 遇白邊會先略過，再將有色內容鏡射至裁切線外 2mm，並同步覆蓋白邊。 */
+/* LUNY v7.9.42：印刷檔補邊改為直接取裁切線內側 1mm 像素，向外鏡射填滿裁切線外側 2mm；裁切線內成品內容不變。 */
+/* LUNY v7.9.41：印刷檔補邊曾改為略過白邊並從有色邊界起算，v7.9.42 已改由裁切線固定起算。 */
 /* LUNY v7.9.40：白邊警示改為即時狀態；滿版填色後立即消失，並避免延遲偵測寫回舊結果。 */
 /* LUNY preview editor v18：客製形狀印刷檔四周增加單邊 1mm 白色技術留白，保留完整的出血黑色辨識線 */
 /* v18：技術留白只套用於客製形狀印刷檔；預覽、切割檔、原圖下載與一般形狀皆不變。 */
@@ -452,10 +453,9 @@ function lunyCustomEnsureControls(){}
 function lunyCustomUpdateControlUI(){}
 
 function measureTextBox(str,fontPx){ctxG.save();ctxG.font=`${fontPx}px "Noto Sans TC", sans-serif`;const m=ctxG.measureText(str||'');const asc=m.actualBoundingBoxAscent||fontPx*0.8;const dsc=m.actualBoundingBoxDescent||fontPx*0.2;const w=Math.max(1,m.width);const h=asc+dsc;ctxG.restore();return{w,h,asc,dsc};}function drawSelection(ctx,cx,cy,w,h,ang){const col='#A36A3A';const pts=corners(cx,cy,w,h,ang);ctx.save();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<4;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.closePath();ctx.stroke();pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.stroke();});const topMid=mid(pts[0],pts[1]);const nx=(topMid.x-cx),ny=(topMid.y-cy);const len=Math.hypot(nx,ny)||1;const ux=nx/len,uy=ny/len;const rx=topMid.x+ux*28,ry=topMid.y+uy*28;ctx.beginPath();ctx.moveTo(topMid.x,topMid.y);ctx.lineTo(rx,ry);ctx.stroke();ctx.beginPath();ctx.arc(rx,ry,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.stroke();ctx.restore();return{corners:pts,rot:{x:rx,y:ry}};}function getEdgeOption(){return String(window.LUNY_EDGE_FILL_MODE||'off').toLowerCase();}
-/* v7.9.41：印刷檔自動出血＝沿裁切線往內檢查 1mm；若遇白邊，略過白邊後從第一個有色像素起算 1mm，再鏡射到裁切線外 2mm。
-   - 鏡射從圖片的有色邊界開始，補外側出血時也會向內覆蓋被略過的白邊。
-   - 只填補白色或透明缺口；既有的有色內容維持原樣。
-   - 往內約 1mm 仍找不到有色像素時，不強行延伸，避免誤改刻意保留的白色設計。
+/* v7.9.42：印刷檔自動出血＝固定抓取裁切線內側 1mm 像素，從裁切線開始向外鏡射填滿 2mm 出血。
+   - 不再略過白邊或尋找有色邊界；取樣起點固定為裁切線。
+   - 只改裁切線外側 2mm 出血區，不修改裁切線內的成品內容。
    - 預設不套用任何補圖，維持客戶上傳圖片的原始狀態。
    - 套用時機在印刷內容繪製完成後、輔助線繪製前，避免把紅線/綠線/灰線鏡射進印刷檔。
    - 只在正式印刷檔輸出時執行，預覽與切割檔不套用。 */
@@ -737,8 +737,6 @@ function lunyMirrorBuildProfiles(sourceData,W,H,shapeValue,cx,cy,cutW,cutH,bleed
   const bleedRadius=new Float32Array(count);
   const valid=new Uint8Array(count);
   const maxRadius=Math.sqrt(W*W+H*H)*0.55;
-  const scanStep=Math.max(0.5,Math.min(1.25,band/36));
-  const maxWhiteSkip=band+Math.max(1.5,scanStep*2);
   let minColorRadius=Infinity,maxBleedRadius=0;
 
   for(let i=0;i<count;i++){
@@ -752,23 +750,17 @@ function lunyMirrorBuildProfiles(sourceData,W,H,shapeValue,cx,cy,cutW,cutH,bleed
       :lunyMirrorStandardRadius(shapeValue,ux,uy,bleedW,bleedH,cm2px);
     if(cutRadius<1||outerRadius<=cutRadius)continue;
 
-    let foundRadius=-1;
-    for(let inward=0;inward<=maxWhiteSkip;inward+=scanStep){
-      const radius=Math.max(0,cutRadius-inward-0.35);
-      const rgba=bilinearSampleRGBA(sourceData,W,H,cx+ux*radius,cy+uy*radius);
-      if(!lunyMirrorRgbaIsWhite(rgba)){foundRadius=radius;break;}
-    }
-    if(foundRadius<0)continue;
-    colorRadius[i]=foundRadius;
+    // v7.9.42：取樣起點固定在裁切線，不再略過白色像素或搜尋有色邊界。
+    colorRadius[i]=cutRadius;
     bleedRadius[i]=outerRadius;
     valid[i]=1;
-    if(foundRadius<minColorRadius)minColorRadius=foundRadius;
+    if(cutRadius<minColorRadius)minColorRadius=cutRadius;
     if(outerRadius>maxBleedRadius)maxBleedRadius=outerRadius;
   }
   return{count,colorRadius,bleedRadius,valid,bleedMask,minColorRadius,maxBleedRadius};
 }
 function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
-  // v7.9.41：只在印刷檔輸出時，從有色邊界鏡射補滿白邊與外側出血。
+  // v7.9.42：只在印刷檔輸出時，把裁切線內側 1mm 鏡射填滿外側 2mm。
   if(!forceForPrint)return;
   if(!canvas||!ctx)return;
   const W=canvas.width||0,H=canvas.height||0;
@@ -825,23 +817,14 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
         colorRadius=profiles.colorRadius[first]*(1-t)+profiles.colorRadius[second]*t;
         outerRadius=profiles.bleedRadius[first]*(1-t)+profiles.bleedRadius[second]*t;
       }
-      if(radius<colorRadius-0.6||radius>outerRadius+0.6)continue;
+      if(radius<colorRadius||radius>outerRadius+0.6)continue;
       const index=(y*W+x)*4;
-      if(!lunyMirrorPixelIsWhite(pixels,index))continue;
 
       const ux=dx/radius,uy=dy/radius;
       const outwardDistance=Math.max(0,radius-colorRadius);
-      let sourceRadius=colorRadius-lunyMirrorReflectDistance(outwardDistance,band);
-      let rgba=bilinearSampleRGBA(pixels,W,H,cx+ux*sourceRadius,cy+uy*sourceRadius);
-      if(lunyMirrorRgbaIsWhite(rgba)){
-        // 抗鋸齒或極細白縫：仍以有色邊界為基準，往內找最近的有效鏡射像素。
-        for(let extra=0.5;extra<=band;extra+=0.5){
-          sourceRadius=Math.max(0,colorRadius-extra);
-          rgba=bilinearSampleRGBA(pixels,W,H,cx+ux*sourceRadius,cy+uy*sourceRadius);
-          if(!lunyMirrorRgbaIsWhite(rgba))break;
-        }
-      }
-      if(lunyMirrorRgbaIsWhite(rgba))continue;
+      const mirrorDistance=Math.max(0.75,lunyMirrorReflectDistance(outwardDistance,band));
+      const sourceRadius=colorRadius-mirrorDistance;
+      const rgba=bilinearSampleRGBA(pixels,W,H,cx+ux*sourceRadius,cy+uy*sourceRadius);
       pixels[index]=rgba[0];
       pixels[index+1]=rgba[1];
       pixels[index+2]=rgba[2];
