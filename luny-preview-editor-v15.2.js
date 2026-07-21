@@ -1,3 +1,4 @@
+/* LUNY v7.9.44.6：圓形／橢圓形照片新增既有出血保留；照片原本已鋪滿外圈時不再重製。矩形穩定背景降低紋理延展比例，避免頂部直條紋。 */
 /* LUNY v7.9.44.5：矩形照片缺圖邊改為固定邊界延展；不再反射內側影像，避免手臂、手錶、袖口與背景在裁切線外折返或重複。 */
 /* LUNY v7.9.44.4：矩形照片逐邊檢查既有出血；已完整覆蓋的邊保留原圖，只補真正缺圖的邊，避免手臂、手錶與衣服被二次鏡射。 */
 /* LUNY v7.9.44.3：取消 v7.9.44.2 的加寬羽化；圓形／橢圓形改為估算邊界方向後延伸，提升手部與衣服銜接正確性並保留清晰度。 */
@@ -460,7 +461,10 @@ function lunyCustomEnsureControls(){}
 function lunyCustomUpdateControlUI(){}
 
 function measureTextBox(str,fontPx){ctxG.save();ctxG.font=`${fontPx}px "Noto Sans TC", sans-serif`;const m=ctxG.measureText(str||'');const asc=m.actualBoundingBoxAscent||fontPx*0.8;const dsc=m.actualBoundingBoxDescent||fontPx*0.2;const w=Math.max(1,m.width);const h=asc+dsc;ctxG.restore();return{w,h,asc,dsc};}function drawSelection(ctx,cx,cy,w,h,ang){const col='#A36A3A';const pts=corners(cx,cy,w,h,ang);ctx.save();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<4;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.closePath();ctx.stroke();pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.stroke();});const topMid=mid(pts[0],pts[1]);const nx=(topMid.x-cx),ny=(topMid.y-cy);const len=Math.hypot(nx,ny)||1;const ux=nx/len,uy=ny/len;const rx=topMid.x+ux*28,ry=topMid.y+uy*28;ctx.beginPath();ctx.moveTo(topMid.x,topMid.y);ctx.lineTo(rx,ry);ctx.stroke();ctx.beginPath();ctx.arc(rx,ry,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.stroke();ctx.restore();return{corners:pts,rot:{x:rx,y:ry}};}function getEdgeOption(){return String(window.LUNY_EDGE_FILL_MODE||'off').toLowerCase();}
-/* v7.9.44.5：印刷檔自動出血＝分析裁切線內側 1mm 的局部區塊，再填滿外側 2mm 出血。
+/* v7.9.44.6：印刷檔自動出血＝分析裁切線內側 1mm 的局部區塊，再填滿外側 2mm 出血。
+   - 圓形／橢圓形照片先檢查外側 2mm；原圖已完整覆蓋時直接保留，避免手部與衣服被再次混合成重影。
+   - 圓形／橢圓形確實缺圖時，改從裁切線內約 0.25mm 固定取樣，避開透明抗鋸齒並不再重複整段內側 1mm。
+   - 矩形穩定背景降低原始紋理比例，以局部中位色平順延展；人物輪廓仍保留較高的邊界比例。
    - 矩形照片缺圖邊固定取裁切線內約 0.12mm 的邊界像素向外延展，不再反射內側 1mm。
    - 延展結果混合少量局部中位色，保留邊界清晰度並降低條紋；手臂、袖口與手錶不會在出血區重複一次。
    - 矩形照片先逐邊檢查裁切線外 2mm；原圖已完整覆蓋的邊直接保留，不做二次鏡射。
@@ -979,7 +983,7 @@ function lunyMirrorAnalyzeNormalPatch(sourceData,W,H,qx,qy,nx,ny,band,cm2px,phot
   const isCornerNormal=Math.abs(nx)>0.01&&Math.abs(ny)>0.01;
   const tangentSteps=isCornerNormal
     ?[-0.50,-0.25,0,0.25,0.50]
-    :(photoMode?[-0.18,-0.09,0,0.09,0.18]:[0]);
+    :(photoMode?[-0.80,-0.60,-0.40,-0.20,0,0.20,0.40,0.60,0.80]:[0]);
   const depthSteps=[0.10,0.20,0.32,0.45,0.58,0.72,0.86,1.00];
   const samples=[];
   for(const tangentMm of tangentSteps){
@@ -1039,6 +1043,39 @@ function lunyMirrorLooksPhotographic(sourceData,W,H,cx,cy,cutW,cutH){
   const nonWhiteRatio=nonWhite/valid,texturedRatio=textured/valid;
   return nonWhiteRatio>=0.55&&bins.size>=28&&texturedRatio>=0.12;
 }
+function lunyMirrorPhotoShapeBleedCovered(sourceData,W,H,shapeValue,cx,cy,cutW,cutH,bleedW,bleedH,cm2px){
+  if(shapeValue!=='circle'&&shapeValue!=='ellipse')return false;
+  const count=192;
+  const depthRatios=[0.18,0.48,0.78,0.96];
+  const bins=new Set();
+  let total=0,opaque=0,nonWhite=0,textured=0;
+  for(let index=0;index<count;index++){
+    const angle=Math.PI*2*(index+0.5)/count;
+    const ux=Math.cos(angle),uy=Math.sin(angle),tx=-uy,ty=ux;
+    const cutRadius=lunyMirrorStandardRadius(shapeValue,ux,uy,cutW,cutH,cm2px);
+    const outerRadius=lunyMirrorStandardRadius(shapeValue,ux,uy,bleedW,bleedH,cm2px);
+    if(cutRadius<1||outerRadius<=cutRadius)continue;
+    for(const depthRatio of depthRatios){
+      const radius=cutRadius+(outerRadius-cutRadius)*depthRatio;
+      const x=cx+ux*radius,y=cy+uy*radius;
+      total++;
+      const center=bilinearSampleRGBA(sourceData,W,H,x,y);
+      if(center[3]<220)continue;
+      opaque++;
+      if(center[0]<246||center[1]<246||center[2]<246)nonWhite++;
+      bins.add((center[0]>>5)+'|'+(center[1]>>5)+'|'+(center[2]>>5));
+      const neighbor=bilinearSampleRGBA(sourceData,W,H,x+tx*2,y+ty*2);
+      if(neighbor[3]>=220&&Math.hypot(
+        center[0]-neighbor[0],center[1]-neighbor[1],center[2]-neighbor[2]
+      )>=4)textured++;
+    }
+  }
+  if(!total||!opaque)return false;
+  return opaque/total>=0.90
+    &&nonWhite/opaque>=0.45
+    &&bins.size>=12
+    &&textured/opaque>=0.03;
+}
 function lunyMirrorPhotoEdgeCoverage(sourceData,W,H,cx,cy,cutW,cutH,corner,band){
   const halfW=cutW/2,halfH=cutH/2;
   const positions=48;
@@ -1075,7 +1112,8 @@ function lunyMirrorPhotoEdgeCoverage(sourceData,W,H,cx,cy,cutW,cutH,corner,band)
     const opaqueRatio=total?opaque/total:0;
     const nonWhiteRatio=opaque?nonWhite/opaque:0;
     const texturedRatio=opaque?textured/opaque:0;
-    return opaqueRatio>=0.88&&nonWhiteRatio>=0.35&&bins.size>=12&&texturedRatio>=0.04;
+    return opaqueRatio>=0.88&&nonWhiteRatio>=0.35
+      &&(opaqueRatio>=0.97||(bins.size>=12&&texturedRatio>=0.04));
   }
   return{
     top:analyze('top'),right:analyze('right'),
@@ -1146,7 +1184,8 @@ function lunyApplyRoundRectHybridBleed(ctx,canvas,cm2px,cutW,cutH,bleedW,bleedH,
       const seamFadePx=Math.max(1,0.008*cm2px);
       const seamWeight=Math.max(0,1-cutDistance/seamFadePx);
       const isCornerNormal=Math.abs(nx)>0.01&&Math.abs(ny)>0.01;
-      const photoWeight=isCornerNormal?0.20:0.72;
+      const adaptiveTextureWeight=Math.max(0.18,Math.min(0.72,0.18+edge.textureWeight*6.75));
+      const photoWeight=isCornerNormal?0.16:adaptiveTextureWeight;
       const weight=photoTextureMode?Math.max(seamWeight,photoWeight):Math.max(seamWeight,edge.textureWeight);
       const index=(y*W+x)*4;
       pixels[index]=Math.round(edge.r*(1-weight)+mirror[0]*weight);
@@ -1179,6 +1218,11 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
   let imageData;
   try{imageData=ctx.getImageData(0,0,W,H);}catch(e){console.warn('[LUNY] 自動補邊讀取像素失敗：',e);return;}
   const pixels=imageData.data;
+  const photoTextureMode=(shapeValue==='circle'||shapeValue==='ellipse')
+    &&lunyMirrorLooksPhotographic(pixels,W,H,cx,cy,cutW,cutH);
+  if(photoTextureMode&&lunyMirrorPhotoShapeBleedCovered(
+    pixels,W,H,shapeValue,cx,cy,cutW,cutH,bleedW,bleedH,cm2px
+  ))return;
   let profiles;
   try{
     profiles=lunyMirrorBuildProfiles(pixels,W,H,shapeValue,cx,cy,cutW,cutH,bleedW,bleedH,cm2px,band);
@@ -1218,7 +1262,9 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
 
       const ux=dx/radius,uy=dy/radius;
       const outwardDistance=Math.max(0,radius-colorRadius);
-      const mirrorDistance=Math.max(0.75,lunyMirrorReflectDistance(outwardDistance,band));
+      const mirrorDistance=photoTextureMode
+        ?Math.max(0.75,band*0.25)
+        :Math.max(0.75,lunyMirrorReflectDistance(outwardDistance,band));
       const sourceRadius=colorRadius-mirrorDistance;
       const useDirectionalContinuation=(shapeValue==='circle'||shapeValue==='ellipse')
         &&Math.abs(directionalSlope)>0.015;
@@ -1250,7 +1296,12 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
       const backgroundB=edgeB*(1-diffusion)+smoothEdgeB*diffusion;
       const seamFadePx=Math.max(1,0.012*cm2px); // 裁切線外約 0.12mm 內優先保留原始接縫
       const seamWeight=Math.max(0,1-outwardDistance/seamFadePx);
-      const weight=Math.max(seamWeight,Math.max(0,Math.min(0.12,textureWeight)));
+      const photoWeight=Math.max(0.28,Math.min(0.86,
+        0.28+textureWeight*4.5+Math.min(0.16,Math.abs(directionalSlope)*0.16)
+      ));
+      const weight=photoTextureMode
+        ?Math.max(seamWeight,photoWeight)
+        :Math.max(seamWeight,Math.max(0,Math.min(0.12,textureWeight)));
       pixels[index]=Math.round(backgroundR*(1-weight)+mirror[0]*weight);
       pixels[index+1]=Math.round(backgroundG*(1-weight)+mirror[1]*weight);
       pixels[index+2]=Math.round(backgroundB*(1-weight)+mirror[2]*weight);
