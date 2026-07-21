@@ -1,4 +1,18 @@
-/* LUNY v7.9.41：印刷檔補邊改為從有色邊界起算；裁切線內 1mm 遇白邊會先略過，再將有色內容鏡射至裁切線外 2mm，並同步覆蓋白邊。 */
+/* LUNY v7.9.44.11：主圖只要跨出安全線，即自動從實際不透明邊界補到裁切線，再沿用原方式補至外側 2mm 出血線；安全線內構圖不變。 */
+/* LUNY v7.9.44.10：矩形照片將同一側的高可信輪廓拆成獨立方向軌跡，手臂／袖口各自延伸且不互相擴散；缺邊判斷與裁切線內內容維持不變。 */
+/* LUNY v7.9.44.9：保留既有缺邊判斷；矩形照片只在高可信輪廓處估算裁切線內 1mm 的局部斜率，讓手臂／袖口沿原方向延伸至外側 2mm，背景維持平順補色。 */
+/* LUNY v7.9.44.8：保留既有缺邊判斷；矩形照片缺邊改由裁切線同位置的邊界像素向外鋪設後柔化，避免縮放模糊圖造成手臂高度錯位。 */
+/* LUNY v7.9.44.7：保留 v7.9.44.6 的缺邊判斷；只有真正透明／缺圖的照片邊，改用縮放後的模糊背景填滿外側 2mm，裁切線內完全不變。 */
+/* LUNY v7.9.44.6：圓形／橢圓形照片新增既有出血保留；照片原本已鋪滿外圈時不再重製。矩形穩定背景降低紋理延展比例，避免頂部直條紋。 */
+/* LUNY v7.9.44.5：矩形照片缺圖邊改為固定邊界延展；不再反射內側影像，避免手臂、手錶、袖口與背景在裁切線外折返或重複。 */
+/* LUNY v7.9.44.4：矩形照片逐邊檢查既有出血；已完整覆蓋的邊保留原圖，只補真正缺圖的邊，避免手臂、手錶與衣服被二次鏡射。 */
+/* LUNY v7.9.44.3：取消 v7.9.44.2 的加寬羽化；圓形／橢圓形改為估算邊界方向後延伸，提升手部與衣服銜接正確性並保留清晰度。 */
+/* LUNY v7.9.44.2：曾以加寬圓周羽化降低扇形接縫，v7.9.44.3 已改為方向延伸，避免出血過度模糊。 */
+/* LUNY v7.9.44.1：以 v7.9.44 為基底；矩形補邊取消沿邊緣跨區混色，避免白底與彩色底交界在左右出血區產生小缺口。 */
+/* LUNY v7.9.44：矩形補邊改為沿各邊法線延伸，不再從畫布中心放射；圓形降低鏡射比例並加強外圈平滑。 */
+/* LUNY v7.9.43：印刷檔補邊改為混合式背景延伸；穩定背景使用局部中位數，照片複雜邊緣只混合少量鏡射紋理。 */
+/* LUNY v7.9.42：印刷檔補邊固定取裁切線內側 1mm 像素，向外填滿裁切線外側 2mm；裁切線內成品內容不變。 */
+/* LUNY v7.9.41：印刷檔補邊曾改為略過白邊並從有色邊界起算，v7.9.42 已改由裁切線固定起算。 */
 /* LUNY v7.9.40：白邊警示改為即時狀態；滿版填色後立即消失，並避免延遲偵測寫回舊結果。 */
 /* LUNY preview editor v18：客製形狀印刷檔四周增加單邊 1mm 白色技術留白，保留完整的出血黑色辨識線 */
 /* v18：技術留白只套用於客製形狀印刷檔；預覽、切割檔、原圖下載與一般形狀皆不變。 */
@@ -452,10 +466,31 @@ function lunyCustomEnsureControls(){}
 function lunyCustomUpdateControlUI(){}
 
 function measureTextBox(str,fontPx){ctxG.save();ctxG.font=`${fontPx}px "Noto Sans TC", sans-serif`;const m=ctxG.measureText(str||'');const asc=m.actualBoundingBoxAscent||fontPx*0.8;const dsc=m.actualBoundingBoxDescent||fontPx*0.2;const w=Math.max(1,m.width);const h=asc+dsc;ctxG.restore();return{w,h,asc,dsc};}function drawSelection(ctx,cx,cy,w,h,ang){const col='#A36A3A';const pts=corners(cx,cy,w,h,ang);ctx.save();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<4;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.closePath();ctx.stroke();pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.stroke();});const topMid=mid(pts[0],pts[1]);const nx=(topMid.x-cx),ny=(topMid.y-cy);const len=Math.hypot(nx,ny)||1;const ux=nx/len,uy=ny/len;const rx=topMid.x+ux*28,ry=topMid.y+uy*28;ctx.beginPath();ctx.moveTo(topMid.x,topMid.y);ctx.lineTo(rx,ry);ctx.stroke();ctx.beginPath();ctx.arc(rx,ry,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.stroke();ctx.restore();return{corners:pts,rot:{x:rx,y:ry}};}function getEdgeOption(){return String(window.LUNY_EDGE_FILL_MODE||'off').toLowerCase();}
-/* v7.9.41：印刷檔自動出血＝沿裁切線往內檢查 1mm；若遇白邊，略過白邊後從第一個有色像素起算 1mm，再鏡射到裁切線外 2mm。
-   - 鏡射從圖片的有色邊界開始，補外側出血時也會向內覆蓋被略過的白邊。
-   - 只填補白色或透明缺口；既有的有色內容維持原樣。
-   - 往內約 1mm 仍找不到有色像素時，不強行延伸，避免誤改刻意保留的白色設計。
+/* v7.9.44.8：印刷檔自動出血＝先判斷外側 2mm 是否真正透明／缺圖，再只填補缺少的區域。
+   - 缺邊判斷維持不變；矩形缺圖邊不再使用整張縮放後的模糊影像。
+   - 先取裁切線同一高度／同一位置的最外像素向外鋪滿，再柔化外側出血，因此手臂與背景能在切線位置接上。
+   - 原始邊界至模糊背景的過渡加寬至外側約 0.6mm，降低硬接縫；裁切線內仍不寫入任何不透明像素。
+   - v7.9.44.6 的缺邊判斷完整保留：已有有效照片的邊不修改，只有透明或缺圖邊才補出血。
+   - 照片缺圖邊改用裁切範圍縮放後的模糊背景補色，不再鏡射、複製或固定延展手部／衣服紋理。
+   - 模糊背景只寫入裁切線外側 2mm；裁切線內的成品構圖與像素完全不變。
+   - 裁切線外約 0.12mm 內保留極窄的原始邊界漸變，避免清晰成品與模糊出血形成硬接縫。
+   - 圓形／橢圓形照片先檢查外側 2mm；原圖已完整覆蓋時直接保留，避免手部與衣服被再次混合成重影。
+   - 圓形／橢圓形確實缺圖時，改從裁切線內約 0.25mm 固定取樣，避開透明抗鋸齒並不再重複整段內側 1mm。
+   - 矩形穩定背景降低原始紋理比例，以局部中位色平順延展；人物輪廓仍保留較高的邊界比例。
+   - 矩形照片缺圖邊固定取裁切線內約 0.12mm 的邊界像素向外延展，不再反射內側 1mm。
+   - 延展結果混合少量局部中位色，保留邊界清晰度並降低條紋；手臂、袖口與手錶不會在出血區重複一次。
+   - 矩形照片先逐邊檢查裁切線外 2mm；原圖已完整覆蓋的邊直接保留，不做二次鏡射。
+   - 只有透明、空白或缺少照片紋理的邊才由內側 1mm 補出，避免手臂、手錶與衣服在接縫處折返。
+   - 矩形照片圓角若需補圖，以局部穩定色為主、降低鏡射比例，避免角落形成漩渦。
+   - 圓形／橢圓形先估算圖像邊界穿越裁切線的方向，再沿原方向續接，避免手部輪廓從圓心放射或反向折回。
+   - 取消 v7.9.44.2 的加寬羽化，回到 v7.9.44 原本的清晰度。
+   - 矩形直邊只沿法線向內取樣，不跨越白底／彩色底分界；四個圓角仍保留平滑取樣。
+   - 矩形沿上、下、左、右與圓角的外法線取樣，不再使用畫布中心放射，避免把框線拖進相鄰邊。
+   - 圓形與其他形狀維持輪廓方向取樣，但降低照片鏡射比例並加強最外圈平滑。
+   - 白底、灰底、漸層等穩定背景採局部 RGB 中位數延伸，避免複製文字、框線與白色細線。
+   - 手、衣服、頭髮等複雜照片邊緣，以中位數為主，只混合最多 12% 鏡射紋理。
+   - 圓形與其他輪廓取樣涵蓋裁切線方向左右約 0.25mm，降低色塊交界的鋸齒與接縫。
+   - 只改裁切線外側 2mm 出血區，不修改裁切線內的成品內容。
    - 預設不套用任何補圖，維持客戶上傳圖片的原始狀態。
    - 套用時機在印刷內容繪製完成後、輔助線繪製前，避免把紅線/綠線/灰線鏡射進印刷檔。
    - 只在正式印刷檔輸出時執行，預覽與切割檔不套用。 */
@@ -727,6 +762,96 @@ function lunyMirrorReflectDistance(distance,band){
   if(value>width)value=period-value;
   return value;
 }
+function lunyMirrorMedian(values){
+  if(!values||!values.length)return 0;
+  const sorted=values.slice().sort((a,b)=>a-b);
+  const middle=Math.floor(sorted.length/2);
+  return sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2;
+}
+function lunyMirrorAnalyzeEdgePatch(sourceData,W,H,cx,cy,profiles,index,band,cm2px){
+  const cutRadius=profiles.colorRadius[index];
+  const tangentPx=Math.max(1,0.025*cm2px); // 裁切線方向左右各約 0.25mm
+  const tangentSpan=Math.max(1,Math.round(
+    tangentPx/Math.max(1,cutRadius)/(Math.PI*2)*profiles.count
+  ));
+  const tangentSteps=[-1,-0.5,0,0.5,1];
+  const depthSteps=[0.10,0.20,0.32,0.45,0.58,0.72,0.86,1.00];
+  const samples=[];
+
+  for(const tangent of tangentSteps){
+    const sampleIndex=(index+Math.round(tangent*tangentSpan)+profiles.count)%profiles.count;
+    if(profiles.valid[sampleIndex]!==1)continue;
+    const angle=-Math.PI+Math.PI*2*sampleIndex/profiles.count;
+    const ux=Math.cos(angle),uy=Math.sin(angle);
+    const sampleCutRadius=profiles.colorRadius[sampleIndex];
+    for(const depth of depthSteps){
+      const radius=Math.max(0,sampleCutRadius-depth*band);
+      const rgba=bilinearSampleRGBA(sourceData,W,H,cx+ux*radius,cy+uy*radius);
+      if(rgba[3]>=24)samples.push(rgba);
+    }
+  }
+  if(!samples.length){
+    const angle=-Math.PI+Math.PI*2*index/profiles.count;
+    const ux=Math.cos(angle),uy=Math.sin(angle);
+    const rgba=bilinearSampleRGBA(
+      sourceData,W,H,
+      cx+ux*Math.max(0,cutRadius-Math.max(0.75,band*0.2)),
+      cy+uy*Math.max(0,cutRadius-Math.max(0.75,band*0.2))
+    );
+    return{r:rgba[0],g:rgba[1],b:rgba[2],textureWeight:0};
+  }
+
+  const r=lunyMirrorMedian(samples.map(v=>v[0]));
+  const g=lunyMirrorMedian(samples.map(v=>v[1]));
+  const b=lunyMirrorMedian(samples.map(v=>v[2]));
+  const closeThresholdSq=42*42;
+  let closeCount=0;
+  for(const rgba of samples){
+    const dr=rgba[0]-r,dg=rgba[1]-g,db=rgba[2]-b;
+    if(dr*dr+dg*dg+db*db<=closeThresholdSq)closeCount++;
+  }
+  const dominantRatio=closeCount/samples.length;
+  let textureWeight=0;
+  if(dominantRatio<0.62){
+    textureWeight=Math.max(0.04,Math.min(0.12,(0.62-dominantRatio)/0.42*0.12));
+  }
+  return{r,g,b,textureWeight};
+}
+function lunyMirrorEstimateDirectionalSlope(sourceData,W,H,cx,cy,profiles,index,band){
+  const angle=-Math.PI+Math.PI*2*index/profiles.count;
+  const nx=Math.cos(angle),ny=Math.sin(angle),tx=-ny,ty=nx;
+  const cutRadius=profiles.colorRadius[index];
+  const nearDepth=Math.max(0.75,band*0.18);
+  const deepDepth=Math.max(nearDepth+0.75,band*0.82);
+  const tangentStep=Math.max(1,band*0.14);
+  const nearRadius=Math.max(0,cutRadius-nearDepth);
+  const deepRadius=Math.max(0,cutRadius-deepDepth);
+  const near=bilinearSampleRGBA(sourceData,W,H,cx+nx*nearRadius,cy+ny*nearRadius);
+  const deep=bilinearSampleRGBA(sourceData,W,H,cx+nx*deepRadius,cy+ny*deepRadius);
+  const left=bilinearSampleRGBA(
+    sourceData,W,H,cx+nx*nearRadius-tx*tangentStep,cy+ny*nearRadius-ty*tangentStep
+  );
+  const right=bilinearSampleRGBA(
+    sourceData,W,H,cx+nx*nearRadius+tx*tangentStep,cy+ny*nearRadius+ty*tangentStep
+  );
+  const radialStep=Math.max(0.75,deepDepth-nearDepth);
+  const tangentDenominator=Math.max(1,2*tangentStep);
+  const gNr=(near[0]-deep[0])/radialStep;
+  const gNg=(near[1]-deep[1])/radialStep;
+  const gNb=(near[2]-deep[2])/radialStep;
+  const gTr=(right[0]-left[0])/tangentDenominator;
+  const gTg=(right[1]-left[1])/tangentDenominator;
+  const gTb=(right[2]-left[2])/tangentDenominator;
+  const tangentContrast=Math.hypot(right[0]-left[0],right[1]-left[1],right[2]-left[2]);
+  const radialContrast=Math.hypot(near[0]-deep[0],near[1]-deep[1],near[2]-deep[2]);
+  const denominator=gTr*gTr+gTg*gTg+gTb*gTb;
+  if(tangentContrast<12||radialContrast<5||denominator<0.12)return 0;
+  let slope=-(gNr*gTr+gNg*gTg+gNb*gTb)/denominator;
+  const confidence=Math.max(0,Math.min(1,(tangentContrast-12)/42))
+    *Math.max(0,Math.min(1,radialContrast/28));
+  slope*=confidence*1.20;
+  return Math.max(-1.35,Math.min(1.35,slope));
+}
 function lunyMirrorBuildProfiles(sourceData,W,H,shapeValue,cx,cy,cutW,cutH,bleedW,bleedH,cm2px,band){
   const useShapeMask=shapeValue==='custom';
   const maskScale=Math.min(1,LUNY_MIRROR_MASK_MAX_SIDE/Math.max(W,H));
@@ -735,10 +860,17 @@ function lunyMirrorBuildProfiles(sourceData,W,H,shapeValue,cx,cy,cutW,cutH,bleed
   const count=Math.max(720,Math.min(8192,Math.ceil(Math.PI*Math.max(cutW,cutH))));
   const colorRadius=new Float32Array(count);
   const bleedRadius=new Float32Array(count);
+  const edgeR=new Float32Array(count);
+  const edgeG=new Float32Array(count);
+  const edgeB=new Float32Array(count);
+  const smoothEdgeR=new Float32Array(count);
+  const smoothEdgeG=new Float32Array(count);
+  const smoothEdgeB=new Float32Array(count);
+  const textureWeight=new Float32Array(count);
+  const rawDirectionalSlope=new Float32Array(count);
+  const directionalSlope=new Float32Array(count);
   const valid=new Uint8Array(count);
   const maxRadius=Math.sqrt(W*W+H*H)*0.55;
-  const scanStep=Math.max(0.5,Math.min(1.25,band/36));
-  const maxWhiteSkip=band+Math.max(1.5,scanStep*2);
   let minColorRadius=Infinity,maxBleedRadius=0;
 
   for(let i=0;i<count;i++){
@@ -752,27 +884,828 @@ function lunyMirrorBuildProfiles(sourceData,W,H,shapeValue,cx,cy,cutW,cutH,bleed
       :lunyMirrorStandardRadius(shapeValue,ux,uy,bleedW,bleedH,cm2px);
     if(cutRadius<1||outerRadius<=cutRadius)continue;
 
-    let foundRadius=-1;
-    for(let inward=0;inward<=maxWhiteSkip;inward+=scanStep){
-      const radius=Math.max(0,cutRadius-inward-0.35);
-      const rgba=bilinearSampleRGBA(sourceData,W,H,cx+ux*radius,cy+uy*radius);
-      if(!lunyMirrorRgbaIsWhite(rgba)){foundRadius=radius;break;}
-    }
-    if(foundRadius<0)continue;
-    colorRadius[i]=foundRadius;
+    // v7.9.42：取樣起點固定在裁切線，不再略過白色像素或搜尋有色邊界。
+    colorRadius[i]=cutRadius;
     bleedRadius[i]=outerRadius;
     valid[i]=1;
-    if(foundRadius<minColorRadius)minColorRadius=foundRadius;
+    if(cutRadius<minColorRadius)minColorRadius=cutRadius;
     if(outerRadius>maxBleedRadius)maxBleedRadius=outerRadius;
   }
-  return{count,colorRadius,bleedRadius,valid,bleedMask,minColorRadius,maxBleedRadius};
+  const profileCore={count,colorRadius,valid};
+  for(let i=0;i<count;i++){
+    if(valid[i]!==1)continue;
+    const edge=lunyMirrorAnalyzeEdgePatch(sourceData,W,H,cx,cy,profileCore,i,band,cm2px);
+    edgeR[i]=edge.r;edgeG[i]=edge.g;edgeB[i]=edge.b;textureWeight[i]=edge.textureWeight;
+    if(shapeValue==='circle'||shapeValue==='ellipse'){
+      rawDirectionalSlope[i]=lunyMirrorEstimateDirectionalSlope(
+        sourceData,W,H,cx,cy,profileCore,i,band
+      );
+    }
+  }
+  const profilesPerPx=count/Math.max(1,Math.PI*Math.max(cutW,cutH));
+  if(shapeValue==='circle'||shapeValue==='ellipse'){
+    // 邊界方向不能只作用在單一輪廓像素，否則相鄰區域會被拉出細縫。
+    // 將偵測到的方向向左右約 1.2mm 平順傳遞，使手部與衣服整塊一起續接。
+    const directionSpan=Math.max(2,Math.round(0.12*cm2px*profilesPerPx));
+    const expandedSlope=new Float32Array(count);
+    for(let i=0;i<count;i++){
+      if(valid[i]!==1)continue;
+      let bestValue=0,bestScore=0;
+      for(let offset=-directionSpan;offset<=directionSpan;offset++){
+        const sampleIndex=(i+offset+count)%count;
+        if(valid[sampleIndex]!==1)continue;
+        const decay=1-Math.abs(offset)/(directionSpan+1);
+        const score=Math.abs(rawDirectionalSlope[sampleIndex])*decay;
+        if(score>bestScore){
+          bestScore=score;
+          bestValue=rawDirectionalSlope[sampleIndex]*decay;
+        }
+      }
+      expandedSlope[i]=bestValue;
+    }
+    const directionSmoothSpan=Math.max(1,Math.round(0.025*cm2px*profilesPerPx));
+    for(let i=0;i<count;i++){
+      if(valid[i]!==1)continue;
+      let total=0,totalWeight=0;
+      for(let offset=-directionSmoothSpan;offset<=directionSmoothSpan;offset++){
+        const sampleIndex=(i+offset+count)%count;
+        if(valid[sampleIndex]!==1)continue;
+        const weight=1-Math.abs(offset)/(directionSmoothSpan+1);
+        total+=expandedSlope[sampleIndex]*weight;
+        totalWeight+=weight;
+      }
+      directionalSlope[i]=totalWeight?total/totalWeight:expandedSlope[i];
+    }
+  }
+  // 最外圈需要比裁切線附近更平滑：維持 v7.9.44 原本的局部加權範圍。
+  const smoothSpan=Math.max(2,Math.round(0.12*cm2px*profilesPerPx));
+  for(let i=0;i<count;i++){
+    if(valid[i]!==1)continue;
+    let rr=0,gg=0,bb=0,totalWeight=0;
+    for(let offset=-smoothSpan;offset<=smoothSpan;offset++){
+      const sampleIndex=(i+offset+count)%count;
+      if(valid[sampleIndex]!==1)continue;
+      const weight=1-Math.abs(offset)/(smoothSpan+1);
+      rr+=edgeR[sampleIndex]*weight;
+      gg+=edgeG[sampleIndex]*weight;
+      bb+=edgeB[sampleIndex]*weight;
+      totalWeight+=weight;
+    }
+    smoothEdgeR[i]=totalWeight?rr/totalWeight:edgeR[i];
+    smoothEdgeG[i]=totalWeight?gg/totalWeight:edgeG[i];
+    smoothEdgeB[i]=totalWeight?bb/totalWeight:edgeB[i];
+  }
+  return{
+    count,colorRadius,bleedRadius,
+    edgeR,edgeG,edgeB,smoothEdgeR,smoothEdgeG,smoothEdgeB,textureWeight,directionalSlope,
+    valid,bleedMask,minColorRadius,maxBleedRadius
+  };
+}
+function lunyMirrorInterpolateProfile(profiles,position){
+  const count=profiles.count;
+  position=((position%count)+count)%count;
+  const first=Math.floor(position),second=(first+1)%count,t=position-first;
+  const firstValid=profiles.valid[first]===1,secondValid=profiles.valid[second]===1;
+  if(!firstValid&&!secondValid)return null;
+  const sample=(array)=>{
+    if(!firstValid)return array[second];
+    if(!secondValid)return array[first];
+    return array[first]*(1-t)+array[second]*t;
+  };
+  return{
+    colorRadius:sample(profiles.colorRadius),
+    outerRadius:sample(profiles.bleedRadius),
+    edgeR:sample(profiles.edgeR),edgeG:sample(profiles.edgeG),edgeB:sample(profiles.edgeB),
+    smoothEdgeR:sample(profiles.smoothEdgeR),
+    smoothEdgeG:sample(profiles.smoothEdgeG),
+    smoothEdgeB:sample(profiles.smoothEdgeB),
+    textureWeight:sample(profiles.textureWeight),
+    directionalSlope:sample(profiles.directionalSlope)
+  };
+}
+function lunyMirrorRoundedRectSdf(x,y,halfW,halfH,corner){
+  const qx=Math.abs(x)-(halfW-corner),qy=Math.abs(y)-(halfH-corner);
+  return Math.sqrt(Math.max(qx,0)*Math.max(qx,0)+Math.max(qy,0)*Math.max(qy,0))
+    +Math.min(Math.max(qx,qy),0)-corner;
+}
+function lunyMirrorAnalyzeNormalPatch(sourceData,W,H,qx,qy,nx,ny,band,cm2px,photoMode){
+  const tx=-ny,ty=nx;
+  // 直邊僅沿法線向內取 1mm，避免白底／彩色底的銳利分界被跨區混色；
+  // 真正的四個圓角仍保留 v7.9.44 平滑取樣，以免角標線形成三角形延伸。
+  const isCornerNormal=Math.abs(nx)>0.01&&Math.abs(ny)>0.01;
+  const tangentSteps=isCornerNormal
+    ?[-0.50,-0.25,0,0.25,0.50]
+    :(photoMode?[-0.80,-0.60,-0.40,-0.20,0,0.20,0.40,0.60,0.80]:[0]);
+  const depthSteps=[0.10,0.20,0.32,0.45,0.58,0.72,0.86,1.00];
+  const samples=[];
+  for(const tangentMm of tangentSteps){
+    const tangentPx=tangentMm/10*cm2px;
+    for(const depth of depthSteps){
+      const depthPx=depth*band;
+      const rgba=bilinearSampleRGBA(
+        sourceData,W,H,
+        qx-nx*depthPx+tx*tangentPx,
+        qy-ny*depthPx+ty*tangentPx
+      );
+      if(rgba[3]>=24)samples.push(rgba);
+    }
+  }
+  if(!samples.length)return{r:255,g:255,b:255,textureWeight:0};
+  const r=lunyMirrorMedian(samples.map(v=>v[0]));
+  const g=lunyMirrorMedian(samples.map(v=>v[1]));
+  const b=lunyMirrorMedian(samples.map(v=>v[2]));
+  const closeThresholdSq=42*42;
+  let closeCount=0;
+  for(const rgba of samples){
+    const dr=rgba[0]-r,dg=rgba[1]-g,db=rgba[2]-b;
+    if(dr*dr+dg*dg+db*db<=closeThresholdSq)closeCount++;
+  }
+  const dominantRatio=closeCount/samples.length;
+  let textureWeight=0;
+  if(dominantRatio<0.62){
+    textureWeight=Math.max(0.03,Math.min(0.08,(0.62-dominantRatio)/0.42*0.08));
+  }
+  return{r,g,b,textureWeight};
+}
+function lunyMirrorLooksPhotographic(sourceData,W,H,cx,cy,cutW,cutH){
+  const columns=24,rows=24;
+  const left=Math.max(1,cx-cutW*0.46),right=Math.min(W-2,cx+cutW*0.46);
+  const top=Math.max(1,cy-cutH*0.46),bottom=Math.min(H-2,cy+cutH*0.46);
+  const bins=new Set();
+  let valid=0,nonWhite=0,textured=0;
+  for(let row=0;row<rows;row++){
+    const y=top+(bottom-top)*(row+0.5)/rows;
+    for(let column=0;column<columns;column++){
+      const x=left+(right-left)*(column+0.5)/columns;
+      const center=bilinearSampleRGBA(sourceData,W,H,x,y);
+      if(center[3]<24)continue;
+      valid++;
+      if(center[0]<244||center[1]<244||center[2]<244)nonWhite++;
+      bins.add((center[0]>>5)+'|'+(center[1]>>5)+'|'+(center[2]>>5));
+      const rightPixel=bilinearSampleRGBA(sourceData,W,H,x+2,y);
+      const bottomPixel=bilinearSampleRGBA(sourceData,W,H,x,y+2);
+      const localDifference=Math.max(
+        Math.hypot(center[0]-rightPixel[0],center[1]-rightPixel[1],center[2]-rightPixel[2]),
+        Math.hypot(center[0]-bottomPixel[0],center[1]-bottomPixel[1],center[2]-bottomPixel[2])
+      );
+      if(localDifference>=5)textured++;
+    }
+  }
+  if(valid<columns*rows*0.6)return false;
+  const nonWhiteRatio=nonWhite/valid,texturedRatio=textured/valid;
+  return nonWhiteRatio>=0.55&&bins.size>=28&&texturedRatio>=0.12;
+}
+function lunyMirrorPhotoShapeBleedCovered(sourceData,W,H,shapeValue,cx,cy,cutW,cutH,bleedW,bleedH,cm2px){
+  if(shapeValue!=='circle'&&shapeValue!=='ellipse')return false;
+  const count=192;
+  const depthRatios=[0.18,0.48,0.78,0.96];
+  const bins=new Set();
+  let total=0,opaque=0,nonWhite=0,textured=0;
+  for(let index=0;index<count;index++){
+    const angle=Math.PI*2*(index+0.5)/count;
+    const ux=Math.cos(angle),uy=Math.sin(angle),tx=-uy,ty=ux;
+    const cutRadius=lunyMirrorStandardRadius(shapeValue,ux,uy,cutW,cutH,cm2px);
+    const outerRadius=lunyMirrorStandardRadius(shapeValue,ux,uy,bleedW,bleedH,cm2px);
+    if(cutRadius<1||outerRadius<=cutRadius)continue;
+    for(const depthRatio of depthRatios){
+      const radius=cutRadius+(outerRadius-cutRadius)*depthRatio;
+      const x=cx+ux*radius,y=cy+uy*radius;
+      total++;
+      const center=bilinearSampleRGBA(sourceData,W,H,x,y);
+      if(center[3]<220)continue;
+      opaque++;
+      if(center[0]<246||center[1]<246||center[2]<246)nonWhite++;
+      bins.add((center[0]>>5)+'|'+(center[1]>>5)+'|'+(center[2]>>5));
+      const neighbor=bilinearSampleRGBA(sourceData,W,H,x+tx*2,y+ty*2);
+      if(neighbor[3]>=220&&Math.hypot(
+        center[0]-neighbor[0],center[1]-neighbor[1],center[2]-neighbor[2]
+      )>=4)textured++;
+    }
+  }
+  if(!total||!opaque)return false;
+  return opaque/total>=0.90
+    &&nonWhite/opaque>=0.45
+    &&bins.size>=12
+    &&textured/opaque>=0.03;
+}
+function lunyMirrorCreateBlurredPhotoFill(canvas,cx,cy,cutW,cutH,bleedW,bleedH,cm2px,shapeValue){
+  const W=canvas.width,H=canvas.height;
+  const blurPx=Math.max(2,0.035*cm2px); // 約 0.35mm，只作用於外側出血背景
+  const sourceX=cx-cutW/2,sourceY=cy-cutH/2;
+  if(shapeValue==='roundrect'){
+    // 先以裁切線同位置的最外像素向外鋪滿，再整體柔化；
+    // 手臂與背景在切線上的高度不會因縮放而錯位。
+    const padded=document.createElement('canvas');
+    padded.width=W;padded.height=H;
+    const paddedCtx=padded.getContext('2d');
+    if(!paddedCtx)return null;
+    const rightX=sourceX+cutW,bottomY=sourceY+cutH;
+    const leftWidth=Math.max(0,sourceX),rightWidth=Math.max(0,W-rightX);
+    const topHeight=Math.max(0,sourceY),bottomHeight=Math.max(0,H-bottomY);
+    paddedCtx.drawImage(canvas,sourceX,sourceY,cutW,cutH,sourceX,sourceY,cutW,cutH);
+    if(leftWidth>0)paddedCtx.drawImage(canvas,sourceX,sourceY,1,cutH,0,sourceY,leftWidth,cutH);
+    if(rightWidth>0)paddedCtx.drawImage(canvas,rightX-1,sourceY,1,cutH,rightX,sourceY,rightWidth,cutH);
+    if(topHeight>0)paddedCtx.drawImage(canvas,sourceX,sourceY,cutW,1,sourceX,0,cutW,topHeight);
+    if(bottomHeight>0)paddedCtx.drawImage(canvas,sourceX,bottomY-1,cutW,1,sourceX,bottomY,cutW,bottomHeight);
+    if(leftWidth>0&&topHeight>0)paddedCtx.drawImage(canvas,sourceX,sourceY,1,1,0,0,leftWidth,topHeight);
+    if(rightWidth>0&&topHeight>0)paddedCtx.drawImage(canvas,rightX-1,sourceY,1,1,rightX,0,rightWidth,topHeight);
+    if(leftWidth>0&&bottomHeight>0)paddedCtx.drawImage(canvas,sourceX,bottomY-1,1,1,0,bottomY,leftWidth,bottomHeight);
+    if(rightWidth>0&&bottomHeight>0)paddedCtx.drawImage(canvas,rightX-1,bottomY-1,1,1,rightX,bottomY,rightWidth,bottomHeight);
+
+    const margin=Math.ceil(blurPx*2);
+    const blurred=document.createElement('canvas');
+    blurred.width=W+margin*2;blurred.height=H+margin*2;
+    const blurredCtx=blurred.getContext('2d');
+    if(!blurredCtx)return null;
+    blurredCtx.filter=`blur(${blurPx}px)`;
+    blurredCtx.drawImage(padded,margin,margin);
+    try{return blurredCtx.getImageData(margin,margin,W,H).data;}catch(e){return null;}
+  }
+
+  const blurred=document.createElement('canvas');
+  blurred.width=W;blurred.height=H;
+  const blurredCtx=blurred.getContext('2d');
+  if(!blurredCtx)return null;
+  // 目的範圍略大於出血框，避免模糊濾鏡在畫布外緣混入透明像素。
+  const destinationX=cx-bleedW/2-blurPx;
+  const destinationY=cy-bleedH/2-blurPx;
+  const destinationW=bleedW+2*blurPx;
+  const destinationH=bleedH+2*blurPx;
+  blurredCtx.save();
+  if(typeof blurredCtx.filter==='string'){
+    blurredCtx.filter=`blur(${blurPx}px)`;
+    blurredCtx.drawImage(
+      canvas,sourceX,sourceY,cutW,cutH,
+      destinationX,destinationY,destinationW,destinationH
+    );
+  }else{
+    // 舊瀏覽器沒有 Canvas filter 時，以多次位移疊圖近似柔化，仍不回退到鏡射補邊。
+    const offsets=[-blurPx*0.55,0,blurPx*0.55];
+    blurredCtx.globalAlpha=1/(offsets.length*offsets.length);
+    for(const offsetY of offsets){
+      for(const offsetX of offsets){
+        blurredCtx.drawImage(
+          canvas,sourceX,sourceY,cutW,cutH,
+          destinationX+offsetX,destinationY+offsetY,destinationW,destinationH
+        );
+      }
+    }
+  }
+  blurredCtx.restore();
+  try{return blurredCtx.getImageData(0,0,W,H).data;}catch(e){return null;}
+}
+function lunyMirrorPhotoEdgeCoverage(sourceData,W,H,cx,cy,cutW,cutH,corner,band){
+  const halfW=cutW/2,halfH=cutH/2;
+  const positions=48;
+  const depthSteps=[0.20,0.65,1.25,1.90];
+  function analyze(edgeName){
+    const bins=new Set();
+    let total=0,opaque=0,nonWhite=0,textured=0;
+    for(let position=0;position<positions;position++){
+      const along=(position+0.5)/positions;
+      for(const depthStep of depthSteps){
+        const depth=Math.max(1,depthStep*band);
+        let x,y,tx,ty;
+        if(edgeName==='top'||edgeName==='bottom'){
+          x=cx-halfW+corner+(cutW-2*corner)*along;
+          y=cy+(edgeName==='top'?-halfH-depth:halfH+depth);
+          tx=2;ty=0;
+        }else{
+          x=cx+(edgeName==='left'?-halfW-depth:halfW+depth);
+          y=cy-halfH+corner+(cutH-2*corner)*along;
+          tx=0;ty=2;
+        }
+        total++;
+        const center=bilinearSampleRGBA(sourceData,W,H,x,y);
+        if(center[3]<220)continue;
+        opaque++;
+        if(center[0]<246||center[1]<246||center[2]<246)nonWhite++;
+        bins.add((center[0]>>5)+'|'+(center[1]>>5)+'|'+(center[2]>>5));
+        const neighbor=bilinearSampleRGBA(sourceData,W,H,x+tx,y+ty);
+        if(neighbor[3]>=220&&Math.hypot(
+          center[0]-neighbor[0],center[1]-neighbor[1],center[2]-neighbor[2]
+        )>=4)textured++;
+      }
+    }
+    const opaqueRatio=total?opaque/total:0;
+    const nonWhiteRatio=opaque?nonWhite/opaque:0;
+    const texturedRatio=opaque?textured/opaque:0;
+    return opaqueRatio>=0.88&&nonWhiteRatio>=0.35
+      &&(opaqueRatio>=0.97||(bins.size>=12&&texturedRatio>=0.04));
+  }
+  return{
+    top:analyze('top'),right:analyze('right'),
+    bottom:analyze('bottom'),left:analyze('left')
+  };
+}
+function lunyMirrorPhotoEdgeIsCovered(coverage,nx,ny){
+  const horizontal=Math.abs(nx)>0.01;
+  const vertical=Math.abs(ny)>0.01;
+  const horizontalCovered=!horizontal||(nx<0?coverage.left:coverage.right);
+  const verticalCovered=!vertical||(ny<0?coverage.top:coverage.bottom);
+  return horizontalCovered&&verticalCovered;
+}
+function lunyMirrorEstimateTensorDirection(sourceData,W,H,qx,qy,nx,ny,band){
+  const tx=-ny,ty=nx;
+  const depthSteps=[0.18,0.38,0.60,0.82,1.00];
+  const tangentSteps=[-0.66,-0.44,-0.22,0,0.22,0.44,0.66];
+  const gradientStep=Math.max(1,Math.min(2.5,band*0.08));
+  let jNN=0,jNT=0,jTT=0,count=0;
+  for(const depthRatio of depthSteps){
+    const depth=depthRatio*band;
+    for(const tangentRatio of tangentSteps){
+      const tangent=tangentRatio*band;
+      const x=qx-nx*depth+tx*tangent;
+      const y=qy-ny*depth+ty*tangent;
+      const outward=bilinearSampleRGBA(
+        sourceData,W,H,x+nx*gradientStep,y+ny*gradientStep
+      );
+      const inward=bilinearSampleRGBA(
+        sourceData,W,H,x-nx*gradientStep,y-ny*gradientStep
+      );
+      const tangentPlus=bilinearSampleRGBA(
+        sourceData,W,H,x+tx*gradientStep,y+ty*gradientStep
+      );
+      const tangentMinus=bilinearSampleRGBA(
+        sourceData,W,H,x-tx*gradientStep,y-ty*gradientStep
+      );
+      if(outward[3]<24||inward[3]<24||tangentPlus[3]<24||tangentMinus[3]<24)continue;
+      for(let channel=0;channel<3;channel++){
+        const gN=(outward[channel]-inward[channel])/(2*gradientStep);
+        const gT=(tangentPlus[channel]-tangentMinus[channel])/(2*gradientStep);
+        jNN+=gN*gN;jNT+=gN*gT;jTT+=gT*gT;
+      }
+      count++;
+    }
+  }
+  if(count<12)return 0;
+  const trace=jNN+jTT;
+  const discriminant=Math.sqrt(Math.max(0,(jNN-jTT)*(jNN-jTT)+4*jNT*jNT));
+  const lambda1=(trace+discriminant)/2;
+  const lambda2=(trace-discriminant)/2;
+  const coherence=(lambda1-lambda2)/Math.max(1e-6,lambda1+lambda2);
+  const energy=lambda1/count;
+  if(coherence<0.58||energy<7)return 0;
+  const angle=0.5*Math.atan2(2*jNT,jNN-jTT);
+  const gradientN=Math.cos(angle),gradientT=Math.sin(angle);
+  // 輪廓幾乎平行於裁切線時，不做不穩定的大幅方向推算。
+  if(Math.abs(gradientT)<0.28)return 0;
+  const confidence=Math.max(0,Math.min(1,(coherence-0.58)/0.28))
+    *Math.max(0,Math.min(1,(energy-7)/55));
+  const slope=-(gradientN/gradientT)*confidence;
+  return Math.max(-1.25,Math.min(1.25,slope));
+}
+function lunyMirrorExpandTensorDirections(raw,start,end,cm2px){
+  start=Math.max(0,Math.ceil(start));
+  end=Math.min(raw.length-1,Math.floor(end));
+  const contours=[];
+  const activeThreshold=0.055;
+  const peakThreshold=0.28;
+  const maxGap=Math.max(1,Math.round(0.012*cm2px));
+  let position=start;
+
+  // 將一維邊界方向拆成數個輪廓群。不同正負方向、或中間有明顯空白的群組
+  // 不再互相傳遞斜率，避免上、下兩段手臂被同一大片方向場一起拉動。
+  while(position<=end){
+    while(position<=end&&Math.abs(raw[position])<activeThreshold)position++;
+    if(position>end)break;
+    const sign=raw[position]<0?-1:1;
+    const groupStart=position;
+    let groupEnd=position,lastActive=position,peak=0;
+    for(;position<=end;position++){
+      const value=raw[position];
+      const active=Math.abs(value)>=activeThreshold&&Math.sign(value)===sign;
+      if(active){lastActive=position;groupEnd=position;peak=Math.max(peak,Math.abs(value));continue;}
+      if(position-lastActive<=maxGap)continue;
+      break;
+    }
+    groupEnd=lastActive;
+    if(peak<peakThreshold)continue;
+
+    let weightedPosition=0,weightedSlope=0,totalWeight=0;
+    for(let sample=groupStart;sample<=groupEnd;sample++){
+      const value=raw[sample];
+      if(Math.sign(value)!==sign||Math.abs(value)<activeThreshold)continue;
+      const weight=Math.pow(Math.abs(value),2.2);
+      weightedPosition+=sample*weight;
+      weightedSlope+=value*weight;
+      totalWeight+=weight;
+    }
+    if(!totalWeight)continue;
+    const center=weightedPosition/totalWeight;
+    const slope=Math.max(-1.2,Math.min(1.2,weightedSlope/totalWeight));
+    if(Math.abs(slope)<0.12)continue;
+    const detectedHalf=Math.max(center-groupStart,groupEnd-center);
+    const radius=Math.max(
+      0.10*cm2px,
+      Math.min(0.22*cm2px,detectedHalf+0.08*cm2px)
+    );
+    contours.push({center,slope,radius,peak});
+  }
+  return{raw,contours,cm2px,start,end,mappingCache:new Map()};
+}
+function lunyMirrorBuildTensorDirections(sourceData,W,H,cx,cy,cutW,cutH,corner,band,cm2px,coverage){
+  const halfW=cutW/2,halfH=cutH/2;
+  const minX=cx-halfW+corner,maxX=cx+halfW-corner;
+  const minY=cy-halfH+corner,maxY=cy+halfH-corner;
+  const sampleStep=Math.max(1,Math.round(0.02*cm2px)); // 每 0.2mm 估算一次，再線性補齊
+  function build(length,start,end,pointAt){
+    const raw=new Float32Array(length);
+    const first=Math.max(0,Math.ceil(start)),last=Math.min(length-1,Math.floor(end));
+    const sampled=[];
+    for(let position=first;position<=last;position+=sampleStep){
+      const point=pointAt(position);
+      sampled.push({position,value:lunyMirrorEstimateTensorDirection(
+        sourceData,W,H,point.qx,point.qy,point.nx,point.ny,band
+      )});
+    }
+    if(!sampled.length||sampled[sampled.length-1].position!==last){
+      const point=pointAt(last);
+      sampled.push({position:last,value:lunyMirrorEstimateTensorDirection(
+        sourceData,W,H,point.qx,point.qy,point.nx,point.ny,band
+      )});
+    }
+    for(let index=0;index<sampled.length-1;index++){
+      const from=sampled[index],to=sampled[index+1];
+      const width=Math.max(1,to.position-from.position);
+      for(let position=from.position;position<=to.position;position++){
+        const ratio=(position-from.position)/width;
+        raw[position]=from.value*(1-ratio)+to.value*ratio;
+      }
+    }
+    return lunyMirrorExpandTensorDirections(raw,start,end,cm2px);
+  }
+  return{
+    top:coverage.top?null:build(W,minX,maxX,x=>({qx:x,qy:cy-halfH,nx:0,ny:-1})),
+    right:coverage.right?null:build(H,minY,maxY,y=>({qx:cx+halfW,qy:y,nx:1,ny:0})),
+    bottom:coverage.bottom?null:build(W,minX,maxX,x=>({qx:x,qy:cy+halfH,nx:0,ny:1})),
+    left:coverage.left?null:build(H,minY,maxY,y=>({qx:cx-halfW,qy:y,nx:-1,ny:0}))
+  };
+}
+function lunyMirrorTensorControlPoints(profile,alongSign,depth){
+  const quantizedDepth=Math.max(0.5,Math.round(depth*2)/2);
+  const cacheKey=(alongSign<0?'n':'p')+'|'+quantizedDepth;
+  const cached=profile.mappingCache.get(cacheKey);
+  if(cached)return cached;
+  const points=[{source:profile.start,destination:profile.start}];
+  for(const contour of profile.contours){
+    points.push({
+      source:contour.center,
+      destination:contour.center+alongSign*contour.slope*quantizedDepth
+    });
+  }
+  points.push({source:profile.end,destination:profile.end});
+  points.sort((a,b)=>a.source-b.source);
+  for(let index=1;index<points.length;index++){
+    const minimumGap=Math.max(0.5,(points[index].source-points[index-1].source)*0.12);
+    points[index].destination=Math.max(
+      points[index].destination,points[index-1].destination+minimumGap
+    );
+  }
+  for(let index=points.length-2;index>=0;index--){
+    const minimumGap=Math.max(0.5,(points[index+1].source-points[index].source)*0.12);
+    points[index].destination=Math.min(
+      points[index].destination,points[index+1].destination-minimumGap
+    );
+  }
+  const mapping={points,depth:quantizedDepth};
+  profile.mappingCache.set(cacheKey,mapping);
+  return mapping;
+}
+function lunyMirrorTensorSlope(directions,qx,qy,nx,ny,cutDistance,mirrorDistance){
+  if(Math.abs(nx)>0.01&&Math.abs(ny)>0.01)return 0;
+  let profile,position;
+  if(Math.abs(nx)>0.01){
+    profile=nx<0?directions.left:directions.right;
+    position=Math.round(qy);
+  }else{
+    profile=ny<0?directions.top:directions.bottom;
+    position=Math.round(qx);
+  }
+  if(!profile)return 0;
+  const alongSign=Math.abs(nx)>0.01?nx:-ny;
+  if(!profile.contours.length)return 0;
+  const depth=Math.max(0.5,cutDistance+(mirrorDistance||0));
+  // 方向軌跡當作獨立控制點，再以單調座標映射連接控制點；這可避免局部位移
+  // 場折返而產生三角缺口，同時保留每條手臂／袖口自己的斜率。
+  const mapping=lunyMirrorTensorControlPoints(profile,alongSign,depth);
+  const points=mapping.points;
+  if(position<=points[0].destination||position>=points[points.length-1].destination)return 0;
+  let from=points[0],to=points[points.length-1];
+  for(let index=0;index<points.length-1;index++){
+    if(position<=points[index+1].destination){from=points[index];to=points[index+1];break;}
+  }
+  const ratio=Math.max(0,Math.min(1,
+    (position-from.destination)/Math.max(0.5,to.destination-from.destination)
+  ));
+  const sourcePosition=from.source+(to.source-from.source)*ratio;
+  return Math.max(-1.2,Math.min(1.2,
+    (position-sourcePosition)/(alongSign*mapping.depth)
+  ));
+}
+function lunyApplyRoundRectHybridBleed(ctx,canvas,cm2px,cutW,cutH,bleedW,bleedH,band){
+  const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2;
+  const cutHalfW=cutW/2,cutHalfH=cutH/2;
+  const bleedHalfW=bleedW/2,bleedHalfH=bleedH/2;
+  const corner=Math.min(0.1*cm2px,cutHalfW,cutHalfH);
+  let imageData;
+  try{imageData=ctx.getImageData(0,0,W,H);}catch(e){return false;}
+  const pixels=imageData.data;
+  const photoTextureMode=lunyMirrorLooksPhotographic(pixels,W,H,cx,cy,cutW,cutH);
+  const photoCoverage=photoTextureMode
+    ?lunyMirrorPhotoEdgeCoverage(pixels,W,H,cx,cy,cutW,cutH,corner,band)
+    :null;
+  const blurredPhotoPixels=photoTextureMode
+    ?lunyMirrorCreateBlurredPhotoFill(canvas,cx,cy,cutW,cutH,bleedW,bleedH,cm2px,'roundrect')
+    :null;
+  const photoDirections=photoTextureMode
+    ?lunyMirrorBuildTensorDirections(
+      pixels,W,H,cx,cy,cutW,cutH,corner,band,cm2px,photoCoverage
+    )
+    :null;
+  const edgeCache=new Map();
+  const minX=Math.max(0,Math.floor(cx-bleedHalfW));
+  const maxX=Math.min(W-1,Math.ceil(cx+bleedHalfW));
+  const minY=Math.max(0,Math.floor(cy-bleedHalfH));
+  const maxY=Math.min(H-1,Math.ceil(cy+bleedHalfH));
+
+  for(let y=minY;y<=maxY;y++){
+    const py=y-cy;
+    for(let x=minX;x<=maxX;x++){
+      const px=x-cx;
+      const cutDistance=lunyMirrorRoundedRectSdf(px,py,cutHalfW,cutHalfH,corner);
+      if(cutDistance<0)continue;
+      if(lunyMirrorRoundedRectSdf(px,py,bleedHalfW,bleedHalfH,corner)>0.6)continue;
+
+      const coreX=Math.max(-cutHalfW+corner,Math.min(cutHalfW-corner,px));
+      const coreY=Math.max(-cutHalfH+corner,Math.min(cutHalfH-corner,py));
+      const vx=px-coreX,vy=py-coreY,length=Math.sqrt(vx*vx+vy*vy);
+      if(length<0.0001)continue;
+      const nx=vx/length,ny=vy/length;
+      const qx=cx+coreX+nx*corner,qy=cy+coreY+ny*corner;
+      // 照片若在這一邊原本就已經鋪滿 2mm 出血，保留原像素比再次鏡射更正確。
+      // 圓角必須相鄰兩邊都有覆蓋才保留，否則仍補上缺少的角落。
+      if(photoCoverage&&lunyMirrorPhotoEdgeIsCovered(photoCoverage,nx,ny))continue;
+      const cacheKey=Math.round(qx*2)+'|'+Math.round(qy*2);
+      let edge=edgeCache.get(cacheKey);
+      if(!edge){
+        edge=lunyMirrorAnalyzeNormalPatch(pixels,W,H,qx,qy,nx,ny,band,cm2px,photoTextureMode);
+        edgeCache.set(cacheKey,edge);
+      }
+
+      // 照片把內側 1mm 的紋理連續拉伸至外側 2mm，不再逐列壓成中位色條紋；
+      // 圖文設計維持 v7.9.44.1 的線條抑制邏輯。
+      // 照片缺圖邊固定從裁切線內約 0.12mm 取樣，再沿偵測方向平移；
+      // 不再隨外移距離逐步往內取到 1mm，避免手臂、袖口、手錶等特徵在出血區重複一次。
+      const mirrorDistance=photoTextureMode
+        ?Math.max(0.75,band*0.12)
+        :Math.max(0.75,lunyMirrorReflectDistance(cutDistance,band));
+      const directionalSlope=photoDirections
+        ?lunyMirrorTensorSlope(photoDirections,qx,qy,nx,ny,cutDistance,mirrorDistance)
+        :0;
+      const tx=-ny,ty=nx;
+      const mirrorShift=directionalSlope*(cutDistance+mirrorDistance);
+      const mirror=bilinearSampleRGBA(
+        pixels,W,H,
+        qx-nx*mirrorDistance-tx*mirrorShift,
+        qy-ny*mirrorDistance-ty*mirrorShift
+      );
+      const seamFadePx=Math.max(1,0.06*cm2px); // 外側約 0.6mm 內平順銜接，裁切線內不變
+      const seamWeight=Math.max(0,1-cutDistance/seamFadePx);
+      const isCornerNormal=Math.abs(nx)>0.01&&Math.abs(ny)>0.01;
+      const index=(y*W+x)*4;
+      if(photoTextureMode&&blurredPhotoPixels){
+        // 模糊層已由同一位置的邊界像素向外鋪設，因此可保持手臂高度並平順接上。
+        const blurredShift=directionalSlope*cutDistance;
+        const blurredSample=bilinearSampleRGBA(
+          blurredPhotoPixels,W,H,
+          x-tx*blurredShift,y-ty*blurredShift
+        );
+        pixels[index]=Math.round(blurredSample[0]*(1-seamWeight)+mirror[0]*seamWeight);
+        pixels[index+1]=Math.round(blurredSample[1]*(1-seamWeight)+mirror[1]*seamWeight);
+        pixels[index+2]=Math.round(blurredSample[2]*(1-seamWeight)+mirror[2]*seamWeight);
+        pixels[index+3]=255;
+        continue;
+      }
+      const adaptiveTextureWeight=Math.max(0.18,Math.min(0.72,0.18+edge.textureWeight*6.75));
+      const photoWeight=isCornerNormal?0.16:adaptiveTextureWeight;
+      const weight=photoTextureMode?Math.max(seamWeight,photoWeight):Math.max(seamWeight,edge.textureWeight);
+      pixels[index]=Math.round(edge.r*(1-weight)+mirror[0]*weight);
+      pixels[index+1]=Math.round(edge.g*(1-weight)+mirror[1]*weight);
+      pixels[index+2]=Math.round(edge.b*(1-weight)+mirror[2]*weight);
+      pixels[index+3]=255;
+    }
+  }
+  ctx.putImageData(imageData,0,0);
+  return true;
+}
+function lunyBridgeRowHalfSpan(shapeValue,relativeY,w,h,cm2px){
+  if(!lunyMirrorPointInStandardShape(shapeValue,0,relativeY,w,h,cm2px))return -1;
+  let low=0,high=Math.max(0.5,w/2);
+  for(let index=0;index<14;index++){
+    const middle=(low+high)/2;
+    if(lunyMirrorPointInStandardShape(shapeValue,middle,relativeY,w,h,cm2px))low=middle;
+    else high=middle;
+  }
+  return low;
+}
+function lunyBridgeNormalAtPoint(shapeValue,x,y,cx,cy,cutW,cutH){
+  const dx=x-cx,dy=y-cy;
+  if(shapeValue==='roundrect'){
+    const nxRatio=Math.abs(dx)/Math.max(1,cutW/2);
+    const nyRatio=Math.abs(dy)/Math.max(1,cutH/2);
+    if(Math.abs(nxRatio-nyRatio)>.08){
+      return nxRatio>nyRatio?{x:dx<0?-1:1,y:0}:{x:0,y:dy<0?-1:1};
+    }
+  }
+  if(shapeValue==='ellipse'){
+    const gx=dx/Math.max(1,(cutW/2)*(cutW/2));
+    const gy=dy/Math.max(1,(cutH/2)*(cutH/2));
+    const length=Math.hypot(gx,gy)||1;
+    return{x:gx/length,y:gy/length};
+  }
+  const length=Math.hypot(dx,dy)||1;
+  return{x:dx/length,y:dy/length};
+}
+function lunyMirrorHasExplicitBleedFill(){
+  const background=typeof backgroundColor!=='undefined'?backgroundColor:'';
+  const edgeColor=typeof eyedropperColor!=='undefined'?eyedropperColor:'';
+  let edgeMode='off';
+  try{edgeMode=String(getEdgeOption()||'off').toLowerCase();}catch(e){}
+  return !!(background||edgeColor||['color','edgecolor','fullcolor'].includes(edgeMode));
+}
+function lunyBridgeSubmittedImageToCutLine(ctx,canvas,cm2px){
+  if(typeof img==='undefined'||!img||typeof CM2PX==='undefined')return{checked:false,intent:false,bridged:false};
+  if(!canvas||!ctx||shape.value==='custom')return{checked:false,intent:false,bridged:false};
+  const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2;
+  const b=BLEED_CM*cm2px,gap=GAP_CM*cm2px;
+  const cutW=Math.max(1,W-2*b),cutH=Math.max(1,H-2*b);
+  const safeW=Math.max(1,cutW-2*gap),safeH=Math.max(1,cutH-2*gap);
+  const k=cm2px/CM2PX;
+  const photoCx=cx+offsetX*k,photoCy=cy+offsetY*k;
+  const photoScale=Math.max(.0001,scale*k);
+  const info=typeof getPhotoPixelInfo==='function'?getPhotoPixelInfo():null;
+  function photoOccupies(x,y){
+    const v=rot(x-photoCx,y-photoCy,-angle);
+    const px=v.x/photoScale+img.width/2,py=v.y/photoScale+img.height/2;
+    if(px<0||py<0||px>=img.width||py>=img.height)return false;
+    if(!info)return true;
+    const sx=Math.max(0,Math.min(info.w-1,Math.floor(px)));
+    const sy=Math.max(0,Math.min(info.h-1,Math.floor(py)));
+    return info.data[(sy*info.w+sx)*4+3]>=32;
+  }
+  let iconInfo=null,iconCx=0,iconCy=0,iconDrawScale=1;
+  if(typeof iconImg!=='undefined'&&iconImg){
+    iconInfo=typeof getIconPixelInfo==='function'?getIconPixelInfo():null;
+    iconCx=cx+iconOffsetX*k;iconCy=cy+iconOffsetY*k;
+    iconDrawScale=Math.max(.0001,iconScale*k);
+  }
+  let textBox=null;
+  if(typeof textStr!=='undefined'&&textStr){
+    const previewBox=measureTextBox(textStr,textSizeCM*CM2PX*textScale);
+    textBox={cx:cx+textOffsetX*k,cy:cy+textOffsetY*k,w:previewBox.w*k,h:previewBox.h*k,a:textAngle};
+  }
+  function addedObjectOccupies(x,y){
+    if(iconInfo&&iconImg){
+      const v=rot(x-iconCx,y-iconCy,-iconAngle);
+      const px=v.x/iconDrawScale+iconImg.width/2,py=v.y/iconDrawScale+iconImg.height/2;
+      if(px>=0&&py>=0&&px<iconImg.width&&py<iconImg.height){
+        const sx=Math.max(0,Math.min(iconInfo.w-1,Math.floor(px)));
+        const sy=Math.max(0,Math.min(iconInfo.h-1,Math.floor(py)));
+        if(iconInfo.data[(sy*iconInfo.w+sx)*4+3]>=32)return true;
+      }
+    }
+    return !!(textBox&&pointInRotRect(x,y,textBox.cx,textBox.cy,textBox.w,textBox.h,textBox.a));
+  }
+
+  // 只要原始圖檔的不透明內容進入安全線與裁切線之間，就視為滿版意圖；白色也算內容。
+  const sampleStep=Math.max(2,Math.round(.04*cm2px));
+  let intentHits=0;
+  const minY=Math.max(0,Math.floor(cy-cutH/2)),maxY=Math.min(H-1,Math.ceil(cy+cutH/2));
+  for(let y=minY;y<=maxY&&intentHits<3;y+=sampleStep){
+    const cutSpan=lunyBridgeRowHalfSpan(shape.value,y-cy,cutW,cutH,cm2px);
+    if(cutSpan<0)continue;
+    const safeSpan=lunyBridgeRowHalfSpan(shape.value,y-cy,safeW,safeH,cm2px);
+    const start=Math.max(0,Math.floor(cx-cutSpan)),end=Math.min(W-1,Math.ceil(cx+cutSpan));
+    for(let x=start;x<=end;x+=sampleStep){
+      const insideSafe=safeSpan>=0&&Math.abs(x-cx)<=safeSpan;
+      if(!insideSafe&&photoOccupies(x,y)){intentHits++;if(intentHits>=3)break;}
+    }
+  }
+  const intent=intentHits>=3;
+  if(!intent)return{checked:true,intent:false,bridged:false};
+
+  let imageData;
+  try{imageData=ctx.getImageData(0,0,W,H);}catch(e){return{checked:true,intent:true,bridged:false};}
+  const pixels=imageData.data;
+  const photoMode=lunyMirrorLooksPhotographic(pixels,W,H,cx,cy,cutW,cutH);
+  const band=Math.max(1,MIRROR_SOURCE_CM*cm2px);
+  const maxSearch=Math.max(2,Math.ceil(gap+2));
+  const edgeCache=new Map();
+  let bridgedPixels=0;
+  function fillTarget(x,y){
+    if(photoOccupies(x,y)||addedObjectOccupies(x,y))return;
+    const normal=lunyBridgeNormalAtPoint(shape.value,x,y,cx,cy,cutW,cutH);
+    let hitX=0,hitY=0,distance=0;
+    for(let step=1;step<=maxSearch;step++){
+      const sx=x-normal.x*step,sy=y-normal.y*step;
+      if(photoOccupies(sx,sy)){hitX=sx;hitY=sy;distance=step;break;}
+    }
+    if(!distance)return;
+    const cacheKey=Math.round(hitX*2)+'|'+Math.round(hitY*2)+'|'+Math.round(normal.x*10)+'|'+Math.round(normal.y*10);
+    let edge=edgeCache.get(cacheKey);
+    if(!edge){
+      edge=lunyMirrorAnalyzeNormalPatch(pixels,W,H,hitX,hitY,normal.x,normal.y,band,cm2px,photoMode);
+      edgeCache.set(cacheKey,edge);
+    }
+    const mirrorDistance=photoMode?Math.max(.75,band*.12):Math.max(.75,lunyMirrorReflectDistance(distance,band));
+    const mirror=bilinearSampleRGBA(pixels,W,H,hitX-normal.x*mirrorDistance,hitY-normal.y*mirrorDistance);
+    const seamFade=Math.max(1,.06*cm2px);
+    const seamWeight=Math.max(0,1-distance/seamFade);
+    const photoWeight=Math.max(.28,Math.min(.72,.28+edge.textureWeight*4.5));
+    const weight=photoMode?Math.max(seamWeight,photoWeight):Math.min(.05,edge.textureWeight);
+    const index=(y*W+x)*4;
+    pixels[index]=Math.round(edge.r*(1-weight)+mirror[0]*weight);
+    pixels[index+1]=Math.round(edge.g*(1-weight)+mirror[1]*weight);
+    pixels[index+2]=Math.round(edge.b*(1-weight)+mirror[2]*weight);
+    pixels[index+3]=255;
+    bridgedPixels++;
+  }
+
+  // 僅掃描裁切線與安全線之間的環帶，安全線內的原構圖完全不更動。
+  for(let y=minY;y<=maxY;y++){
+    const cutSpan=lunyBridgeRowHalfSpan(shape.value,y-cy,cutW,cutH,cm2px);
+    if(cutSpan<0)continue;
+    const safeSpan=lunyBridgeRowHalfSpan(shape.value,y-cy,safeW,safeH,cm2px);
+    const left=Math.max(0,Math.floor(cx-cutSpan)),right=Math.min(W-1,Math.ceil(cx+cutSpan));
+    if(safeSpan<0){
+      for(let x=left;x<=right;x++)fillTarget(x,y);
+    }else{
+      const safeLeft=Math.max(left,Math.floor(cx-safeSpan));
+      const safeRight=Math.min(right,Math.ceil(cx+safeSpan));
+      for(let x=left;x<safeLeft;x++)fillTarget(x,y);
+      for(let x=safeRight+1;x<=right;x++)fillTarget(x,y);
+    }
+  }
+  if(bridgedPixels)ctx.putImageData(imageData,0,0);
+  return{checked:true,intent:true,bridged:bridgedPixels>0,pixels:bridgedPixels};
+}
+function lunySubmittedImageCrossesSafePreview(){
+  if(typeof img==='undefined'||!img||!cG||shape.value==='custom')return false;
+  const W=cG.width,H=cG.height,cx=W/2,cy=H/2;
+  const b=BLEED_CM*CM2PX,gap=GAP_CM*CM2PX;
+  const cutW=Math.max(1,W-2*b),cutH=Math.max(1,H-2*b);
+  const safeW=Math.max(1,cutW-2*gap),safeH=Math.max(1,cutH-2*gap);
+  const info=typeof getPhotoPixelInfo==='function'?getPhotoPixelInfo():null;
+  function occupied(x,y){
+    const p=previewPointToPhotoPixel(x,y);
+    if(!p)return false;
+    if(!info)return true;
+    return info.data[(p.y*info.w+p.x)*4+3]>=32;
+  }
+  const step=Math.max(2,Math.round(.04*CM2PX));
+  let hits=0;
+  const minY=Math.max(0,Math.floor(cy-cutH/2)),maxY=Math.min(H-1,Math.ceil(cy+cutH/2));
+  for(let y=minY;y<=maxY&&hits<3;y+=step){
+    const cutSpan=lunyBridgeRowHalfSpan(shape.value,y-cy,cutW,cutH,CM2PX);
+    if(cutSpan<0)continue;
+    const safeSpan=lunyBridgeRowHalfSpan(shape.value,y-cy,safeW,safeH,CM2PX);
+    const start=Math.max(0,Math.floor(cx-cutSpan)),end=Math.min(W-1,Math.ceil(cx+cutSpan));
+    for(let x=start;x<=end;x+=step){
+      if(!(safeSpan>=0&&Math.abs(x-cx)<=safeSpan)&&occupied(x,y)){
+        hits++;if(hits>=3)return true;
+      }
+    }
+  }
+  return false;
+}
+function lunyAddedObjectsTouchDangerZonePreview(){
+  const W=cG.width,H=cG.height,b=BLEED_CM*CM2PX,gap=GAP_CM*CM2PX;
+  const cutW=Math.max(1,W-2*b),cutH=Math.max(1,H-2*b);
+  const safeW=Math.max(1,cutW-2*gap),safeH=Math.max(1,cutH-2*gap);
+  if(iconImg){
+    const w=iconImg.width*iconScale,h=iconImg.height*iconScale;
+    if(rectTouchesDangerZone(W/2+iconOffsetX,H/2+iconOffsetY,w,h,iconAngle,safeW,safeH,cutW,cutH))return true;
+  }
+  if(textStr){
+    const m=measureTextBox(textStr,textSizeCM*CM2PX*textScale);
+    if(rectTouchesDangerZone(W/2+textOffsetX,H/2+textOffsetY,m.w,m.h,textAngle,safeW,safeH,cutW,cutH))return true;
+  }
+  return false;
 }
 function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
-  // v7.9.41：只在印刷檔輸出時，從有色邊界鏡射補滿白邊與外側出血。
+  // v7.9.43：只在印刷檔輸出時，以局部中位數為主、少量鏡射紋理填滿外側 2mm。
   if(!forceForPrint)return;
   if(!canvas||!ctx)return;
   const W=canvas.width||0,H=canvas.height||0;
   if(W<20||H<20)return;
+
+  // 先把「實際圖檔邊界 → 裁切線」補齊，再交給既有演算法處理「裁切線 → 出血線」。
+  let bridgeState=null;
+  if(typeof window!=='undefined'){
+    try{bridgeState=lunyBridgeSubmittedImageToCutLine(ctx,canvas,cm2px);}catch(e){console.warn('[LUNY] 安全線至裁切線補邊失敗：',e);}
+  }
+  if(bridgeState&&bridgeState.checked&&!bridgeState.intent&&!lunyMirrorHasExplicitBleedFill())return;
 
   const b=BLEED_CM*cm2px;
   const band=Math.max(1,MIRROR_SOURCE_CM*cm2px);
@@ -780,9 +1713,22 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
   const cutW=W-2*b,cutH=H-2*b;
   const bleedW=cutW+2*b,bleedH=cutH+2*b;
   const shapeValue=shape.value;
+  if(shapeValue==='roundrect'){
+    try{
+      if(lunyApplyRoundRectHybridBleed(ctx,canvas,cm2px,cutW,cutH,bleedW,bleedH,band))return;
+    }catch(e){console.warn('[LUNY] 矩形法線補邊失敗，改用一般補邊：',e);}
+  }
   let imageData;
   try{imageData=ctx.getImageData(0,0,W,H);}catch(e){console.warn('[LUNY] 自動補邊讀取像素失敗：',e);return;}
   const pixels=imageData.data;
+  const photoTextureMode=(shapeValue==='circle'||shapeValue==='ellipse')
+    &&lunyMirrorLooksPhotographic(pixels,W,H,cx,cy,cutW,cutH);
+  if(photoTextureMode&&lunyMirrorPhotoShapeBleedCovered(
+    pixels,W,H,shapeValue,cx,cy,cutW,cutH,bleedW,bleedH,cm2px
+  ))return;
+  const blurredPhotoPixels=photoTextureMode
+    ?lunyMirrorCreateBlurredPhotoFill(canvas,cx,cy,cutW,cutH,bleedW,bleedH,cm2px,shapeValue)
+    :null;
   let profiles;
   try{
     profiles=lunyMirrorBuildProfiles(pixels,W,H,shapeValue,cx,cy,cutW,cutH,bleedW,bleedH,cm2px,band);
@@ -811,41 +1757,73 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
 
       let position=(Math.atan2(dy,dx)+Math.PI)/(Math.PI*2)*count;
       position=((position%count)+count)%count;
-      const first=Math.floor(position),second=(first+1)%count,t=position-first;
-      const firstValid=profiles.valid[first]===1,secondValid=profiles.valid[second]===1;
-      if(!firstValid&&!secondValid)continue;
-      let colorRadius,outerRadius;
-      if(!firstValid){
-        colorRadius=profiles.colorRadius[second];
-        outerRadius=profiles.bleedRadius[second];
-      }else if(!secondValid){
-        colorRadius=profiles.colorRadius[first];
-        outerRadius=profiles.bleedRadius[first];
-      }else{
-        colorRadius=profiles.colorRadius[first]*(1-t)+profiles.colorRadius[second]*t;
-        outerRadius=profiles.bleedRadius[first]*(1-t)+profiles.bleedRadius[second]*t;
-      }
-      if(radius<colorRadius-0.6||radius>outerRadius+0.6)continue;
+      const baseProfile=lunyMirrorInterpolateProfile(profiles,position);
+      if(!baseProfile)continue;
+      let{
+        colorRadius,outerRadius,edgeR,edgeG,edgeB,
+        smoothEdgeR,smoothEdgeG,smoothEdgeB,textureWeight,directionalSlope
+      }=baseProfile;
       const index=(y*W+x)*4;
-      if(!lunyMirrorPixelIsWhite(pixels,index))continue;
+      // 幾何裁切線與抗鋸齒像素中心可能相差不到 1px；只補該範圍內原本透明的接縫像素，
+      // 不碰任何不透明的裁切線內成品內容。
+      const transparentSeamPixel=photoTextureMode
+        &&pixels[index+3]<220
+        &&radius>=colorRadius-1;
+      if((radius<colorRadius&&!transparentSeamPixel)||radius>outerRadius+0.6)continue;
 
       const ux=dx/radius,uy=dy/radius;
       const outwardDistance=Math.max(0,radius-colorRadius);
-      let sourceRadius=colorRadius-lunyMirrorReflectDistance(outwardDistance,band);
-      let rgba=bilinearSampleRGBA(pixels,W,H,cx+ux*sourceRadius,cy+uy*sourceRadius);
-      if(lunyMirrorRgbaIsWhite(rgba)){
-        // 抗鋸齒或極細白縫：仍以有色邊界為基準，往內找最近的有效鏡射像素。
-        for(let extra=0.5;extra<=band;extra+=0.5){
-          sourceRadius=Math.max(0,colorRadius-extra);
-          rgba=bilinearSampleRGBA(pixels,W,H,cx+ux*sourceRadius,cy+uy*sourceRadius);
-          if(!lunyMirrorRgbaIsWhite(rgba))break;
+      const mirrorDistance=photoTextureMode
+        ?Math.max(0.75,band*0.25)
+        :Math.max(0.75,lunyMirrorReflectDistance(outwardDistance,band));
+      const sourceRadius=colorRadius-mirrorDistance;
+      const useDirectionalContinuation=(shapeValue==='circle'||shapeValue==='ellipse')
+        &&Math.abs(directionalSlope)>0.015;
+      let sourceAngle=Math.atan2(dy,dx);
+      if(useDirectionalContinuation){
+        sourceAngle-=directionalSlope*(outwardDistance+mirrorDistance)/Math.max(1,colorRadius);
+        const backgroundAngleShift=-directionalSlope*(outwardDistance+band*0.55)
+          /Math.max(1,colorRadius);
+        const shiftedProfile=lunyMirrorInterpolateProfile(
+          profiles,position+backgroundAngleShift/(Math.PI*2)*count
+        );
+        if(shiftedProfile){
+          edgeR=shiftedProfile.edgeR;edgeG=shiftedProfile.edgeG;edgeB=shiftedProfile.edgeB;
+          smoothEdgeR=shiftedProfile.smoothEdgeR;
+          smoothEdgeG=shiftedProfile.smoothEdgeG;
+          smoothEdgeB=shiftedProfile.smoothEdgeB;
+          textureWeight=shiftedProfile.textureWeight;
         }
       }
-      if(lunyMirrorRgbaIsWhite(rgba))continue;
-      pixels[index]=rgba[0];
-      pixels[index+1]=rgba[1];
-      pixels[index+2]=rgba[2];
-      pixels[index+3]=rgba[3];
+      const mirror=bilinearSampleRGBA(
+        pixels,W,H,
+        cx+Math.cos(sourceAngle)*sourceRadius,
+        cy+Math.sin(sourceAngle)*sourceRadius
+      );
+      const outwardRatio=Math.max(0,Math.min(1,outwardDistance/Math.max(1,2*band)));
+      const diffusion=Math.sqrt(outwardRatio);
+      const backgroundR=edgeR*(1-diffusion)+smoothEdgeR*diffusion;
+      const backgroundG=edgeG*(1-diffusion)+smoothEdgeG*diffusion;
+      const backgroundB=edgeB*(1-diffusion)+smoothEdgeB*diffusion;
+      const seamFadePx=Math.max(1,0.06*cm2px); // 裁切線外約 0.6mm 內由原始邊界平順過渡
+      const seamWeight=Math.max(0,1-outwardDistance/seamFadePx);
+      if(photoTextureMode&&blurredPhotoPixels){
+        pixels[index]=Math.round(backgroundR*(1-seamWeight)+mirror[0]*seamWeight);
+        pixels[index+1]=Math.round(backgroundG*(1-seamWeight)+mirror[1]*seamWeight);
+        pixels[index+2]=Math.round(backgroundB*(1-seamWeight)+mirror[2]*seamWeight);
+        pixels[index+3]=255;
+        continue;
+      }
+      const photoWeight=Math.max(0.28,Math.min(0.86,
+        0.28+textureWeight*4.5+Math.min(0.16,Math.abs(directionalSlope)*0.16)
+      ));
+      const weight=photoTextureMode
+        ?Math.max(seamWeight,photoWeight)
+        :Math.max(seamWeight,Math.max(0,Math.min(0.12,textureWeight)));
+      pixels[index]=Math.round(backgroundR*(1-weight)+mirror[0]*weight);
+      pixels[index+1]=Math.round(backgroundG*(1-weight)+mirror[1]*weight);
+      pixels[index+2]=Math.round(backgroundB*(1-weight)+mirror[2]*weight);
+      pixels[index+3]=255;
     }
   }
   ctx.putImageData(imageData,0,0);
@@ -892,15 +1870,20 @@ function drawAll(ctx,canvas,cm2px,opts){const{includeGuides=true,includeSelectio
     return{level:0,zone:'bleed',title:'已選擇滿版底色 / 邊框顏色，系統會以指定顏色補滿出血區。',important:false};
   }
 
-  // 預設原始預覽仍必須偵測裁切線內側 2mm 危險區。
-  const danger=!!(typeof window.__lunyCheckDangerZoneHit==='function'&&window.__lunyCheckDangerZoneHit());
+  // 主圖跨出安全線代表滿版意圖；危險警告只保留給文字、Logo、QR Code。
+  const danger=lunyAddedObjectsTouchDangerZonePreview();
   window.__lunyDangerZoneHit=danger;
   if(danger){
-    return{level:1,zone:'danger',title:'有圖文內容碰到裁切線內側 2mm 危險區域，請再往內縮。',important:true};
+    return{level:1,zone:'danger',title:'有文字、Logo 或 QR Code 碰到裁切線內側 2mm 危險區域，請再往內縮。',important:true};
   }
 
-  // 畫面維持原始狀態，但正式印刷檔會自動由裁切線內側 1mm 延伸至裁切線外 2mm。
-  return{level:0,zone:'cut',title:'目前為原始成品預覽；正式印刷檔會自動抓裁切線內側 1mm，延伸至裁切線外 2mm 製作出血。',important:false};
+  if(lunySubmittedImageCrossesSafePreview()){
+    return{level:0,zone:'bleed',title:'主圖已跨出安全線，系統會從實際圖片邊界補到裁切線，再延伸至外側 2mm 出血線。',important:false};
+  }
+  if(img){
+    return{level:1,zone:'safe',title:'主圖仍在安全線內，系統不會自動補成滿版；若要滿版，請將圖片延伸到綠線外。',important:false};
+  }
+  return{level:0,zone:'inside',title:'尚未加入主圖。',important:false};
 }function updateBleedRiskUI(){const box=ensureBleedRiskUI();const msg=box&&box.querySelector('#lunyBleedRiskMessage');if(!box||!msg)return;const st=getBleedRiskStatus();let bgc='#f0fff4',bd='#a8dfb3',fg='#166534',prefix='✅ ';if(st.level===1){bgc='#fffaf0';bd='#f2d29b';fg='#9a5a00';prefix='⚠️ ';}if(st.level>=2){bgc='#fff1f2';bd='#f0a8b2';fg='#b42336';prefix='🚫 ';}box.style.background=bgc;box.style.borderColor=bd;box.style.color=fg;let zoneHint='';if(st.zone==='safe'||st.zone==='inside'){zoneHint='\n對應範圍：綠色虛線以內';}else if(st.zone==='cut'){zoneHint='\n對應範圍：紅色裁切線';}else if(st.zone==='bleed'){zoneHint='\n對應範圍：灰線';}else if(st.zone==='danger'){zoneHint='\n對應範圍：裁切線內側 2mm 危險區域';}else if(st.zone==='custom'){zoneHint='\n紅線為實際客製刀線；灰線為出血線；綠線為刀線內縮 2mm。';}let extra=st.important?'\n文字、Logo、QR Code、電話請放在綠線內，建議再離綠線 1–2mm。':'';msg.innerHTML=(prefix+st.title+zoneHint+extra).replace(/\n/g,'<br>');}let __lunyBleedCancelUntil=0;
 let __lunyBleedApprovedUntil=0;
 let __lunyBleedUserCancelled=false;
@@ -1129,6 +2112,8 @@ function lunyDetectVisibleWhiteEdge(){
   if(['on','white','whiteedge','white-edge','border','edge','color','edgecolor','fullcolor'].includes(edgeMode))return false;
   if(!img&&!iconImg&&!textStr)return false;
   if(shape.value==='custom'&&!__lunyCustomCutlineCache)return false;
+  // 主圖只要跨出安全線，正式檔就會自動補到出血線，不再顯示露白警示。
+  if(img&&lunySubmittedImageCrossesSafePreview())return false;
   const sourceW=Math.max(1,cG.width),sourceH=Math.max(1,cG.height);
   const ratio=Math.min(1,260/Math.max(sourceW,sourceH));
   const W=Math.max(40,Math.round(sourceW*ratio)),H=Math.max(40,Math.round(sourceH*ratio));
