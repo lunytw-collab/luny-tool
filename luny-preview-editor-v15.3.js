@@ -1,3 +1,4 @@
+/* LUNY v7.9.44.7：保留 v7.9.44.6 的缺邊判斷；只有真正透明／缺圖的照片邊，改用縮放後的模糊背景填滿外側 2mm，裁切線內完全不變。 */
 /* LUNY v7.9.44.6：圓形／橢圓形照片新增既有出血保留；照片原本已鋪滿外圈時不再重製。矩形穩定背景降低紋理延展比例，避免頂部直條紋。 */
 /* LUNY v7.9.44.5：矩形照片缺圖邊改為固定邊界延展；不再反射內側影像，避免手臂、手錶、袖口與背景在裁切線外折返或重複。 */
 /* LUNY v7.9.44.4：矩形照片逐邊檢查既有出血；已完整覆蓋的邊保留原圖，只補真正缺圖的邊，避免手臂、手錶與衣服被二次鏡射。 */
@@ -461,7 +462,11 @@ function lunyCustomEnsureControls(){}
 function lunyCustomUpdateControlUI(){}
 
 function measureTextBox(str,fontPx){ctxG.save();ctxG.font=`${fontPx}px "Noto Sans TC", sans-serif`;const m=ctxG.measureText(str||'');const asc=m.actualBoundingBoxAscent||fontPx*0.8;const dsc=m.actualBoundingBoxDescent||fontPx*0.2;const w=Math.max(1,m.width);const h=asc+dsc;ctxG.restore();return{w,h,asc,dsc};}function drawSelection(ctx,cx,cy,w,h,ang){const col='#A36A3A';const pts=corners(cx,cy,w,h,ang);ctx.save();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<4;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.closePath();ctx.stroke();pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=4;ctx.stroke();});const topMid=mid(pts[0],pts[1]);const nx=(topMid.x-cx),ny=(topMid.y-cy);const len=Math.hypot(nx,ny)||1;const ux=nx/len,uy=ny/len;const rx=topMid.x+ux*28,ry=topMid.y+uy*28;ctx.beginPath();ctx.moveTo(topMid.x,topMid.y);ctx.lineTo(rx,ry);ctx.stroke();ctx.beginPath();ctx.arc(rx,ry,6,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.stroke();ctx.restore();return{corners:pts,rot:{x:rx,y:ry}};}function getEdgeOption(){return String(window.LUNY_EDGE_FILL_MODE||'off').toLowerCase();}
-/* v7.9.44.6：印刷檔自動出血＝分析裁切線內側 1mm 的局部區塊，再填滿外側 2mm 出血。
+/* v7.9.44.7：印刷檔自動出血＝先判斷外側 2mm 是否真正透明／缺圖，再只填補缺少的區域。
+   - v7.9.44.6 的缺邊判斷完整保留：已有有效照片的邊不修改，只有透明或缺圖邊才補出血。
+   - 照片缺圖邊改用裁切範圍縮放後的模糊背景補色，不再鏡射、複製或固定延展手部／衣服紋理。
+   - 模糊背景只寫入裁切線外側 2mm；裁切線內的成品構圖與像素完全不變。
+   - 裁切線外約 0.12mm 內保留極窄的原始邊界漸變，避免清晰成品與模糊出血形成硬接縫。
    - 圓形／橢圓形照片先檢查外側 2mm；原圖已完整覆蓋時直接保留，避免手部與衣服被再次混合成重影。
    - 圓形／橢圓形確實缺圖時，改從裁切線內約 0.25mm 固定取樣，避開透明抗鋸齒並不再重複整段內側 1mm。
    - 矩形穩定背景降低原始紋理比例，以局部中位色平順延展；人物輪廓仍保留較高的邊界比例。
@@ -1076,6 +1081,42 @@ function lunyMirrorPhotoShapeBleedCovered(sourceData,W,H,shapeValue,cx,cy,cutW,c
     &&bins.size>=12
     &&textured/opaque>=0.03;
 }
+function lunyMirrorCreateBlurredPhotoFill(canvas,cx,cy,cutW,cutH,bleedW,bleedH,cm2px){
+  const W=canvas.width,H=canvas.height;
+  const blurred=document.createElement('canvas');
+  blurred.width=W;blurred.height=H;
+  const blurredCtx=blurred.getContext('2d');
+  if(!blurredCtx)return null;
+  const blurPx=Math.max(2,0.035*cm2px); // 約 0.35mm，只作用於外側出血背景
+  const sourceX=cx-cutW/2,sourceY=cy-cutH/2;
+  // 目的範圍略大於出血框，避免模糊濾鏡在畫布外緣混入透明像素。
+  const destinationX=cx-bleedW/2-blurPx;
+  const destinationY=cy-bleedH/2-blurPx;
+  const destinationW=bleedW+2*blurPx;
+  const destinationH=bleedH+2*blurPx;
+  blurredCtx.save();
+  if(typeof blurredCtx.filter==='string'){
+    blurredCtx.filter=`blur(${blurPx}px)`;
+    blurredCtx.drawImage(
+      canvas,sourceX,sourceY,cutW,cutH,
+      destinationX,destinationY,destinationW,destinationH
+    );
+  }else{
+    // 舊瀏覽器沒有 Canvas filter 時，以多次位移疊圖近似柔化，仍不回退到鏡射補邊。
+    const offsets=[-blurPx*0.55,0,blurPx*0.55];
+    blurredCtx.globalAlpha=1/(offsets.length*offsets.length);
+    for(const offsetY of offsets){
+      for(const offsetX of offsets){
+        blurredCtx.drawImage(
+          canvas,sourceX,sourceY,cutW,cutH,
+          destinationX+offsetX,destinationY+offsetY,destinationW,destinationH
+        );
+      }
+    }
+  }
+  blurredCtx.restore();
+  try{return blurredCtx.getImageData(0,0,W,H).data;}catch(e){return null;}
+}
 function lunyMirrorPhotoEdgeCoverage(sourceData,W,H,cx,cy,cutW,cutH,corner,band){
   const halfW=cutW/2,halfH=cutH/2;
   const positions=48;
@@ -1139,6 +1180,9 @@ function lunyApplyRoundRectHybridBleed(ctx,canvas,cm2px,cutW,cutH,bleedW,bleedH,
   const photoCoverage=photoTextureMode
     ?lunyMirrorPhotoEdgeCoverage(pixels,W,H,cx,cy,cutW,cutH,corner,band)
     :null;
+  const blurredPhotoPixels=photoTextureMode
+    ?lunyMirrorCreateBlurredPhotoFill(canvas,cx,cy,cutW,cutH,bleedW,bleedH,cm2px)
+    :null;
   const edgeCache=new Map();
   const minX=Math.max(0,Math.floor(cx-bleedHalfW));
   const maxX=Math.min(W-1,Math.ceil(cx+bleedHalfW));
@@ -1184,10 +1228,19 @@ function lunyApplyRoundRectHybridBleed(ctx,canvas,cm2px,cutW,cutH,bleedW,bleedH,
       const seamFadePx=Math.max(1,0.008*cm2px);
       const seamWeight=Math.max(0,1-cutDistance/seamFadePx);
       const isCornerNormal=Math.abs(nx)>0.01&&Math.abs(ny)>0.01;
+      const index=(y*W+x)*4;
+      if(photoTextureMode&&blurredPhotoPixels){
+        // 裁切線外極窄範圍保留原始邊界，之後快速過渡至模糊背景。
+        // 這裡不再複製人物肢體，因此不會形成假手臂、鏡射折返或水平色條。
+        pixels[index]=Math.round(blurredPhotoPixels[index]*(1-seamWeight)+mirror[0]*seamWeight);
+        pixels[index+1]=Math.round(blurredPhotoPixels[index+1]*(1-seamWeight)+mirror[1]*seamWeight);
+        pixels[index+2]=Math.round(blurredPhotoPixels[index+2]*(1-seamWeight)+mirror[2]*seamWeight);
+        pixels[index+3]=255;
+        continue;
+      }
       const adaptiveTextureWeight=Math.max(0.18,Math.min(0.72,0.18+edge.textureWeight*6.75));
       const photoWeight=isCornerNormal?0.16:adaptiveTextureWeight;
       const weight=photoTextureMode?Math.max(seamWeight,photoWeight):Math.max(seamWeight,edge.textureWeight);
-      const index=(y*W+x)*4;
       pixels[index]=Math.round(edge.r*(1-weight)+mirror[0]*weight);
       pixels[index+1]=Math.round(edge.g*(1-weight)+mirror[1]*weight);
       pixels[index+2]=Math.round(edge.b*(1-weight)+mirror[2]*weight);
@@ -1223,6 +1276,9 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
   if(photoTextureMode&&lunyMirrorPhotoShapeBleedCovered(
     pixels,W,H,shapeValue,cx,cy,cutW,cutH,bleedW,bleedH,cm2px
   ))return;
+  const blurredPhotoPixels=photoTextureMode
+    ?lunyMirrorCreateBlurredPhotoFill(canvas,cx,cy,cutW,cutH,bleedW,bleedH,cm2px)
+    :null;
   let profiles;
   try{
     profiles=lunyMirrorBuildProfiles(pixels,W,H,shapeValue,cx,cy,cutW,cutH,bleedW,bleedH,cm2px,band);
@@ -1257,8 +1313,13 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
         colorRadius,outerRadius,edgeR,edgeG,edgeB,
         smoothEdgeR,smoothEdgeG,smoothEdgeB,textureWeight,directionalSlope
       }=baseProfile;
-      if(radius<colorRadius||radius>outerRadius+0.6)continue;
       const index=(y*W+x)*4;
+      // 幾何裁切線與抗鋸齒像素中心可能相差不到 1px；只補該範圍內原本透明的接縫像素，
+      // 不碰任何不透明的裁切線內成品內容。
+      const transparentSeamPixel=photoTextureMode
+        &&pixels[index+3]<220
+        &&radius>=colorRadius-1;
+      if((radius<colorRadius&&!transparentSeamPixel)||radius>outerRadius+0.6)continue;
 
       const ux=dx/radius,uy=dy/radius;
       const outwardDistance=Math.max(0,radius-colorRadius);
@@ -1296,6 +1357,13 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
       const backgroundB=edgeB*(1-diffusion)+smoothEdgeB*diffusion;
       const seamFadePx=Math.max(1,0.012*cm2px); // 裁切線外約 0.12mm 內優先保留原始接縫
       const seamWeight=Math.max(0,1-outwardDistance/seamFadePx);
+      if(photoTextureMode&&blurredPhotoPixels){
+        pixels[index]=Math.round(blurredPhotoPixels[index]*(1-seamWeight)+mirror[0]*seamWeight);
+        pixels[index+1]=Math.round(blurredPhotoPixels[index+1]*(1-seamWeight)+mirror[1]*seamWeight);
+        pixels[index+2]=Math.round(blurredPhotoPixels[index+2]*(1-seamWeight)+mirror[2]*seamWeight);
+        pixels[index+3]=255;
+        continue;
+      }
       const photoWeight=Math.max(0.28,Math.min(0.86,
         0.28+textureWeight*4.5+Math.min(0.16,Math.abs(directionalSlope)*0.16)
       ));
