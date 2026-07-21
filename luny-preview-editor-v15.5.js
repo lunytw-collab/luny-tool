@@ -1,3 +1,4 @@
+/* LUNY v7.9.44.9：保留既有缺邊判斷；矩形照片只在高可信輪廓處估算裁切線內 1mm 的局部斜率，讓手臂／袖口沿原方向延伸至外側 2mm，背景維持平順補色。 */
 /* LUNY v7.9.44.8：保留既有缺邊判斷；矩形照片缺邊改由裁切線同位置的邊界像素向外鋪設後柔化，避免縮放模糊圖造成手臂高度錯位。 */
 /* LUNY v7.9.44.7：保留 v7.9.44.6 的缺邊判斷；只有真正透明／缺圖的照片邊，改用縮放後的模糊背景填滿外側 2mm，裁切線內完全不變。 */
 /* LUNY v7.9.44.6：圓形／橢圓形照片新增既有出血保留；照片原本已鋪滿外圈時不再重製。矩形穩定背景降低紋理延展比例，避免頂部直條紋。 */
@@ -1202,6 +1203,135 @@ function lunyMirrorPhotoEdgeIsCovered(coverage,nx,ny){
   const verticalCovered=!vertical||(ny<0?coverage.top:coverage.bottom);
   return horizontalCovered&&verticalCovered;
 }
+function lunyMirrorEstimateTensorDirection(sourceData,W,H,qx,qy,nx,ny,band){
+  const tx=-ny,ty=nx;
+  const depthSteps=[0.18,0.38,0.60,0.82,1.00];
+  const tangentSteps=[-0.66,-0.44,-0.22,0,0.22,0.44,0.66];
+  const gradientStep=Math.max(1,Math.min(2.5,band*0.08));
+  let jNN=0,jNT=0,jTT=0,count=0;
+  for(const depthRatio of depthSteps){
+    const depth=depthRatio*band;
+    for(const tangentRatio of tangentSteps){
+      const tangent=tangentRatio*band;
+      const x=qx-nx*depth+tx*tangent;
+      const y=qy-ny*depth+ty*tangent;
+      const outward=bilinearSampleRGBA(
+        sourceData,W,H,x+nx*gradientStep,y+ny*gradientStep
+      );
+      const inward=bilinearSampleRGBA(
+        sourceData,W,H,x-nx*gradientStep,y-ny*gradientStep
+      );
+      const tangentPlus=bilinearSampleRGBA(
+        sourceData,W,H,x+tx*gradientStep,y+ty*gradientStep
+      );
+      const tangentMinus=bilinearSampleRGBA(
+        sourceData,W,H,x-tx*gradientStep,y-ty*gradientStep
+      );
+      if(outward[3]<24||inward[3]<24||tangentPlus[3]<24||tangentMinus[3]<24)continue;
+      for(let channel=0;channel<3;channel++){
+        const gN=(outward[channel]-inward[channel])/(2*gradientStep);
+        const gT=(tangentPlus[channel]-tangentMinus[channel])/(2*gradientStep);
+        jNN+=gN*gN;jNT+=gN*gT;jTT+=gT*gT;
+      }
+      count++;
+    }
+  }
+  if(count<12)return 0;
+  const trace=jNN+jTT;
+  const discriminant=Math.sqrt(Math.max(0,(jNN-jTT)*(jNN-jTT)+4*jNT*jNT));
+  const lambda1=(trace+discriminant)/2;
+  const lambda2=(trace-discriminant)/2;
+  const coherence=(lambda1-lambda2)/Math.max(1e-6,lambda1+lambda2);
+  const energy=lambda1/count;
+  if(coherence<0.58||energy<7)return 0;
+  const angle=0.5*Math.atan2(2*jNT,jNN-jTT);
+  const gradientN=Math.cos(angle),gradientT=Math.sin(angle);
+  // 輪廓幾乎平行於裁切線時，不做不穩定的大幅方向推算。
+  if(Math.abs(gradientT)<0.28)return 0;
+  const confidence=Math.max(0,Math.min(1,(coherence-0.58)/0.28))
+    *Math.max(0,Math.min(1,(energy-7)/55));
+  const slope=-(gradientN/gradientT)*confidence;
+  return Math.max(-1.25,Math.min(1.25,slope));
+}
+function lunyMirrorExpandTensorDirections(raw,start,end,cm2px){
+  const expanded=new Float32Array(raw.length);
+  const result=new Float32Array(raw.length);
+  start=Math.max(0,Math.ceil(start));
+  end=Math.min(raw.length-1,Math.floor(end));
+  // 外側最遠會位移 2mm；方向場也必須覆蓋同等距離，否則輪廓離開原位置後
+  // 會在半途回到水平補色，形成手臂末端的色條。
+  const spread=Math.max(2,Math.round(0.22*cm2px));
+  const smooth=Math.max(1,Math.round(0.02*cm2px));
+  for(let position=start;position<=end;position++){
+    let bestValue=0,bestScore=0;
+    for(let sample=Math.max(start,position-spread);sample<=Math.min(end,position+spread);sample++){
+      const decay=1-Math.abs(sample-position)/(spread+1);
+      const score=Math.abs(raw[sample])*decay;
+      if(score>bestScore){bestScore=score;bestValue=raw[sample]*decay;}
+    }
+    expanded[position]=bestValue;
+  }
+  for(let position=start;position<=end;position++){
+    let total=0,totalWeight=0;
+    for(let sample=Math.max(start,position-smooth);sample<=Math.min(end,position+smooth);sample++){
+      const weight=1-Math.abs(sample-position)/(smooth+1);
+      total+=expanded[sample]*weight;totalWeight+=weight;
+    }
+    result[position]=totalWeight?total/totalWeight:expanded[position];
+  }
+  return result;
+}
+function lunyMirrorBuildTensorDirections(sourceData,W,H,cx,cy,cutW,cutH,corner,band,cm2px,coverage){
+  const halfW=cutW/2,halfH=cutH/2;
+  const minX=cx-halfW+corner,maxX=cx+halfW-corner;
+  const minY=cy-halfH+corner,maxY=cy+halfH-corner;
+  const sampleStep=Math.max(1,Math.round(0.02*cm2px)); // 每 0.2mm 估算一次，再線性補齊
+  function build(length,start,end,pointAt){
+    const raw=new Float32Array(length);
+    const first=Math.max(0,Math.ceil(start)),last=Math.min(length-1,Math.floor(end));
+    const sampled=[];
+    for(let position=first;position<=last;position+=sampleStep){
+      const point=pointAt(position);
+      sampled.push({position,value:lunyMirrorEstimateTensorDirection(
+        sourceData,W,H,point.qx,point.qy,point.nx,point.ny,band
+      )});
+    }
+    if(!sampled.length||sampled[sampled.length-1].position!==last){
+      const point=pointAt(last);
+      sampled.push({position:last,value:lunyMirrorEstimateTensorDirection(
+        sourceData,W,H,point.qx,point.qy,point.nx,point.ny,band
+      )});
+    }
+    for(let index=0;index<sampled.length-1;index++){
+      const from=sampled[index],to=sampled[index+1];
+      const width=Math.max(1,to.position-from.position);
+      for(let position=from.position;position<=to.position;position++){
+        const ratio=(position-from.position)/width;
+        raw[position]=from.value*(1-ratio)+to.value*ratio;
+      }
+    }
+    return lunyMirrorExpandTensorDirections(raw,start,end,cm2px);
+  }
+  return{
+    top:coverage.top?null:build(W,minX,maxX,x=>({qx:x,qy:cy-halfH,nx:0,ny:-1})),
+    right:coverage.right?null:build(H,minY,maxY,y=>({qx:cx+halfW,qy:y,nx:1,ny:0})),
+    bottom:coverage.bottom?null:build(W,minX,maxX,x=>({qx:x,qy:cy+halfH,nx:0,ny:1})),
+    left:coverage.left?null:build(H,minY,maxY,y=>({qx:cx-halfW,qy:y,nx:-1,ny:0}))
+  };
+}
+function lunyMirrorTensorSlope(directions,qx,qy,nx,ny){
+  if(Math.abs(nx)>0.01&&Math.abs(ny)>0.01)return 0;
+  let profile,position;
+  if(Math.abs(nx)>0.01){
+    profile=nx<0?directions.left:directions.right;
+    position=Math.round(qy);
+  }else{
+    profile=ny<0?directions.top:directions.bottom;
+    position=Math.round(qx);
+  }
+  if(!profile)return 0;
+  return profile[Math.max(0,Math.min(profile.length-1,position))]||0;
+}
 function lunyApplyRoundRectHybridBleed(ctx,canvas,cm2px,cutW,cutH,bleedW,bleedH,band){
   const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2;
   const cutHalfW=cutW/2,cutHalfH=cutH/2;
@@ -1216,6 +1346,11 @@ function lunyApplyRoundRectHybridBleed(ctx,canvas,cm2px,cutW,cutH,bleedW,bleedH,
     :null;
   const blurredPhotoPixels=photoTextureMode
     ?lunyMirrorCreateBlurredPhotoFill(canvas,cx,cy,cutW,cutH,bleedW,bleedH,cm2px,'roundrect')
+    :null;
+  const photoDirections=photoTextureMode
+    ?lunyMirrorBuildTensorDirections(
+      pixels,W,H,cx,cy,cutW,cutH,corner,band,cm2px,photoCoverage
+    )
     :null;
   const edgeCache=new Map();
   const minX=Math.max(0,Math.floor(cx-bleedHalfW));
@@ -1254,10 +1389,15 @@ function lunyApplyRoundRectHybridBleed(ctx,canvas,cm2px,cutW,cutH,bleedW,bleedH,
       const mirrorDistance=photoTextureMode
         ?Math.max(0.75,band*0.12)
         :Math.max(0.75,lunyMirrorReflectDistance(cutDistance,band));
+      const directionalSlope=photoDirections
+        ?lunyMirrorTensorSlope(photoDirections,qx,qy,nx,ny)
+        :0;
+      const tx=-ny,ty=nx;
+      const mirrorShift=directionalSlope*(cutDistance+mirrorDistance);
       const mirror=bilinearSampleRGBA(
         pixels,W,H,
-        qx-nx*mirrorDistance,
-        qy-ny*mirrorDistance
+        qx-nx*mirrorDistance-tx*mirrorShift,
+        qy-ny*mirrorDistance-ty*mirrorShift
       );
       const seamFadePx=Math.max(1,0.06*cm2px); // 外側約 0.6mm 內平順銜接，裁切線內不變
       const seamWeight=Math.max(0,1-cutDistance/seamFadePx);
@@ -1265,9 +1405,14 @@ function lunyApplyRoundRectHybridBleed(ctx,canvas,cm2px,cutW,cutH,bleedW,bleedH,
       const index=(y*W+x)*4;
       if(photoTextureMode&&blurredPhotoPixels){
         // 模糊層已由同一位置的邊界像素向外鋪設，因此可保持手臂高度並平順接上。
-        pixels[index]=Math.round(blurredPhotoPixels[index]*(1-seamWeight)+mirror[0]*seamWeight);
-        pixels[index+1]=Math.round(blurredPhotoPixels[index+1]*(1-seamWeight)+mirror[1]*seamWeight);
-        pixels[index+2]=Math.round(blurredPhotoPixels[index+2]*(1-seamWeight)+mirror[2]*seamWeight);
+        const blurredShift=directionalSlope*cutDistance;
+        const blurredSample=bilinearSampleRGBA(
+          blurredPhotoPixels,W,H,
+          x-tx*blurredShift,y-ty*blurredShift
+        );
+        pixels[index]=Math.round(blurredSample[0]*(1-seamWeight)+mirror[0]*seamWeight);
+        pixels[index+1]=Math.round(blurredSample[1]*(1-seamWeight)+mirror[1]*seamWeight);
+        pixels[index+2]=Math.round(blurredSample[2]*(1-seamWeight)+mirror[2]*seamWeight);
         pixels[index+3]=255;
         continue;
       }
