@@ -1,3 +1,4 @@
+/* LUNY v7.9.44.10：矩形照片將同一側的高可信輪廓拆成獨立方向軌跡，手臂／袖口各自延伸且不互相擴散；缺邊判斷與裁切線內內容維持不變。 */
 /* LUNY v7.9.44.9：保留既有缺邊判斷；矩形照片只在高可信輪廓處估算裁切線內 1mm 的局部斜率，讓手臂／袖口沿原方向延伸至外側 2mm，背景維持平順補色。 */
 /* LUNY v7.9.44.8：保留既有缺邊判斷；矩形照片缺邊改由裁切線同位置的邊界像素向外鋪設後柔化，避免縮放模糊圖造成手臂高度錯位。 */
 /* LUNY v7.9.44.7：保留 v7.9.44.6 的缺邊判斷；只有真正透明／缺圖的照片邊，改用縮放後的模糊背景填滿外側 2mm，裁切線內完全不變。 */
@@ -1254,32 +1255,53 @@ function lunyMirrorEstimateTensorDirection(sourceData,W,H,qx,qy,nx,ny,band){
   return Math.max(-1.25,Math.min(1.25,slope));
 }
 function lunyMirrorExpandTensorDirections(raw,start,end,cm2px){
-  const expanded=new Float32Array(raw.length);
-  const result=new Float32Array(raw.length);
   start=Math.max(0,Math.ceil(start));
   end=Math.min(raw.length-1,Math.floor(end));
-  // 外側最遠會位移 2mm；方向場也必須覆蓋同等距離，否則輪廓離開原位置後
-  // 會在半途回到水平補色，形成手臂末端的色條。
-  const spread=Math.max(2,Math.round(0.22*cm2px));
-  const smooth=Math.max(1,Math.round(0.02*cm2px));
-  for(let position=start;position<=end;position++){
-    let bestValue=0,bestScore=0;
-    for(let sample=Math.max(start,position-spread);sample<=Math.min(end,position+spread);sample++){
-      const decay=1-Math.abs(sample-position)/(spread+1);
-      const score=Math.abs(raw[sample])*decay;
-      if(score>bestScore){bestScore=score;bestValue=raw[sample]*decay;}
+  const contours=[];
+  const activeThreshold=0.055;
+  const peakThreshold=0.28;
+  const maxGap=Math.max(1,Math.round(0.012*cm2px));
+  let position=start;
+
+  // 將一維邊界方向拆成數個輪廓群。不同正負方向、或中間有明顯空白的群組
+  // 不再互相傳遞斜率，避免上、下兩段手臂被同一大片方向場一起拉動。
+  while(position<=end){
+    while(position<=end&&Math.abs(raw[position])<activeThreshold)position++;
+    if(position>end)break;
+    const sign=raw[position]<0?-1:1;
+    const groupStart=position;
+    let groupEnd=position,lastActive=position,peak=0;
+    for(;position<=end;position++){
+      const value=raw[position];
+      const active=Math.abs(value)>=activeThreshold&&Math.sign(value)===sign;
+      if(active){lastActive=position;groupEnd=position;peak=Math.max(peak,Math.abs(value));continue;}
+      if(position-lastActive<=maxGap)continue;
+      break;
     }
-    expanded[position]=bestValue;
-  }
-  for(let position=start;position<=end;position++){
-    let total=0,totalWeight=0;
-    for(let sample=Math.max(start,position-smooth);sample<=Math.min(end,position+smooth);sample++){
-      const weight=1-Math.abs(sample-position)/(smooth+1);
-      total+=expanded[sample]*weight;totalWeight+=weight;
+    groupEnd=lastActive;
+    if(peak<peakThreshold)continue;
+
+    let weightedPosition=0,weightedSlope=0,totalWeight=0;
+    for(let sample=groupStart;sample<=groupEnd;sample++){
+      const value=raw[sample];
+      if(Math.sign(value)!==sign||Math.abs(value)<activeThreshold)continue;
+      const weight=Math.pow(Math.abs(value),2.2);
+      weightedPosition+=sample*weight;
+      weightedSlope+=value*weight;
+      totalWeight+=weight;
     }
-    result[position]=totalWeight?total/totalWeight:expanded[position];
+    if(!totalWeight)continue;
+    const center=weightedPosition/totalWeight;
+    const slope=Math.max(-1.2,Math.min(1.2,weightedSlope/totalWeight));
+    if(Math.abs(slope)<0.12)continue;
+    const detectedHalf=Math.max(center-groupStart,groupEnd-center);
+    const radius=Math.max(
+      0.10*cm2px,
+      Math.min(0.22*cm2px,detectedHalf+0.08*cm2px)
+    );
+    contours.push({center,slope,radius,peak});
   }
-  return result;
+  return{raw,contours,cm2px,start,end,mappingCache:new Map()};
 }
 function lunyMirrorBuildTensorDirections(sourceData,W,H,cx,cy,cutW,cutH,corner,band,cm2px,coverage){
   const halfW=cutW/2,halfH=cutH/2;
@@ -1319,7 +1341,37 @@ function lunyMirrorBuildTensorDirections(sourceData,W,H,cx,cy,cutW,cutH,corner,b
     left:coverage.left?null:build(H,minY,maxY,y=>({qx:cx-halfW,qy:y,nx:-1,ny:0}))
   };
 }
-function lunyMirrorTensorSlope(directions,qx,qy,nx,ny){
+function lunyMirrorTensorControlPoints(profile,alongSign,depth){
+  const quantizedDepth=Math.max(0.5,Math.round(depth*2)/2);
+  const cacheKey=(alongSign<0?'n':'p')+'|'+quantizedDepth;
+  const cached=profile.mappingCache.get(cacheKey);
+  if(cached)return cached;
+  const points=[{source:profile.start,destination:profile.start}];
+  for(const contour of profile.contours){
+    points.push({
+      source:contour.center,
+      destination:contour.center+alongSign*contour.slope*quantizedDepth
+    });
+  }
+  points.push({source:profile.end,destination:profile.end});
+  points.sort((a,b)=>a.source-b.source);
+  for(let index=1;index<points.length;index++){
+    const minimumGap=Math.max(0.5,(points[index].source-points[index-1].source)*0.12);
+    points[index].destination=Math.max(
+      points[index].destination,points[index-1].destination+minimumGap
+    );
+  }
+  for(let index=points.length-2;index>=0;index--){
+    const minimumGap=Math.max(0.5,(points[index+1].source-points[index].source)*0.12);
+    points[index].destination=Math.min(
+      points[index].destination,points[index+1].destination-minimumGap
+    );
+  }
+  const mapping={points,depth:quantizedDepth};
+  profile.mappingCache.set(cacheKey,mapping);
+  return mapping;
+}
+function lunyMirrorTensorSlope(directions,qx,qy,nx,ny,cutDistance,mirrorDistance){
   if(Math.abs(nx)>0.01&&Math.abs(ny)>0.01)return 0;
   let profile,position;
   if(Math.abs(nx)>0.01){
@@ -1330,7 +1382,25 @@ function lunyMirrorTensorSlope(directions,qx,qy,nx,ny){
     position=Math.round(qx);
   }
   if(!profile)return 0;
-  return profile[Math.max(0,Math.min(profile.length-1,position))]||0;
+  const alongSign=Math.abs(nx)>0.01?nx:-ny;
+  if(!profile.contours.length)return 0;
+  const depth=Math.max(0.5,cutDistance+(mirrorDistance||0));
+  // 方向軌跡當作獨立控制點，再以單調座標映射連接控制點；這可避免局部位移
+  // 場折返而產生三角缺口，同時保留每條手臂／袖口自己的斜率。
+  const mapping=lunyMirrorTensorControlPoints(profile,alongSign,depth);
+  const points=mapping.points;
+  if(position<=points[0].destination||position>=points[points.length-1].destination)return 0;
+  let from=points[0],to=points[points.length-1];
+  for(let index=0;index<points.length-1;index++){
+    if(position<=points[index+1].destination){from=points[index];to=points[index+1];break;}
+  }
+  const ratio=Math.max(0,Math.min(1,
+    (position-from.destination)/Math.max(0.5,to.destination-from.destination)
+  ));
+  const sourcePosition=from.source+(to.source-from.source)*ratio;
+  return Math.max(-1.2,Math.min(1.2,
+    (position-sourcePosition)/(alongSign*mapping.depth)
+  ));
 }
 function lunyApplyRoundRectHybridBleed(ctx,canvas,cm2px,cutW,cutH,bleedW,bleedH,band){
   const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2;
@@ -1390,7 +1460,7 @@ function lunyApplyRoundRectHybridBleed(ctx,canvas,cm2px,cutW,cutH,bleedW,bleedH,
         ?Math.max(0.75,band*0.12)
         :Math.max(0.75,lunyMirrorReflectDistance(cutDistance,band));
       const directionalSlope=photoDirections
-        ?lunyMirrorTensorSlope(photoDirections,qx,qy,nx,ny)
+        ?lunyMirrorTensorSlope(photoDirections,qx,qy,nx,ny,cutDistance,mirrorDistance)
         :0;
       const tx=-ny,ty=nx;
       const mirrorShift=directionalSlope*(cutDistance+mirrorDistance);
