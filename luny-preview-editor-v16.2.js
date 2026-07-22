@@ -1,6 +1,6 @@
 /* LUNY v7.9.45：客製形狀改用單一母輪廓生成刀線；先去雜點、補小缺口、以 HelpShape 式加粗連接分離物件，再只取最外層封閉輪廓。 */
 /* v7.9.45：內側參考線、實際刀線與出血邊界都從同一個淨化後遮罩做等距外擴；刀線距圖案至少 2mm，出血再距刀線 2mm。 */
-/* v7.9.45：正式印刷檔的純洋紅 1pt 辨識線改畫在實際刀線，不再把最外圈出血邊界當成刀線。 */
+/* v7.9.45：正式印刷檔的純洋紅 1pt 辨識線維持在最外圈出血邊界，供後續 Adobe 腳本讀取。 */
 /* LUNY v7.9.44.10：矩形照片將同一側的高可信輪廓拆成獨立方向軌跡，手臂／袖口各自延伸且不互相擴散；缺邊判斷與裁切線內內容維持不變。 */
 /* LUNY v7.9.44.9：保留既有缺邊判斷；矩形照片只在高可信輪廓處估算裁切線內 1mm 的局部斜率，讓手臂／袖口沿原方向延伸至外側 2mm，背景維持平順補色。 */
 /* LUNY v7.9.44.8：保留既有缺邊判斷；矩形照片缺邊改由裁切線同位置的邊界像素向外鋪設後柔化，避免縮放模糊圖造成手臂高度錯位。 */
@@ -16,9 +16,9 @@
 /* LUNY v7.9.42：印刷檔補邊固定取裁切線內側 1mm 像素，向外填滿裁切線外側 2mm；裁切線內成品內容不變。 */
 /* LUNY v7.9.41：印刷檔補邊曾改為略過白邊並從有色邊界起算，v7.9.42 已改由裁切線固定起算。 */
 /* LUNY v7.9.40：白邊警示改為即時狀態；滿版填色後立即消失，並避免延遲偵測寫回舊結果。 */
-/* LUNY preview editor v18：客製形狀印刷檔四周增加單邊 1mm 白色技術留白，保留完整的辨識線。v7.9.45 起辨識線改位於實際刀線。 */
+/* LUNY preview editor v18：客製形狀印刷檔四周增加單邊 1mm 白色技術留白，保留完整的最外圈出血辨識線。 */
 /* v18：技術留白只套用於客製形狀印刷檔；預覽、切割檔、原圖下載與一般形狀皆不變。 */
-/* LUNY preview editor v17：曾於最外圈出血線加入內側對齊辨識線；v7.9.45 已改為實際刀線上的純洋紅 1pt 辨識線。 */
+/* LUNY preview editor v17：於最外圈出血線加入內側對齊辨識線；v7.9.45 維持純洋紅 1pt 供 Adobe 腳本讀取。 */
 /* v17 歷史做法：模擬 Illustrator「筆畫內側對齊」；辨識線外緣曾貼齊出血線。 */
 /* LUNY preview editor v15：正式輸出動態解析度（≤10cm 500PPI／≤20cm 400PPI／>20cm 300PPI）＋輸出像素安全上限 */
 /* LUNY preview editor v13：客製形狀長邊計價／實際比例尺寸／畫布鎖定／露白檢查 */
@@ -2103,8 +2103,8 @@ function drawPreview(){
 window.drawPreview=drawPreview;function resizePreviewCanvas(){const size=lunyGetEffectiveSizeCm();const wcm=size.widthCm;const hcm=size.heightCm;const nextW=Math.round((wcm+2*BLEED_CM)*CM2PX),nextH=Math.round((hcm+2*BLEED_CM)*CM2PX);if(cG.width!==nextW)cG.width=nextW;if(cG.height!==nextH)cG.height=nextH;}function renderExportCanvas(includeGuides,useFullImage,productionMode){const size=lunyGetEffectiveSizeCm();const spec=lunyResolveExportSpec(size.widthCm,size.heightCm,!!productionMode);const exportCm2Px=spec.actualPpi/2.54;const out=document.createElement('canvas');out.width=spec.pxW;out.height=spec.pxH;out.__lunyExportPpi=spec.actualPpi;out.__lunyExportSpec=spec;const octx=out.getContext('2d');octx.imageSmoothingEnabled=true;octx.imageSmoothingQuality='high';drawAll(octx,out,exportCm2Px,{includeGuides:!!includeGuides,includeSelection:false,showQRTestMark:showQRTest,showMinText:showTestText,isPreview:false,useFullImage:!!useFullImage});return out;}function addExportShapePath(ctx,shapeValue,cx,cy,w,h,cm2px){if(shapeValue==='custom'&&lunyCustomAddPath(ctx,w,h,cm2px))return;const s=shapeValue;const rpx=0.1*cm2px;if(s==='circle'){const r=Math.min(w,h)/2;ctx.arc(cx,cy,r,0,Math.PI*2);}else if(s==='roundrect'){const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}else if(s==='ellipse'){ctx.ellipse(cx,cy,w/2,h/2,0,0,Math.PI*2);}else if(s==='arch'){const x=cx-w/2;const y=cy-h/2;archPath(ctx,x,y,w,h,cm2px);ctx.closePath();}else{const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}}function clearOutsideExportShape(ctx,W,H,shapeValue,cx,cy,bleedW,bleedH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();ctx.rect(0,0,W,H);addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);ctx.fill('evenodd');ctx.restore();}function drawPrintWhiteEdgeArea(ctx,shapeValue,cx,cy,bleedW,bleedH,safeW,safeH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);addExportShapePath(ctx,shapeValue,cx,cy,safeW,safeH,cm2px);ctx.fill('evenodd');ctx.restore();}function lunyCustomAddTechnicalCutPath(ctx,baseW,baseH,cm2px,technicalMarginPx){
   const data=lunyCustomComputeCutline();
   if(!data)return false;
-  /* 2mm = 實際刀線；4mm 只是出血外邊界，不輸出成刀線。 */
-  const normalized=data.pointsByOffset[2]||data.pointsByOffset[lunyCustomNearestOffset(2)];
+  /* 4mm = 最外圈出血邊界；辨識線供後續 Adobe 腳本讀取。 */
+  const normalized=data.pointsByOffset[4]||data.pointsByOffset[lunyCustomNearestOffset(4)];
   if(!normalized||normalized.length<3)return false;
   const b=BLEED_CM*cm2px;
   const baseCutW=Math.max(1,baseW-2*b),baseCutH=Math.max(1,baseH-2*b);
@@ -2122,7 +2122,7 @@ function drawCustomCutlineDetectionLine(ctx,baseW,baseH,cm2px,exportPpi,technica
   ctx.beginPath();
   const ok=lunyCustomAddTechnicalCutPath(ctx,baseW,baseH,cm2px,technicalMarginPx);
   if(ok){
-    /* Canvas 無內側描邊：裁切於實際刀線內，再用 2pt 置中描邊，留下的內側半邊即為純洋紅 1pt。 */
+    /* Canvas 無內側描邊：裁切於出血路徑內，再用 2pt 置中描邊，留下的內側半邊即為純洋紅 1pt。 */
     ctx.save();ctx.clip();ctx.strokeStyle='#FF00FF';ctx.lineWidth=(Number(exportPpi)||300)*(2/72);
     ctx.beginPath();lunyCustomAddTechnicalCutPath(ctx,baseW,baseH,cm2px,technicalMarginPx);ctx.stroke();ctx.restore();
   }
