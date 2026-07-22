@@ -1,3 +1,5 @@
+/* LUNY v7.9.46：客製形狀刀線提高輪廓分析解析度，改用物理尺寸 0.22mm 簡化並執行兩次平滑，減少像素階梯與小幅抖動。 */
+/* v7.9.46：只調整輪廓平滑；2mm 刀線、2mm 出血、50°最小角度與最外圈 #FF00FF 1pt 腳本辨識線均保持不變。 */
 /* LUNY v7.9.45：客製形狀改用單一母輪廓生成刀線；先去雜點、補小缺口、以 HelpShape 式加粗連接分離物件，再只取最外層封閉輪廓。 */
 /* v7.9.45：內側參考線、實際刀線與出血邊界都從同一個淨化後遮罩做等距外擴；刀線距圖案至少 2mm，出血再距刀線 2mm。 */
 /* v7.9.45：正式印刷檔的純洋紅 1pt 辨識線維持在最外圈出血邊界，供後續 Adobe 腳本讀取。 */
@@ -113,10 +115,12 @@ window.LUNY_getExportResolutionInfo=function(){
  */
 const LUNY_CUSTOM_OFFSET_CM=0.2;
 const LUNY_CUSTOM_MIN_ANGLE_DEG=50;
-const LUNY_CUSTOM_ANALYSIS_MAX=560;
+const LUNY_CUSTOM_ANALYSIS_MAX=720;
 const LUNY_CUSTOM_BG_TOLERANCE=42;
 const LUNY_CUSTOM_CLOSE_GAP_MM=0.8;
 const LUNY_CUSTOM_BRIDGE_WARN_MM=6;
+const LUNY_CUSTOM_SIMPLIFY_MM=0.22;
+const LUNY_CUSTOM_SMOOTHING_PASSES=2;
 const LUNY_CUSTOM_CONTOUR_OFFSETS_MM=Object.freeze([0,1,2,4]);
 const __lunyCustomSourceMaskCache=new WeakMap();
 const __lunyCustomObjectIds=new WeakMap();
@@ -402,9 +406,10 @@ function lunyCustomContourFromRequiredMask(required,w,h,pxPerMm){
   for(const extraMm of extraOffsetsMm){
     const working=extraMm>0?lunyCustomDilate(required,w,h,extraMm*pxPerMm):required;
     let points=lunyCustomLargestOuterLoop(working,w,h);if(points.length<3)continue;
-    points=lunyCustomSimplifyClosed(points,Math.max(.35,.09*pxPerMm));
+    /* 用毫米而不是固定像素設定簡化量，不同成品尺寸會保持一致的平滑程度。 */
+    points=lunyCustomSimplifyClosed(points,Math.max(.45,LUNY_CUSTOM_SIMPLIFY_MM*pxPerMm));
     if(points.length<3)continue;
-    points=lunyCustomChaikin(points,1);
+    points=lunyCustomChaikin(points,LUNY_CUSTOM_SMOOTHING_PASSES);
     points=lunyCustomRelaxAngles(points,LUNY_CUSTOM_MIN_ANGLE_DEG);
     const raster=lunyCustomRasterize(points,w,h),contains=lunyCustomContainsMask(raster,required);
     if(contains)best=points;
@@ -413,7 +418,7 @@ function lunyCustomContourFromRequiredMask(required,w,h,pxPerMm){
   if(best&&best.length>=3)return best;
   /* 不使用凸包作為常態降級，以免凹形圖案變成大片實心外框。 */
   const fallback=lunyCustomLargestOuterLoop(required,w,h);
-  return fallback.length>=3?lunyCustomSimplifyClosed(fallback,Math.max(.25,.05*pxPerMm)):[];
+  return fallback.length>=3?lunyCustomSimplifyClosed(fallback,Math.max(.35,.1*pxPerMm)):[];
 }
 function lunyCustomBuildOutline(baseMask,w,h,pxPerMm,offsetMm){
   const required=offsetMm>0?lunyCustomDilate(baseMask,w,h,offsetMm*pxPerMm):baseMask;
