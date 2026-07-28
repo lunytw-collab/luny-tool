@@ -1,3 +1,6 @@
+/* LUNY v7.9.48：前端畫布改為依尺寸使用 500／400／300 PPI；常見 10cm 內貼紙以 500 PPI 清晰預覽，大尺寸自動降階避免過重。 */
+/* v7.9.48：畫布顯示尺寸維持原本大小，只增加像素密度；結帳清單縮圖仍固定最高 360px／JPEG 0.76。 */
+/* v7.9.48：預覽區新增說明，明確告知印刷使用上傳原始檔，不會拿畫面預覽縮圖印刷。 */
 /* LUNY v7.9.47：前端預覽改為雙畫質渲染；拖曳／縮放時使用輕量圖，停止操作後改用原始完整圖片清晰重繪。 */
 /* v7.9.47：加入結帳清單的縮圖獨立鎖定最長邊 360px、JPEG 品質最高 0.76，不隨前端預覽畫質增加負載。 */
 /* LUNY v7.9.46：客製形狀刀線提高輪廓分析解析度，改用物理尺寸 0.22mm 簡化並執行兩次平滑，減少像素階梯與小幅抖動。 */
@@ -53,6 +56,9 @@ function lunyGetTargetExportPpi(widthCm,heightCm){
   if(longSide<=LUNY_EXPORT_SMALL_MAX_CM)return LUNY_EXPORT_PPI_SMALL;
   if(longSide<=LUNY_EXPORT_MEDIUM_MAX_CM)return LUNY_EXPORT_PPI_MEDIUM;
   return LUNY_EXPORT_PPI_LARGE;
+}
+function lunyGetTargetPreviewPpi(widthCm,heightCm){
+  return lunyGetTargetExportPpi(widthCm,heightCm);
 }
 function lunyResolveExportSpec(widthCm,heightCm,productionMode){
   const wcm=Math.max(.01,Number(widthCm)||1),hcm=Math.max(.01,Number(heightCm)||1);
@@ -2107,7 +2113,52 @@ function drawPreview(){
   if(qrBtn)qrBtn.setAttribute('aria-pressed',String(!!showQRTest));
   if(txtBtn)txtBtn.setAttribute('aria-pressed',String(!!showTestText));
 }
-window.drawPreview=drawPreview;function resizePreviewCanvas(){const size=lunyGetEffectiveSizeCm();const wcm=size.widthCm;const hcm=size.heightCm;const nextW=Math.round((wcm+2*BLEED_CM)*CM2PX),nextH=Math.round((hcm+2*BLEED_CM)*CM2PX);if(cG.width!==nextW)cG.width=nextW;if(cG.height!==nextH)cG.height=nextH;}function renderExportCanvas(includeGuides,useFullImage,productionMode){const size=lunyGetEffectiveSizeCm();const spec=lunyResolveExportSpec(size.widthCm,size.heightCm,!!productionMode);const exportCm2Px=spec.actualPpi/2.54;const out=document.createElement('canvas');out.width=spec.pxW;out.height=spec.pxH;out.__lunyExportPpi=spec.actualPpi;out.__lunyExportSpec=spec;const octx=out.getContext('2d');octx.imageSmoothingEnabled=true;octx.imageSmoothingQuality='high';drawAll(octx,out,exportCm2Px,{includeGuides:!!includeGuides,includeSelection:false,showQRTestMark:showQRTest,showMinText:showTestText,isPreview:false,useFullImage:!!useFullImage});return out;}function addExportShapePath(ctx,shapeValue,cx,cy,w,h,cm2px){if(shapeValue==='custom'&&lunyCustomAddPath(ctx,w,h,cm2px))return;const s=shapeValue;const rpx=0.1*cm2px;if(s==='circle'){const r=Math.min(w,h)/2;ctx.arc(cx,cy,r,0,Math.PI*2);}else if(s==='roundrect'){const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}else if(s==='ellipse'){ctx.ellipse(cx,cy,w/2,h/2,0,0,Math.PI*2);}else if(s==='arch'){const x=cx-w/2;const y=cy-h/2;archPath(ctx,x,y,w,h,cm2px);ctx.closePath();}else{const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}}function clearOutsideExportShape(ctx,W,H,shapeValue,cx,cy,bleedW,bleedH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();ctx.rect(0,0,W,H);addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);ctx.fill('evenodd');ctx.restore();}function drawPrintWhiteEdgeArea(ctx,shapeValue,cx,cy,bleedW,bleedH,safeW,safeH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);addExportShapePath(ctx,shapeValue,cx,cy,safeW,safeH,cm2px);ctx.fill('evenodd');ctx.restore();}function lunyCustomAddTechnicalCutPath(ctx,baseW,baseH,cm2px,technicalMarginPx){
+window.drawPreview=drawPreview;
+function resizePreviewCanvas(){
+  const size=lunyGetEffectiveSizeCm();
+  const wcm=Math.max(.01,Number(size.widthCm)||1);
+  const hcm=Math.max(.01,Number(size.heightCm)||1);
+  const targetPpi=lunyGetTargetPreviewPpi(wcm,hcm);
+  const nextCM2PX=targetPpi/2.54;
+  const densityRatio=nextCM2PX/CM2PX;
+
+  // PPI 跨級時，同步換算所有以畫布像素儲存的位置與圖片比例，
+  // 讓 500／400／300 PPI 切換不會改變客戶已排好的實際尺寸與位置。
+  if(Number.isFinite(densityRatio)&&Math.abs(densityRatio-1)>.0001){
+    if(img){
+      scale*=densityRatio;
+      offsetX*=densityRatio;
+      offsetY*=densityRatio;
+    }
+    if(iconImg){
+      iconScale*=densityRatio;
+      iconOffsetX*=densityRatio;
+      iconOffsetY*=densityRatio;
+    }
+    if(textStr){
+      textOffsetX*=densityRatio;
+      textOffsetY*=densityRatio;
+    }
+    CM2PX=nextCM2PX;
+    __lunyCustomLayoutFrame=null;
+    if(typeof lunyCustomInvalidateCutline==='function')lunyCustomInvalidateCutline();
+  }else{
+    CM2PX=nextCM2PX;
+  }
+
+  const nextW=Math.max(1,Math.round((wcm+2*BLEED_CM)*CM2PX));
+  const nextH=Math.max(1,Math.round((hcm+2*BLEED_CM)*CM2PX));
+  if(cG.width!==nextW)cG.width=nextW;
+  if(cG.height!==nextH)cG.height=nextH;
+
+  // 維持原本 300 PPI 時的畫面尺寸，只提高 Canvas 內部像素密度。
+  const displayCM2PX=PREVIEW_PPI/2.54;
+  cG.style.width=Math.max(1,Math.round((wcm+2*BLEED_CM)*displayCM2PX))+'px';
+  cG.style.height='auto';
+  cG.style.maxWidth='100%';
+  cG.dataset.previewPpi=String(targetPpi);
+}
+function renderExportCanvas(includeGuides,useFullImage,productionMode){const size=lunyGetEffectiveSizeCm();const spec=lunyResolveExportSpec(size.widthCm,size.heightCm,!!productionMode);const exportCm2Px=spec.actualPpi/2.54;const out=document.createElement('canvas');out.width=spec.pxW;out.height=spec.pxH;out.__lunyExportPpi=spec.actualPpi;out.__lunyExportSpec=spec;const octx=out.getContext('2d');octx.imageSmoothingEnabled=true;octx.imageSmoothingQuality='high';drawAll(octx,out,exportCm2Px,{includeGuides:!!includeGuides,includeSelection:false,showQRTestMark:showQRTest,showMinText:showTestText,isPreview:false,useFullImage:!!useFullImage});return out;}function addExportShapePath(ctx,shapeValue,cx,cy,w,h,cm2px){if(shapeValue==='custom'&&lunyCustomAddPath(ctx,w,h,cm2px))return;const s=shapeValue;const rpx=0.1*cm2px;if(s==='circle'){const r=Math.min(w,h)/2;ctx.arc(cx,cy,r,0,Math.PI*2);}else if(s==='roundrect'){const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}else if(s==='ellipse'){ctx.ellipse(cx,cy,w/2,h/2,0,0,Math.PI*2);}else if(s==='arch'){const x=cx-w/2;const y=cy-h/2;archPath(ctx,x,y,w,h,cm2px);ctx.closePath();}else{const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}}function clearOutsideExportShape(ctx,W,H,shapeValue,cx,cy,bleedW,bleedH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();ctx.rect(0,0,W,H);addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);ctx.fill('evenodd');ctx.restore();}function drawPrintWhiteEdgeArea(ctx,shapeValue,cx,cy,bleedW,bleedH,safeW,safeH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);addExportShapePath(ctx,shapeValue,cx,cy,safeW,safeH,cm2px);ctx.fill('evenodd');ctx.restore();}function lunyCustomAddTechnicalCutPath(ctx,baseW,baseH,cm2px,technicalMarginPx){
   const data=lunyCustomComputeCutline();
   if(!data)return false;
   /* 4mm = 最外圈出血邊界；辨識線供後續 Adobe 腳本讀取。 */
@@ -3006,6 +3057,17 @@ bg.addEventListener('input',drawPreview);document.querySelectorAll('input[name="
 
 /* LUNY v7.9.32：預覽畫布預設白底，外框灰色。 */
 (function(){
+  function ensurePreviewQualityNotice(canvas){
+    if(!canvas||!canvas.parentElement)return;
+    var notice=document.getElementById('lunyPreviewQualityNotice');
+    if(!notice){
+      notice=document.createElement('div');
+      notice.id='lunyPreviewQualityNotice';
+      notice.style.cssText='max-width:520px;margin:8px auto 4px;padding:9px 12px;border:1px solid #dbe7dd;border-radius:10px;background:#f5faf6;color:#45604a;font-size:12px;line-height:1.55;text-align:center;box-sizing:border-box;';
+      notice.innerHTML='<strong>預覽為螢幕顯示示意</strong><br>正式印刷會使用您上傳的原始檔製作，不會使用這張預覽縮圖；實際清晰度請以解析度檢查結果為準。';
+      canvas.insertAdjacentElement('afterend',notice);
+    }
+  }
   function applyCanvasPresentation(){
     var canvas=document.getElementById('canvasGuides');
     if(!canvas) return;
@@ -3013,6 +3075,8 @@ bg.addEventListener('input',drawPreview);document.querySelectorAll('input[name="
     canvas.style.border='1px solid #d1d5db';
     canvas.style.borderRadius='12px';
     canvas.style.boxSizing='border-box';
+    canvas.style.imageRendering='auto';
+    ensurePreviewQualityNotice(canvas);
   }
   document.addEventListener('DOMContentLoaded', function(){ setTimeout(applyCanvasPresentation,0); });
   window.addEventListener('load', function(){ setTimeout(applyCanvasPresentation,0); setTimeout(applyCanvasPresentation,300); });
