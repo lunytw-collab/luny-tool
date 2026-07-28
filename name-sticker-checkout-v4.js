@@ -13,8 +13,8 @@
       name:"防水貼紙",
       productName:"防水姓名貼",
       materialCode:"waterproof",
-      materialText:"防水貼紙｜生活防水",
-      laminateText:"防水姓名貼固定規格",
+      materialText:"PVC貼紙",
+      laminateText:"霧膜",
       finishMode:"standard_white_border",
       finishText:"一般姓名貼白邊",
       noWhiteBorder:false
@@ -24,8 +24,8 @@
       name:"轉印貼紙",
       productName:"轉印姓名貼",
       materialCode:"transfer",
-      materialText:"轉印貼紙｜固定無白邊｜轉印製程",
-      laminateText:"轉印姓名貼固定無白邊規格",
+      materialText:"PVC貼紙",
+      laminateText:"霧膜",
       finishMode:"no_white_border",
       finishText:"固定無白邊",
       noWhiteBorder:true
@@ -44,7 +44,7 @@
   const PACKAGE_MARKETING_BY_COUNT = {
     1:{label:"單款體驗", averageText:"", savingText:"", freeStorePickupShipping:false},
     2:{label:"", averageText:"平均每入 $350", savingText:"省 $141", freeStorePickupShipping:false},
-    4:{label:"最划算・推薦方案", averageText:"平均每入約 $250", savingText:"現省 $681", freeStorePickupShipping:true}
+    4:{label:"", averageText:"平均每入約 $250", savingText:"現省 $681", freeStorePickupShipping:true}
   };
 
   /* 可直接把正式成品圖／實貼圖網址填入；留空時會顯示內建示意圖。 */
@@ -149,7 +149,7 @@
     const normalized = clampCount(count);
     if(normalized === 1) return "單款體驗";
     if(normalized === 2) return "平均每入 $350｜省 $141";
-    return "<strong>最划算・推薦方案</strong><br>平均每入約 $250｜現省 $681";
+    return "平均每入約 $250｜現省 $681";
   }
   function itemIncrementForIndex(type, index){
     const i = clampStyleIndex(index);
@@ -240,7 +240,10 @@
   }
 
   function getShapeText(shape){
-    return shape === "tanghulu" ? "糖葫蘆形" : "圓角矩形";
+    const key = String(shape || "").trim().toLowerCase();
+    return key === "tanghulu" || key === "沿邊造型" || key === "糖葫蘆形"
+      ? "沿邊造型"
+      : "矩形";
   }
   function getBackgroundText(background){
     if(!background) return "";
@@ -393,8 +396,17 @@
         q.quantity = 144;
         q.widthCm = 2.7;
         q.heightCm = 1.3;
-        q.material = cfg.materialCode;
+        const shapeCode = q.designShape || q.shapeCode || q.shape || q.shapeText || "";
+        q.designShape = shapeCode;
+        q.shapeCode = shapeCode;
+        q.shapeText = getShapeText(shapeCode);
+        q.shape = q.shapeText;
+        q.material = cfg.materialText;
+        q.materialCode = cfg.materialCode;
         q.materialText = cfg.materialText;
+        q.laminate = cfg.laminateText;
+        q.laminateCode = "matte";
+        q.laminateText = cfg.laminateText;
         item.productType = "NAME_STICKER";
         item.productCode = cfg.productName;
         item.quote = q;
@@ -426,7 +438,9 @@
       `姓名：${line1}${line2 ? "｜" + line2 : ""}`,
       `尺寸：2.7 × 1.3 cm`,
       `數量：144 張`,
-      `造型：${shapeText}`,
+      `形狀：${shapeText}`,
+      `材質：${cfg.materialText}`,
+      `上膜：${cfg.laminateText}`,
       `成品外觀：${cfg.finishText}`,
       `本款式套組總價：NT$ ${packagePrice}`,
       getPackageMarketingText(targetCount)
@@ -445,13 +459,16 @@
         noWhiteBorder:cfg.noWhiteBorder,
         whiteBorder:!cfg.noWhiteBorder,
         printBackgroundToCutEdge:cfg.noWhiteBorder,
-        shape:state.shape,
+        shape:shapeText,
+        shapeCode:state.shape,
         shapeText,
         widthCm:2.7,
         heightCm:1.3,
-        material:cfg.materialCode,
+        material:cfg.materialText,
+        materialCode:cfg.materialCode,
         materialText:cfg.materialText,
-        laminate:"fixed",
+        laminate:cfg.laminateText,
+        laminateCode:"matte",
         laminateText:cfg.laminateText,
         quantity:144,
         urgent:"normal",
@@ -539,7 +556,9 @@
       `姓名：${escapeHtml(q.nameLine1 || "")}${q.nameLine2 ? "｜" + escapeHtml(q.nameLine2) : ""}`,
       `尺寸：2.7 × 1.3 cm`,
       `數量：144 張`,
-      `造型：${escapeHtml(q.shapeText || getShapeText(q.shape))}`,
+      `形狀：${escapeHtml(q.shapeText || getShapeText(q.designShape || q.shapeCode || q.shape))}`,
+      `材質：${escapeHtml(q.materialText || q.material || "PVC貼紙")}`,
+      `上膜：${escapeHtml(q.laminateText || q.laminate || "霧膜")}`,
       `同款式套組進度：第 ${escapeHtml(q.nameStickerStyleIndex || "")} 款／共 ${escapeHtml(q.nameStickerPackageCount || targetCounts[type])} 款`
     ].join("<br>");
   }
