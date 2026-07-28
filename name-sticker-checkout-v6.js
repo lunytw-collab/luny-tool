@@ -1,8 +1,60 @@
 /*
- * LUNY 姓名貼專用結帳轉接器 v5
+ * LUNY 姓名貼專用結帳轉接器 v5.1
  * 功能：防水／轉印款式分流、套組分開計價、4 款超取免運標記、轉印固定無白邊、結帳與 GAS 欄位同步。
  * 載入順序：請放在姓名貼編輯器主程式、luny-storage-manager、luny-label-order-flow 之後。
  */
+(function installNameStickerV5VisualReset(){
+  /*
+   * 這段必須放在主程式的共用鎖之前。
+   * 即使頁面仍殘留 v3／v4，v5 仍會清除舊版替 4 入加上的特殊卡片 class。
+   */
+  const STYLE_ID = "luny-name-package-v5-reset";
+
+  function ensureResetStyle(){
+    if(document.getElementById(STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+      @media (min-width:769px){
+        #namePackageOptions.name-package-options{
+          grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+        }
+      }
+      #namePackageOptions .name-package-btn[data-name-style-count="4"],
+      #namePackageOptions .name-package-btn.is-best-value{
+        grid-column:auto !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function clearLegacyBestValueClass(){
+    document
+      .querySelectorAll('#namePackageOptions .name-package-btn[data-name-style-count="4"]')
+      .forEach(btn=>btn.classList.remove("is-best-value"));
+  }
+
+  function installReset(){
+    ensureResetStyle();
+    clearLegacyBestValueClass();
+
+    if(!window.MutationObserver || window.__LUNY_NAME_STICKER_V5_STYLE_OBSERVER__) return;
+    window.__LUNY_NAME_STICKER_V5_STYLE_OBSERVER__ = new MutationObserver(clearLegacyBestValueClass);
+    window.__LUNY_NAME_STICKER_V5_STYLE_OBSERVER__.observe(document.documentElement,{
+      subtree:true,
+      childList:true,
+      attributes:true,
+      attributeFilter:["class"]
+    });
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", installReset, {once:true});
+  }else{
+    installReset();
+  }
+})();
+
 (function installNameStickerCheckoutAdapter(){
   if(window.__LUNY_NAME_STICKER_CHECKOUT_ADAPTER__) return;
   window.__LUNY_NAME_STICKER_CHECKOUT_ADAPTER__ = true;
