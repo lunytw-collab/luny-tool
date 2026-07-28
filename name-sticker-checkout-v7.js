@@ -1,5 +1,5 @@
 /*
- * LUNY 姓名貼專用結帳轉接器 v5.1
+ * LUNY 姓名貼專用結帳轉接器 v5.2
  * 功能：防水／轉印款式分流、套組分開計價、4 款超取免運標記、轉印固定無白邊、結帳與 GAS 欄位同步。
  * 載入順序：請放在姓名貼編輯器主程式、luny-storage-manager、luny-label-order-flow 之後。
  */
@@ -39,10 +39,20 @@
     clearLegacyBestValueClass();
 
     if(!window.MutationObserver || window.__LUNY_NAME_STICKER_V5_STYLE_OBSERVER__) return;
-    window.__LUNY_NAME_STICKER_V5_STYLE_OBSERVER__ = new MutationObserver(clearLegacyBestValueClass);
-    window.__LUNY_NAME_STICKER_V5_STYLE_OBSERVER__.observe(document.documentElement,{
+    const packageOptions = document.getElementById("namePackageOptions");
+    if(!packageOptions) return;
+
+    window.__LUNY_NAME_STICKER_V5_STYLE_OBSERVER__ = new MutationObserver(mutations=>{
+      const shouldClean = mutations.some(mutation=>{
+        const target = mutation.target;
+        return target instanceof Element
+          && target.matches('.name-package-btn[data-name-style-count="4"]')
+          && target.classList.contains("is-best-value");
+      });
+      if(shouldClean) clearLegacyBestValueClass();
+    });
+    window.__LUNY_NAME_STICKER_V5_STYLE_OBSERVER__.observe(packageOptions,{
       subtree:true,
-      childList:true,
       attributes:true,
       attributeFilter:["class"]
     });
