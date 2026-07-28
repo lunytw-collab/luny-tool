@@ -1,5 +1,5 @@
 /*
- * LUNY 姓名貼專用結帳轉接器 v2
+ * LUNY 姓名貼專用結帳轉接器 v5
  * 功能：防水／轉印款式分流、套組分開計價、4 款超取免運標記、轉印固定無白邊、結帳與 GAS 欄位同步。
  * 載入順序：請放在姓名貼編輯器主程式、luny-storage-manager、luny-label-order-flow 之後。
  */
@@ -54,12 +54,12 @@
   };
 
   const TYPE_KEY = "LUNY_NAME_STICKER_SELECTED_TYPE_V2";
-  const TARGET_KEY_PREFIX = "LUNY_NAME_STICKER_TARGET_COUNT_V2_";
+  const TARGET_KEY_PREFIX = "LUNY_NAME_STICKER_TARGET_COUNT_V5_";
   const LEGACY_TARGET_KEY = "LUNY_NAME_STICKER_TARGET_COUNT";
-  const PACKAGE_KEY = "LUNY_NAME_STICKER_PACKAGE_V2";
+  const PACKAGE_KEY = "LUNY_NAME_STICKER_PACKAGE_V5";
   const TYPE_ORDER = ["waterproof","transfer"];
-  /* 新訪客預設顯示 4 款方案；已有選擇或購物車資料者仍沿用原紀錄。 */
-  const targetCounts = {waterproof:4, transfer:4};
+  /* 新訪客預設 1 入；4 入僅保留最划算文字，不套用額外外框或底色。 */
+  const targetCounts = {waterproof:1, transfer:1};
   let selectedStickerType = "waterproof";
   window.LUNY_NAME_STICKER_TYPE = selectedStickerType;
 
@@ -164,12 +164,9 @@
   }
   function getStoredTarget(type, items){
     const normalized = normalizeStickerType(type);
-    let stored = 4;
+    let stored = 1;
     try{
-      stored = clampCount(localStorage.getItem(TARGET_KEY_PREFIX + normalized) || 4);
-      if(normalized === "waterproof" && !localStorage.getItem(TARGET_KEY_PREFIX + normalized)){
-        stored = clampCount(localStorage.getItem(LEGACY_TARGET_KEY) || stored);
-      }
+      stored = clampCount(localStorage.getItem(TARGET_KEY_PREFIX + normalized) || 1);
     }catch(e){}
     const rows = getNameItemsByType(normalized, items);
     const fromItems = rows
@@ -813,7 +810,11 @@
       if(discountNode){
         discountNode.innerHTML = getPackageMarketingHtml(count);
       }
-      btn.classList.toggle("is-best-value", count === 4);
+      /*
+       * 4 入與 1／2 入共用相同卡片樣式。
+       * 主動移除舊版 class，避免頁面殘留 CSS 將 4 入拉成整排或加上專屬框底。
+       */
+      btn.classList.remove("is-best-value");
       btn.dataset.freeStorePickupShipping = isFreeStorePickupShipping(count) ? "true" : "false";
     });
   }
