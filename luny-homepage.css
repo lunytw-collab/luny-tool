@@ -1,0 +1,1293 @@
+/*!
+ * LUNY 首頁共用樣式
+ * 更新日期：2026-07-29
+ * HERO 首屏必要樣式仍保留在 1SHOP 主體內，以避免載入時只先看到圖片。
+ */
+
+  #luny-homepage {
+    --lh-ink: #191816;
+    --lh-text: #4f4b46;
+    --lh-muted: #777169;
+    --lh-line: #e9e4dc;
+    --lh-cream: #f7f3ed;
+    --lh-soft: #fbfaf8;
+    --lh-gold: #c98c43;
+    --lh-gold-dark: #9d652c;
+    --lh-green: #27855e;
+    --lh-red: #e75b57;
+    --lh-shadow: 0 18px 48px rgba(52, 43, 32, 0.10);
+    width: 100%;
+    overflow: hidden;
+    background: #fff;
+    color: var(--lh-ink);
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    line-height: 1.7;
+  }
+
+  #luny-homepage,
+  #luny-homepage * {
+    box-sizing: border-box;
+  }
+
+  #luny-homepage img {
+    max-width: 100%;
+  }
+
+  #luny-homepage a {
+    color: inherit;
+  }
+
+  #luny-homepage .luny-home-shell {
+    width: min(1180px, calc(100% - 48px));
+    margin: 0 auto;
+  }
+
+  #luny-homepage .luny-home-section {
+    padding: 104px 0;
+  }
+
+  #luny-homepage .luny-home-eyebrow,
+  #luny-homepage .luny-home-kicker {
+    margin: 0 0 18px;
+    color: var(--lh-gold-dark);
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  #luny-homepage .luny-home-section-header {
+    margin-bottom: 46px;
+  }
+
+  #luny-homepage .luny-home-section-header-center {
+    max-width: 760px;
+    margin-right: auto;
+    margin-bottom: 46px;
+    margin-left: auto;
+    text-align: center;
+  }
+
+  #luny-homepage .luny-home-section-header h2,
+  #luny-homepage .luny-home-tool-copy h2,
+  #luny-homepage .luny-home-faq-intro h2,
+  #luny-homepage .luny-home-final-card h2 {
+    margin: 0 0 16px;
+    font-size: clamp(34px, 4vw, 56px);
+    line-height: 1.16;
+    font-weight: 900;
+    letter-spacing: -0.035em;
+  }
+
+  #luny-homepage .luny-home-section-header > p:last-child,
+  #luny-homepage .luny-home-tool-copy > p,
+  #luny-homepage .luny-home-faq-intro > p,
+  #luny-homepage .luny-home-final-card > p {
+    margin: 0;
+    color: var(--lh-muted);
+    font-size: 18px;
+  }
+
+  /* Hero */
+  #luny-homepage .luny-home-hero {
+    position: relative;
+    padding: 82px 0 76px;
+    background:
+      radial-gradient(circle at 82% 12%, rgba(217, 177, 126, 0.24), transparent 26%),
+      linear-gradient(180deg, #fff 0%, #fbf8f3 100%);
+  }
+
+  #luny-homepage .luny-home-hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.92fr) minmax(480px, 1.08fr);
+    align-items: center;
+    gap: 64px;
+  }
+
+  #luny-homepage .luny-home-hero-copy {
+    position: relative;
+    z-index: 2;
+  }
+
+  #luny-homepage .luny-home-hero-copy h1 {
+    margin: 0 0 24px;
+    font-size: clamp(48px, 6vw, 82px);
+    line-height: 1.05;
+    font-weight: 950;
+    letter-spacing: -0.055em;
+  }
+
+  #luny-homepage .luny-home-hero-copy h1 span {
+    color: var(--lh-gold-dark);
+  }
+
+  #luny-homepage .luny-home-hero-lead {
+    margin: 0;
+    color: var(--lh-text);
+    font-size: 20px;
+    line-height: 1.85;
+  }
+
+  #luny-homepage .luny-home-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 34px;
+  }
+
+  #luny-homepage .luny-home-button {
+    display: inline-flex;
+    min-height: 54px;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 28px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 17px;
+    font-weight: 900;
+    text-decoration: none;
+    transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
+  }
+
+  #luny-homepage .luny-home-button:hover {
+    transform: translateY(-2px);
+  }
+
+  #luny-homepage .luny-home-button-primary {
+    background: var(--lh-ink);
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(25, 24, 22, 0.18);
+  }
+
+  #luny-homepage .luny-home-button-primary:hover {
+    background: #000;
+    box-shadow: 0 14px 30px rgba(25, 24, 22, 0.24);
+  }
+
+  #luny-homepage .luny-home-button-secondary {
+    border-color: #cfc7bd;
+    background: rgba(255,255,255,.78);
+    color: var(--lh-ink);
+  }
+
+  #luny-homepage .luny-home-button-secondary:hover {
+    background: #fff;
+  }
+
+  #luny-homepage .luny-home-hero-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    margin: 28px 0 0;
+    padding: 0;
+    color: var(--lh-text);
+    font-size: 14px;
+    font-weight: 700;
+    list-style: none;
+  }
+
+  #luny-homepage .luny-home-hero-checks li::before {
+    content: "✓";
+    display: inline-grid;
+    width: 20px;
+    height: 20px;
+    place-items: center;
+    margin-right: 7px;
+    border-radius: 50%;
+    background: #e8f5ef;
+    color: var(--lh-green);
+    font-size: 12px;
+  }
+
+  #luny-homepage .luny-home-sticker-stage {
+    position: relative;
+    min-height: 580px;
+    border: 1px solid rgba(190, 169, 142, 0.3);
+    border-radius: 42px;
+    background: linear-gradient(145deg, #f2e9de 0%, #fff 54%, #f8f0e6 100%);
+    box-shadow: var(--lh-shadow);
+  }
+
+  #luny-homepage .luny-home-stage-glow {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(2px);
+  }
+
+  #luny-homepage .luny-home-stage-glow-a {
+    top: 35px;
+    right: 24px;
+    width: 210px;
+    height: 210px;
+    background: rgba(255, 255, 255, .7);
+  }
+
+  #luny-homepage .luny-home-stage-glow-b {
+    bottom: 26px;
+    left: 36px;
+    width: 170px;
+    height: 170px;
+    background: rgba(217, 163, 104, .12);
+  }
+
+  #luny-homepage .luny-home-floating-card {
+    position: absolute;
+    overflow: hidden;
+    padding: 10px;
+    border: 1px solid rgba(125, 96, 62, .12);
+    border-radius: 26px;
+    background: rgba(255,255,255,.94);
+    box-shadow: 0 20px 42px rgba(56, 43, 28, .16);
+  }
+
+  #luny-homepage .luny-home-floating-card img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 19px;
+    object-fit: contain;
+    background: #fff;
+  }
+
+  #luny-homepage .luny-home-floating-label {
+    position: absolute;
+    z-index: 2;
+    top: 18px;
+    left: 18px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(25,24,22,.88);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  #luny-homepage .luny-home-floating-main {
+    top: 112px;
+    left: 28px;
+    width: 58%;
+    height: 370px;
+    transform: rotate(-4deg);
+  }
+
+  #luny-homepage .luny-home-floating-top {
+    top: 42px;
+    right: 25px;
+    width: 39%;
+    height: 245px;
+    transform: rotate(5deg);
+  }
+
+  #luny-homepage .luny-home-floating-bottom {
+    right: 24px;
+    bottom: 42px;
+    width: 42%;
+    height: 235px;
+    transform: rotate(2deg);
+  }
+
+  #luny-homepage .luny-home-stage-note {
+    position: absolute;
+    z-index: 4;
+    bottom: 32px;
+    left: 32px;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 20px;
+    border: 1px solid rgba(255,255,255,.8);
+    border-radius: 18px;
+    background: rgba(255,255,255,.86);
+    box-shadow: 0 10px 24px rgba(43,35,26,.10);
+    backdrop-filter: blur(10px);
+  }
+
+  #luny-homepage .luny-home-stage-note strong { font-size: 16px; }
+  #luny-homepage .luny-home-stage-note span { color: var(--lh-muted); font-size: 13px; }
+
+  /* Proof bar */
+  #luny-homepage .luny-home-proofbar {
+    border-top: 1px solid var(--lh-line);
+    border-bottom: 1px solid var(--lh-line);
+    background: #fff;
+  }
+
+  #luny-homepage .luny-home-proofbar-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  #luny-homepage .luny-home-proofbar-grid > div,
+  #luny-homepage .luny-home-proofbar-grid > a {
+    display: block;
+    padding: 26px 20px;
+    border-right: 1px solid var(--lh-line);
+    color: var(--lh-ink);
+    text-align: center;
+    text-decoration: none;
+  }
+
+  #luny-homepage .luny-home-proofbar-grid > :last-child { border-right: 0; }
+  #luny-homepage .luny-home-proofbar-grid > a { transition: background .2s ease; }
+  #luny-homepage .luny-home-proofbar-grid > a:hover { background: var(--lh-soft); }
+  #luny-homepage .luny-home-proofbar strong { display: block; font-size: 20px; }
+  #luny-homepage .luny-home-proofbar span { display: block; margin-top: 2px; color: var(--lh-muted); font-size: 13px; }
+  #luny-homepage .luny-home-proofbar small { display: block; margin-top: 7px; color: var(--lh-gold-dark); font-size: 11px; font-weight: 800; }
+  #luny-homepage .luny-home-proofbar-date { margin: 0; padding: 0 16px 12px; color: #8d877f; font-size: 11px; text-align: center; }
+
+  /* Product cards */
+  #luny-homepage .luny-home-products { background: #fff; }
+
+  #luny-homepage .luny-home-product-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 22px;
+  }
+
+  #luny-homepage .luny-home-product-card {
+    overflow: hidden;
+    border: 1px solid var(--lh-line);
+    border-radius: 28px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(45, 38, 30, .06);
+    text-decoration: none;
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+
+  #luny-homepage .luny-home-product-card:hover {
+    transform: translateY(-7px);
+    box-shadow: 0 20px 42px rgba(45, 38, 30, .12);
+  }
+
+  #luny-homepage .luny-home-product-media {
+    position: relative;
+    height: 330px;
+    padding: 18px;
+    background: #eef0ea;
+  }
+
+  #luny-homepage .luny-home-product-media-warm { background: #f3e9dc; }
+  #luny-homepage .luny-home-product-media-pink { background: #f3e6e2; }
+
+  #luny-homepage .luny-home-product-media img {
+    width: 100%;
+    height: 100%;
+    border-radius: 19px;
+    object-fit: contain;
+    background: #fff;
+  }
+
+  #luny-homepage .luny-home-product-index {
+    position: absolute;
+    z-index: 2;
+    top: 28px;
+    left: 28px;
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--lh-ink);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  #luny-homepage .luny-home-product-body { padding: 28px; }
+
+  #luny-homepage .luny-home-product-use {
+    margin: 0 0 8px;
+    color: var(--lh-gold-dark);
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: .08em;
+  }
+
+  #luny-homepage .luny-home-product-body h3 {
+    margin: 0 0 10px;
+    font-size: 27px;
+    line-height: 1.25;
+    font-weight: 900;
+  }
+
+  #luny-homepage .luny-home-product-body > p:not(.luny-home-product-use) {
+    min-height: 60px;
+    margin: 0;
+    color: var(--lh-muted);
+    font-size: 15px;
+  }
+
+  #luny-homepage .luny-home-product-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+  }
+
+  #luny-homepage .luny-home-product-meta span {
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: var(--lh-cream);
+    color: var(--lh-text);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  #luny-homepage .luny-home-product-link,
+  #luny-homepage .luny-home-text-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--lh-ink);
+    font-weight: 900;
+    text-decoration: none;
+  }
+
+  #luny-homepage .luny-home-product-link { margin-top: 22px; font-size: 15px; }
+  #luny-homepage .luny-home-product-link b,
+  #luny-homepage .luny-home-text-link b { transition: transform .2s ease; }
+  #luny-homepage a:hover .luny-home-product-link b,
+  #luny-homepage .luny-home-text-link:hover b { transform: translateX(4px); }
+
+  /* Tool */
+  #luny-homepage .luny-home-tool { background: var(--lh-soft); }
+
+  #luny-homepage .luny-home-tool-grid {
+    display: grid;
+    grid-template-columns: .78fr 1.22fr;
+    align-items: center;
+    gap: 70px;
+  }
+
+  #luny-homepage .luny-home-tool-copy > p { line-height: 1.85; }
+
+  #luny-homepage .luny-home-feature-list {
+    display: grid;
+    gap: 14px;
+    margin: 30px 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  #luny-homepage .luny-home-feature-list li {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  #luny-homepage .luny-home-feature-list li > span {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    place-items: center;
+    border-radius: 50%;
+    background: #eee5da;
+    color: var(--lh-gold-dark);
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  #luny-homepage .luny-home-feature-list strong,
+  #luny-homepage .luny-home-feature-list small { display: block; }
+  #luny-homepage .luny-home-feature-list strong { font-size: 16px; }
+  #luny-homepage .luny-home-feature-list small { color: var(--lh-muted); font-size: 13px; }
+
+  #luny-homepage .luny-home-tool-demo {
+    overflow: hidden;
+    border: 1px solid #ded8cf;
+    border-radius: 28px;
+    background: #fff;
+    box-shadow: var(--lh-shadow);
+  }
+
+  #luny-homepage .luny-home-demo-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--lh-line);
+    color: var(--lh-text);
+    font-size: 13px;
+  }
+
+  #luny-homepage .luny-home-demo-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 4px;
+    border-radius: 50%;
+    background: #d8d2c9;
+  }
+
+  #luny-homepage .luny-home-demo-content {
+    display: grid;
+    grid-template-columns: .92fr 1.08fr;
+  }
+
+  #luny-homepage .luny-home-demo-controls,
+  #luny-homepage .luny-home-demo-preview { padding: 28px; }
+  #luny-homepage .luny-home-demo-controls { border-right: 1px solid var(--lh-line); }
+
+  #luny-homepage .luny-home-demo-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 22px;
+  }
+
+  #luny-homepage .luny-home-demo-step > span {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--lh-gold);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  #luny-homepage .luny-home-demo-controls label {
+    display: block;
+    margin: 13px 0 6px;
+    color: var(--lh-muted);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  #luny-homepage .luny-home-demo-options { display: flex; gap: 6px; }
+
+  #luny-homepage .luny-home-demo-options span {
+    flex: 1;
+    padding: 8px 5px;
+    border: 1px solid var(--lh-line);
+    border-radius: 9px;
+    color: var(--lh-muted);
+    font-size: 11px;
+    text-align: center;
+  }
+
+  #luny-homepage .luny-home-demo-options .is-active {
+    border-color: var(--lh-gold);
+    background: #fff8ed;
+    color: var(--lh-gold-dark);
+    font-weight: 900;
+  }
+
+  #luny-homepage .luny-home-demo-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 11px;
+    border: 1px solid var(--lh-line);
+    border-radius: 9px;
+    color: var(--lh-text);
+    font-size: 11px;
+  }
+
+  #luny-homepage .luny-home-demo-price {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 18px;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--lh-cream);
+    color: var(--lh-muted);
+    font-size: 11px;
+  }
+
+  #luny-homepage .luny-home-demo-price strong { color: var(--lh-gold-dark); font-size: 16px; }
+
+  #luny-homepage .luny-home-preview-area {
+    position: relative;
+    width: 260px;
+    max-width: 100%;
+    aspect-ratio: 1;
+    margin: 24px auto 18px;
+  }
+
+  #luny-homepage .luny-home-preview-bleed,
+  #luny-homepage .luny-home-preview-cut,
+  #luny-homepage .luny-home-preview-safe,
+  #luny-homepage .luny-home-preview-art {
+    position: absolute;
+    border-radius: 50%;
+  }
+
+  #luny-homepage .luny-home-preview-bleed { inset: 0; border: 2px dashed #a9a9a9; }
+  #luny-homepage .luny-home-preview-cut { inset: 12px; border: 2px solid var(--lh-red); }
+  #luny-homepage .luny-home-preview-safe { inset: 24px; border: 2px solid #55a176; }
+
+  #luny-homepage .luny-home-preview-art {
+    inset: 30px;
+    display: grid;
+    place-content: center;
+    background: linear-gradient(145deg, #dcc4a8, #b58b64);
+    color: #fff;
+    text-align: center;
+    box-shadow: inset -12px -12px 26px rgba(83,55,31,.12);
+  }
+
+  #luny-homepage .luny-home-preview-art strong { font-size: 34px; line-height: .95; letter-spacing: .04em; }
+  #luny-homepage .luny-home-preview-art small { margin-top: 10px; font-size: 8px; letter-spacing: .16em; }
+
+  #luny-homepage .luny-home-preview-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 12px;
+    color: var(--lh-muted);
+    font-size: 9px;
+  }
+
+  #luny-homepage .luny-home-preview-legend i {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 4px;
+    border-radius: 50%;
+  }
+
+  #luny-homepage .luny-home-preview-legend .is-gray { background: #a9a9a9; }
+  #luny-homepage .luny-home-preview-legend .is-red { background: var(--lh-red); }
+  #luny-homepage .luny-home-preview-legend .is-green { background: #55a176; }
+
+  /* Process */
+  #luny-homepage .luny-home-process { background: #fff; }
+
+  #luny-homepage .luny-home-process-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  #luny-homepage .luny-home-process-grid li {
+    position: relative;
+    min-height: 300px;
+    padding: 30px;
+    border: 1px solid var(--lh-line);
+    border-radius: 26px;
+    background: var(--lh-soft);
+  }
+
+  #luny-homepage .luny-home-process-number {
+    position: absolute;
+    top: 24px;
+    right: 26px;
+    color: #cfc8be;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  #luny-homepage .luny-home-process-icon {
+    display: grid;
+    width: 70px;
+    height: 70px;
+    place-items: center;
+    margin-bottom: 44px;
+    border-radius: 20px;
+    background: #eee5da;
+    color: var(--lh-gold-dark);
+    font-size: 32px;
+    font-weight: 300;
+  }
+
+  #luny-homepage .luny-home-process-grid h3 { margin: 0 0 10px; font-size: 23px; }
+  #luny-homepage .luny-home-process-grid p { margin: 0; color: var(--lh-muted); font-size: 15px; }
+
+  /* Compare */
+  #luny-homepage .luny-home-compare { background: var(--lh-cream); }
+
+  #luny-homepage .luny-home-compare-wrap {
+    overflow-x: auto;
+    border: 1px solid #ddd4c8;
+    border-radius: 26px;
+    background: #fff;
+    box-shadow: 0 12px 32px rgba(61, 48, 33, .07);
+  }
+
+  #luny-homepage .luny-home-compare-table {
+    width: 100%;
+    min-width: 700px;
+    border-collapse: collapse;
+    color: var(--lh-text);
+  }
+
+  #luny-homepage .luny-home-compare-table th,
+  #luny-homepage .luny-home-compare-table td {
+    padding: 20px 24px;
+    border-right: 1px solid var(--lh-line);
+    border-bottom: 1px solid var(--lh-line);
+    text-align: center;
+  }
+
+  #luny-homepage .luny-home-compare-table tr:last-child th,
+  #luny-homepage .luny-home-compare-table tr:last-child td { border-bottom: 0; }
+  #luny-homepage .luny-home-compare-table th:last-child,
+  #luny-homepage .luny-home-compare-table td:last-child { border-right: 0; }
+  #luny-homepage .luny-home-compare-table tbody th { color: var(--lh-ink); text-align: left; }
+  #luny-homepage .luny-home-compare-table thead th { background: #faf8f5; color: var(--lh-ink); font-size: 16px; }
+  #luny-homepage .luny-home-compare-table .is-luny { background: #efe2d1; color: #6f4725; }
+
+  #luny-homepage .luny-home-benefit-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    margin-top: 22px;
+  }
+
+  #luny-homepage .luny-home-benefit-grid article {
+    padding: 28px;
+    border: 1px solid #e3dbd1;
+    border-radius: 22px;
+    background: rgba(255,255,255,.72);
+  }
+
+  #luny-homepage .luny-home-benefit-grid article > span { color: var(--lh-gold-dark); font-size: 12px; font-weight: 900; }
+  #luny-homepage .luny-home-benefit-grid h3 { margin: 16px 0 8px; font-size: 21px; }
+  #luny-homepage .luny-home-benefit-grid p { margin: 0; color: var(--lh-muted); font-size: 14px; }
+
+  /* Reviews */
+  #luny-homepage .luny-home-reviews { background: #fff; }
+
+  #luny-homepage .luny-home-review-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 30px;
+  }
+
+  #luny-homepage .luny-home-review-heading h2 { font-size: clamp(34px, 4vw, 52px); }
+
+  #luny-homepage .luny-home-review-sources {
+    display: grid;
+    grid-template-columns: minmax(0, .9fr) minmax(420px, 1.1fr);
+    gap: 24px;
+    align-items: center;
+    margin: 28px 0 32px;
+    padding: 24px;
+    border: 1px solid var(--lh-line);
+    border-radius: 24px;
+    background: var(--lh-soft);
+  }
+
+  #luny-homepage .luny-home-review-source-copy strong { display: block; margin-bottom: 7px; font-size: 18px; }
+  #luny-homepage .luny-home-review-source-copy p { margin: 0; color: var(--lh-muted); font-size: 13px; line-height: 1.75; }
+
+  #luny-homepage .luny-home-review-source-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  #luny-homepage .luny-home-review-source-links a {
+    display: flex;
+    flex-direction: column;
+    min-height: 124px;
+    padding: 18px;
+    border: 1px solid var(--lh-line);
+    border-radius: 18px;
+    background: #fff;
+    color: var(--lh-ink);
+    text-decoration: none;
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+
+  #luny-homepage .luny-home-review-source-links a:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(47,39,30,.08); }
+  #luny-homepage .luny-home-review-source-links b { font-size: 15px; }
+  #luny-homepage .luny-home-review-source-links span { margin-top: 5px; color: var(--lh-muted); font-size: 13px; }
+  #luny-homepage .luny-home-review-source-links small { margin-top: auto; padding-top: 12px; color: var(--lh-gold-dark); font-size: 11px; font-weight: 800; }
+
+  #luny-homepage .luny-home-review-scroller {
+    display: grid;
+    grid-auto-columns: minmax(300px, 34%);
+    grid-auto-flow: column;
+    gap: 18px;
+    overflow-x: auto;
+    padding: 4px 2px 22px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: thin;
+    scrollbar-color: #c9bbaa #f1ece6;
+  }
+
+  #luny-homepage .luny-home-review-card {
+    overflow: hidden;
+    border: 1px solid var(--lh-line);
+    border-radius: 24px;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(47, 39, 30, .07);
+    scroll-snap-align: start;
+  }
+
+  #luny-homepage .luny-home-review-card > img {
+    display: block;
+    width: 100%;
+    height: 230px;
+    object-fit: cover;
+  }
+
+  #luny-homepage .luny-home-review-body { padding: 24px; }
+
+  #luny-homepage .luny-home-review-body > span {
+    display: inline-flex;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: var(--lh-cream);
+    color: var(--lh-gold-dark);
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  #luny-homepage .luny-home-stars { margin: 14px 0 8px; color: #f4ad23; font-size: 13px; letter-spacing: .06em; }
+  #luny-homepage .luny-home-review-body h3 { margin: 0 0 8px; font-size: 19px; }
+  #luny-homepage .luny-home-review-body p { min-height: 72px; margin: 0; color: var(--lh-muted); font-size: 14px; }
+  #luny-homepage .luny-home-review-body small { display: block; margin-top: 16px; color: #a09a92; font-size: 11px; }
+  #luny-homepage .luny-home-swipe-tip { display: none; margin: 12px 0 0; color: var(--lh-muted); font-size: 12px; text-align: center; }
+
+  /* FAQ */
+  #luny-homepage .luny-home-faq { background: var(--lh-soft); }
+
+  #luny-homepage .luny-home-faq-grid {
+    display: grid;
+    grid-template-columns: .72fr 1.28fr;
+    gap: 80px;
+  }
+
+  #luny-homepage .luny-home-faq-intro > p { margin-bottom: 26px; }
+
+  #luny-homepage .luny-home-faq-list details {
+    border-top: 1px solid var(--lh-line);
+  }
+
+  #luny-homepage .luny-home-faq-list details:last-child { border-bottom: 1px solid var(--lh-line); }
+
+  #luny-homepage .luny-home-faq-list summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 24px 0;
+    color: var(--lh-ink);
+    font-size: 18px;
+    font-weight: 900;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  #luny-homepage .luny-home-faq-list summary::-webkit-details-marker { display: none; }
+  #luny-homepage .luny-home-faq-list summary span { color: var(--lh-gold-dark); font-size: 24px; font-weight: 400; transition: transform .2s ease; }
+  #luny-homepage .luny-home-faq-list details[open] summary span { transform: rotate(45deg); }
+  #luny-homepage .luny-home-faq-list details p { margin: -8px 40px 24px 0; color: var(--lh-muted); font-size: 15px; }
+
+  /* Final CTA */
+  #luny-homepage .luny-home-final {
+    padding: 92px 0;
+    background: #fff;
+  }
+
+  #luny-homepage .luny-home-final-card {
+    padding: 68px 50px 46px;
+    border-radius: 36px;
+    background:
+      radial-gradient(circle at 12% 0%, rgba(255,255,255,.9), transparent 35%),
+      linear-gradient(135deg, #efe2d0 0%, #f9f3eb 100%);
+    text-align: center;
+  }
+
+  #luny-homepage .luny-home-actions-center { justify-content: center; }
+
+  #luny-homepage .luny-home-final-points {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    margin-top: 50px;
+    border-top: 1px solid rgba(117, 84, 48, .16);
+  }
+
+  #luny-homepage .luny-home-final-points > div { padding: 26px 18px 0; }
+  #luny-homepage .luny-home-final-points strong,
+  #luny-homepage .luny-home-final-points span { display: block; }
+  #luny-homepage .luny-home-final-points strong { font-size: 16px; }
+  #luny-homepage .luny-home-final-points span { margin-top: 3px; color: var(--lh-muted); font-size: 13px; }
+
+  /* Tablet */
+  @media (max-width: 980px) {
+    #luny-homepage .luny-home-shell { width: min(100% - 36px, 760px); }
+    #luny-homepage .luny-home-section { padding: 78px 0; }
+
+    #luny-homepage .luny-home-hero-grid,
+    #luny-homepage .luny-home-tool-grid,
+    #luny-homepage .luny-home-faq-grid {
+      grid-template-columns: 1fr;
+    }
+
+    #luny-homepage .luny-home-hero-grid { gap: 48px; }
+    #luny-homepage .luny-home-sticker-stage { min-height: 560px; }
+    #luny-homepage .luny-home-product-grid { grid-template-columns: 1fr; }
+    #luny-homepage .luny-home-product-card { display: grid; grid-template-columns: .9fr 1.1fr; }
+    #luny-homepage .luny-home-product-media { height: 100%; min-height: 340px; }
+    #luny-homepage .luny-home-product-body { display: flex; flex-direction: column; justify-content: center; }
+    #luny-homepage .luny-home-product-body > p:not(.luny-home-product-use) { min-height: 0; }
+    #luny-homepage .luny-home-process-grid,
+    #luny-homepage .luny-home-benefit-grid { grid-template-columns: 1fr; }
+    #luny-homepage .luny-home-process-grid li { min-height: 240px; }
+    #luny-homepage .luny-home-process-icon { margin-bottom: 28px; }
+    #luny-homepage .luny-home-faq-grid { gap: 42px; }
+  }
+
+  /* Mobile */
+  @media (max-width: 680px) {
+    #luny-homepage .luny-home-shell { width: calc(100% - 32px); }
+    #luny-homepage .luny-home-section { padding: 62px 0; }
+    #luny-homepage .luny-home-section-header,
+    #luny-homepage .luny-home-section-header-center { margin-bottom: 32px; }
+    #luny-homepage .luny-home-eyebrow,
+    #luny-homepage .luny-home-kicker { margin-bottom: 12px; font-size: 11px; }
+
+    #luny-homepage .luny-home-hero { padding: 54px 0 46px; }
+    #luny-homepage .luny-home-hero-copy h1 { font-size: 44px; line-height: 1.08; }
+    #luny-homepage .luny-home-hero-lead { font-size: 16px; line-height: 1.8; }
+    #luny-homepage .luny-home-hero-lead br { display: none; }
+    #luny-homepage .luny-home-actions { flex-direction: column; }
+    #luny-homepage .luny-home-button { width: 100%; }
+    #luny-homepage .luny-home-hero-checks { display: grid; gap: 9px; }
+
+    #luny-homepage .luny-home-sticker-stage { min-height: 430px; border-radius: 28px; }
+    #luny-homepage .luny-home-floating-card { border-radius: 18px; padding: 6px; }
+    #luny-homepage .luny-home-floating-card img { border-radius: 13px; }
+    #luny-homepage .luny-home-floating-label { top: 11px; left: 11px; padding: 4px 8px; font-size: 9px; }
+    #luny-homepage .luny-home-floating-main { top: 88px; left: 14px; width: 60%; height: 270px; }
+    #luny-homepage .luny-home-floating-top { top: 28px; right: 12px; width: 40%; height: 175px; }
+    #luny-homepage .luny-home-floating-bottom { right: 12px; bottom: 25px; width: 42%; height: 166px; }
+    #luny-homepage .luny-home-stage-note { bottom: 15px; left: 14px; padding: 10px 12px; border-radius: 12px; }
+    #luny-homepage .luny-home-stage-note strong { font-size: 12px; }
+    #luny-homepage .luny-home-stage-note span { font-size: 10px; }
+
+    #luny-homepage .luny-home-proofbar-grid { grid-template-columns: repeat(2, 1fr); }
+    #luny-homepage .luny-home-proofbar-grid > div,
+    #luny-homepage .luny-home-proofbar-grid > a { padding: 19px 10px; border-bottom: 1px solid var(--lh-line); }
+    #luny-homepage .luny-home-proofbar-grid > :nth-child(2) { border-right: 0; }
+    #luny-homepage .luny-home-proofbar-grid > :nth-child(3),
+    #luny-homepage .luny-home-proofbar-grid > :nth-child(4) { border-bottom: 0; }
+    #luny-homepage .luny-home-proofbar strong { font-size: 16px; }
+    #luny-homepage .luny-home-proofbar span { min-height: 38px; font-size: 12px; line-height: 1.55; }
+    #luny-homepage .luny-home-proofbar-date { padding-top: 9px; }
+
+    #luny-homepage .luny-home-section-header h2,
+    #luny-homepage .luny-home-tool-copy h2,
+    #luny-homepage .luny-home-faq-intro h2,
+    #luny-homepage .luny-home-final-card h2 { font-size: 34px; }
+    #luny-homepage .luny-home-section-header > p:last-child,
+    #luny-homepage .luny-home-tool-copy > p,
+    #luny-homepage .luny-home-faq-intro > p,
+    #luny-homepage .luny-home-final-card > p { font-size: 16px; }
+
+    #luny-homepage .luny-home-product-card { display: block; border-radius: 22px; }
+    #luny-homepage .luny-home-product-media { height: 290px; min-height: 0; padding: 13px; }
+    #luny-homepage .luny-home-product-body { padding: 23px; }
+    #luny-homepage .luny-home-product-body h3 { font-size: 24px; }
+
+    #luny-homepage .luny-home-tool-grid { gap: 40px; }
+    #luny-homepage .luny-home-tool-demo { border-radius: 20px; }
+    #luny-homepage .luny-home-demo-content { grid-template-columns: 1fr; }
+    #luny-homepage .luny-home-demo-controls { border-right: 0; border-bottom: 1px solid var(--lh-line); }
+    #luny-homepage .luny-home-demo-controls,
+    #luny-homepage .luny-home-demo-preview { padding: 20px; }
+    #luny-homepage .luny-home-preview-area { width: 230px; }
+
+    #luny-homepage .luny-home-process-grid li { min-height: 0; padding: 24px; border-radius: 20px; }
+    #luny-homepage .luny-home-process-icon { width: 58px; height: 58px; margin-bottom: 24px; border-radius: 16px; }
+
+    #luny-homepage .luny-home-compare-wrap { margin-right: -16px; border-radius: 20px 0 0 20px; }
+    #luny-homepage .luny-home-compare-table th,
+    #luny-homepage .luny-home-compare-table td { padding: 16px; font-size: 13px; }
+    #luny-homepage .luny-home-benefit-grid article { padding: 23px; }
+
+    #luny-homepage .luny-home-review-heading { display: block; }
+    #luny-homepage .luny-home-review-heading .luny-home-text-link { margin-top: 18px; }
+    #luny-homepage .luny-home-review-sources { grid-template-columns: 1fr; gap: 18px; margin: 24px 0; padding: 18px; border-radius: 20px; }
+    #luny-homepage .luny-home-review-source-links { grid-template-columns: 1fr; }
+    #luny-homepage .luny-home-review-source-links a { min-height: 112px; }
+    #luny-homepage .luny-home-review-scroller { grid-auto-columns: 86%; gap: 12px; margin-right: -16px; }
+    #luny-homepage .luny-home-review-card > img { height: 210px; }
+    #luny-homepage .luny-home-review-body { padding: 20px; }
+    #luny-homepage .luny-home-swipe-tip { display: block; }
+
+    #luny-homepage .luny-home-faq-list summary { padding: 20px 0; font-size: 16px; }
+    #luny-homepage .luny-home-faq-list details p { margin-right: 10px; font-size: 14px; }
+
+    #luny-homepage .luny-home-final { padding: 56px 0; }
+    #luny-homepage .luny-home-final-card { width: calc(100% - 24px); padding: 46px 20px 28px; border-radius: 28px; }
+    #luny-homepage .luny-home-final-points { grid-template-columns: 1fr; margin-top: 36px; }
+    #luny-homepage .luny-home-final-points > div { padding: 18px 10px; border-top: 1px solid rgba(117, 84, 48, .12); }
+    #luny-homepage .luny-home-final-points > div:first-child { border-top: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #luny-homepage *,
+    #luny-homepage *::before,
+    #luny-homepage *::after {
+      scroll-behavior: auto !important;
+      transition: none !important;
+    }
+  }
+
+  /* Hero carousel v2 */
+  #luny-homepage .luny-home-hero { padding: 0 0 22px; overflow: hidden; }
+  #luny-homepage .luny-home-hero-track { position: relative; min-height: 720px; }
+  #luny-homepage .luny-home-hero-slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding: 72px 0 56px;
+    visibility: hidden;
+    opacity: 0;
+    transform: translateX(24px);
+    transition: opacity .55s ease, transform .55s ease, visibility .55s;
+    pointer-events: none;
+  }
+  #luny-homepage .luny-home-hero-slide.is-active {
+    position: relative;
+    visibility: visible;
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+  #luny-homepage .luny-home-hero-slide:nth-child(2) { background: linear-gradient(135deg, #fff 0%, #f4eee6 100%); }
+  #luny-homepage .luny-home-hero-slide:nth-child(3) { background: linear-gradient(135deg, #fff 0%, #f7f0e8 58%, #efe2d4 100%); }
+  #luny-homepage .luny-home-hero-copy h2 {
+    margin: 0 0 24px;
+    font-size: clamp(48px, 6vw, 82px);
+    line-height: 1.05;
+    font-weight: 950;
+    letter-spacing: -.055em;
+  }
+  #luny-homepage .luny-home-hero-copy h2 span { color: var(--lh-gold-dark); }
+  #luny-homepage .luny-home-hero-gallery {
+    position: relative;
+    min-height: 580px;
+    border-radius: 42px;
+    background: #eee4d7;
+    box-shadow: var(--lh-shadow);
+    isolation: isolate;
+  }
+  #luny-homepage .luny-home-hero-gallery::before {
+    content: "";
+    position: absolute;
+    inset: 22px;
+    z-index: -1;
+    border: 1px solid rgba(255,255,255,.65);
+    border-radius: 30px;
+  }
+  #luny-homepage .luny-home-hero-photo {
+    position: absolute;
+    display: block;
+    object-fit: cover;
+    border: 8px solid #fff;
+    border-radius: 26px;
+    background: #fff;
+    box-shadow: 0 20px 44px rgba(54,39,24,.2);
+  }
+  #luny-homepage .luny-home-hero-photo-main { top: 42px; left: 34px; width: 66%; height: 78%; transform: rotate(-2deg); }
+  #luny-homepage .luny-home-hero-photo-top { top: 32px; right: 24px; width: 38%; height: 39%; transform: rotate(4deg); }
+  #luny-homepage .luny-home-hero-photo-bottom { right: 30px; bottom: 28px; width: 40%; height: 39%; transform: rotate(2deg); }
+  #luny-homepage .luny-home-hero-photo-wide { top: auto; bottom: 42px; width: 48%; height: 44%; }
+  #luny-homepage .luny-home-hero-controls {
+    position: relative;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 14px;
+    margin-top: -6px;
+  }
+  #luny-homepage .luny-home-hero-arrow {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    padding: 0;
+    border: 1px solid #d8cfc5;
+    border-radius: 50%;
+    background: #fff;
+    color: var(--lh-ink);
+    font-size: 18px;
+    cursor: pointer;
+  }
+  #luny-homepage .luny-home-hero-dots { display: flex; gap: 8px; }
+  #luny-homepage .luny-home-hero-dots button {
+    width: 9px;
+    height: 9px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: #d6cec4;
+    cursor: pointer;
+    transition: width .25s ease, background .25s ease;
+  }
+  #luny-homepage .luny-home-hero-dots button.is-active { width: 28px; background: var(--lh-gold-dark); }
+
+  @media (max-width: 980px) {
+    #luny-homepage .luny-home-hero-track { min-height: 1120px; }
+    #luny-homepage .luny-home-hero-slide { align-items: flex-start; padding-top: 58px; }
+    #luny-homepage .luny-home-hero-controls { justify-content: center; }
+  }
+
+  @media (max-width: 680px) {
+    #luny-homepage .luny-home-hero { padding-top: 0; }
+    #luny-homepage .luny-home-hero-track { min-height: 890px; }
+    #luny-homepage .luny-home-hero-slide { padding: 44px 0 28px; }
+    #luny-homepage .luny-home-hero-grid { gap: 34px; }
+    #luny-homepage .luny-home-hero-copy h2 { font-size: 44px; line-height: 1.08; }
+    #luny-homepage .luny-home-hero-gallery { min-height: 390px; border-radius: 26px; }
+    #luny-homepage .luny-home-hero-photo { border-width: 5px; border-radius: 17px; }
+    #luny-homepage .luny-home-hero-photo-main { top: 32px; left: 18px; width: 68%; height: 73%; }
+    #luny-homepage .luny-home-hero-photo-top { top: 22px; right: 10px; width: 39%; height: 38%; }
+    #luny-homepage .luny-home-hero-photo-bottom { right: 13px; bottom: 20px; width: 42%; height: 40%; }
+    #luny-homepage .luny-home-hero-photo-wide { top: auto; bottom: 24px; width: 51%; height: 42%; }
+    #luny-homepage .luny-home-hero-controls { margin-top: 4px; }
+  }
+
+  /* v3｜純圖片首屏 */
+  #luny-homepage .luny-home-hero { position: relative; min-height: 680px; padding: 0; background: #26231f; }
+  #luny-homepage .luny-home-hero-track { min-height: 680px; }
+  #luny-homepage .luny-home-hero-slide {
+    position: absolute;
+    inset: 0;
+    display: block;
+    min-height: 680px;
+    margin: 0;
+    padding: 0;
+    transform: scale(1.025);
+  }
+  #luny-homepage .luny-home-hero-slide.is-active { position: absolute; transform: scale(1); }
+  #luny-homepage .luny-home-hero-slide img { display: block; width: 100%; height: 680px; object-fit: cover; }
+  #luny-homepage .luny-home-hero-slide::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(18,16,14,.72) 0%, rgba(18,16,14,.47) 38%, rgba(18,16,14,.08) 72%);
+  }
+  #luny-homepage .luny-home-hero-overlay { position: absolute; z-index: 3; inset: 0; display: flex; align-items: center; pointer-events: none; }
+  #luny-homepage .luny-home-hero-overlay .luny-home-shell { width: min(1180px, calc(100% - 48px)); }
+  #luny-homepage .luny-home-hero-overlay .luny-home-hero-copy { max-width: 610px; color: #fff; pointer-events: auto; }
+  #luny-homepage .luny-home-hero-overlay .luny-home-eyebrow { color: #f1c991; }
+  #luny-homepage .luny-home-hero-overlay h1 { margin-bottom: 14px; color: #fff; }
+  #luny-homepage .luny-home-hero-overlay .luny-home-hero-lead { color: #fff; font-size: clamp(20px, 2vw, 28px); font-weight: 700; }
+  #luny-homepage .luny-home-hero-overlay .luny-home-hero-checks { color: rgba(255,255,255,.94); font-size: 16px; }
+  #luny-homepage .luny-home-hero-overlay .luny-home-button-primary { background: var(--lh-gold); color: #fff; }
+  #luny-homepage .luny-home-hero-controls { position: absolute; z-index: 5; right: 0; bottom: 28px; left: 0; justify-content: flex-end; }
+  #luny-homepage .luny-home-hero-controls .luny-home-hero-arrow { border-color: rgba(255,255,255,.38); background: rgba(16,14,12,.48); color: #fff; backdrop-filter: blur(8px); }
+  #luny-homepage .luny-home-hero-dots button { background: rgba(255,255,255,.48); }
+  #luny-homepage .luny-home-hero-dots button.is-active { background: #fff; }
+
+  /* v3｜濃縮下單流程 */
+  #luny-homepage .luny-home-order { background: var(--lh-soft); }
+  #luny-homepage .luny-home-order-layout { display: grid; grid-template-columns: .82fr 1.18fr; align-items: center; gap: 72px; }
+  #luny-homepage .luny-home-simple-steps { margin: 0 0 34px; padding: 0; list-style: none; }
+  #luny-homepage .luny-home-simple-steps li { display: grid; grid-template-columns: 48px 1fr; gap: 18px; padding: 22px 0; border-bottom: 1px solid var(--lh-line); }
+  #luny-homepage .luny-home-simple-steps li:first-child { padding-top: 0; }
+  #luny-homepage .luny-home-simple-steps li > span { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 50%; background: var(--lh-ink); color: #fff; font-weight: 900; }
+  #luny-homepage .luny-home-simple-steps strong { display: block; font-size: 23px; line-height: 1.35; }
+  #luny-homepage .luny-home-simple-steps p { margin: 5px 0 0; color: var(--lh-muted); font-size: 16px; }
+  #luny-homepage .luny-home-preview-panel { padding: 24px; border: 1px solid var(--lh-line); border-radius: 28px; background: #fff; box-shadow: var(--lh-shadow); }
+  #luny-homepage .luny-home-preview-title { display: block; margin-bottom: 16px; text-align: center; font-size: 18px; }
+  #luny-homepage .luny-home-preview-canvas {
+    display: grid;
+    aspect-ratio: 1 / 1;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid #d6d9dd;
+    border-radius: 15px;
+    background: #fff;
+  }
+  #luny-homepage .luny-home-preview-image { display: block; width: 100%; height: 100%; border-radius: 14px; object-fit: contain; }
+  #luny-homepage .luny-home-preview-status { display: flex; justify-content: space-between; gap: 14px; margin-top: 15px; color: var(--lh-muted); font-size: 13px; }
+  #luny-homepage .luny-home-preview-status strong { color: var(--lh-green); }
+  #luny-homepage .luny-home-tool-pair { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; gap: 18px; }
+  #luny-homepage .luny-home-quote-panel { display: flex; min-width: 0; flex-direction: column; padding: 24px; border: 1px solid var(--lh-line); border-radius: 28px; background: #fff; box-shadow: var(--lh-shadow); }
+  #luny-homepage .luny-home-quote-form { flex: 1; padding: 17px; border: 1px solid var(--lh-line); border-radius: 15px; background: #fff; }
+  #luny-homepage .luny-home-quote-group { padding-bottom: 14px; border-bottom: 1px solid var(--lh-line); }
+  #luny-homepage .luny-home-quote-label { display: block; margin-bottom: 9px; color: var(--lh-text); font-size: 13px; font-weight: 900; }
+  #luny-homepage .luny-home-quote-shapes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  #luny-homepage .luny-home-quote-shapes > span { display: grid; min-width: 0; min-height: 70px; place-items: center; align-content: center; gap: 4px; padding: 7px 3px; border: 1px solid #dcdcdc; border-radius: 8px; color: var(--lh-text); font-size: 11px; text-align: center; }
+  #luny-homepage .luny-home-quote-shapes > span.is-active { border: 2px solid var(--lh-gold); color: var(--lh-gold-dark); }
+  #luny-homepage .luny-home-quote-shapes i { display: block; width: 25px; height: 25px; border: 1px solid #9a9a9a; background: linear-gradient(145deg,#f1f1f1,#c8c8c8); box-shadow: inset 0 1px 2px rgba(0,0,0,.08); }
+  #luny-homepage .luny-home-quote-shapes i.is-circle { border-radius: 50%; }
+  #luny-homepage .luny-home-quote-shapes i.is-rect { width: 31px; height: 22px; }
+  #luny-homepage .luny-home-quote-shapes i.is-custom { display: grid; place-items: center; border: 0; background: none; color: #999; font-size: 26px; font-style: normal; box-shadow: none; }
+  #luny-homepage .luny-home-quote-row { display: grid; grid-template-columns: 55px 1fr; align-items: center; gap: 8px; margin-top: 12px; }
+  #luny-homepage .luny-home-quote-row > strong { color: var(--lh-text); font-size: 12px; }
+  #luny-homepage .luny-home-quote-row > span { display: flex; min-width: 0; align-items: center; justify-content: space-between; padding: 8px 10px; border: 1px solid #ddd; border-radius: 7px; color: var(--lh-text); font-size: 11px; white-space: nowrap; }
+  #luny-homepage .luny-home-quote-row b { margin-left: 5px; font-size: 9px; }
+  #luny-homepage .luny-home-quote-price { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 15px; padding: 13px; border: 1px solid #eadbc8; border-radius: 10px; background: #fffcf7; }
+  #luny-homepage .luny-home-quote-price span { font-size: 14px; font-weight: 900; }
+  #luny-homepage .luny-home-quote-price strong { color: var(--lh-gold-dark); font-size: 14px; }
+  #luny-homepage .luny-home-tool-note { margin: 12px 0 0; color: var(--lh-muted); font-size: 11px; line-height: 1.55; text-align: center; }
+
+  /* v3｜案例與內容 */
+  #luny-homepage .luny-home-cases { background: #fff; }
+  #luny-homepage .luny-home-guides { background: var(--lh-cream); }
+  #luny-homepage .luny-home-editorial-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
+  #luny-homepage .luny-home-guide-grid { display: grid; max-width: 760px; margin: 0 auto; }
+  #luny-homepage .luny-home-editorial-card { overflow: hidden; border: 1px solid var(--lh-line); border-radius: 25px; background: #fff; color: inherit; text-decoration: none; transition: transform .22s ease, box-shadow .22s ease; }
+  #luny-homepage .luny-home-editorial-card:hover,
+  #luny-homepage .luny-home-guide-card:hover { transform: translateY(-5px); box-shadow: var(--lh-shadow); }
+  #luny-homepage .luny-home-editorial-card img { display: block; width: 100%; height: 250px; object-fit: cover; }
+  #luny-homepage .luny-home-editorial-card > div { padding: 25px; }
+  #luny-homepage .luny-home-editorial-card span,
+  #luny-homepage .luny-home-guide-card small { color: var(--lh-gold-dark); font-size: 12px; font-weight: 900; letter-spacing: .08em; }
+  #luny-homepage .luny-home-editorial-card h3,
+  #luny-homepage .luny-home-guide-card h3 { margin: 9px 0 8px; font-size: 22px; line-height: 1.35; }
+  #luny-homepage .luny-home-editorial-card p,
+  #luny-homepage .luny-home-guide-card p { margin: 0 0 18px; color: var(--lh-muted); font-size: 15px; }
+  #luny-homepage .luny-home-editorial-card strong,
+  #luny-homepage .luny-home-guide-card strong { font-size: 14px; }
+  #luny-homepage .luny-home-guide-card { padding: 30px; border: 1px solid rgba(142,112,78,.18); border-radius: 24px; background: #fff; color: inherit; text-decoration: none; transition: transform .22s ease, box-shadow .22s ease; }
+  #luny-homepage .luny-home-guide-icon { display: grid; width: 58px; height: 58px; place-items: center; margin-bottom: 24px; border-radius: 17px; background: #f1e5d5; color: var(--lh-gold-dark); font-size: 24px; font-weight: 900; }
+
+  @media (max-width: 980px) {
+    #luny-homepage .luny-home-hero,
+    #luny-homepage .luny-home-hero-track,
+    #luny-homepage .luny-home-hero-slide { min-height: 650px; }
+    #luny-homepage .luny-home-hero-slide img { height: 650px; }
+    #luny-homepage .luny-home-order-layout { grid-template-columns: 1fr; gap: 44px; }
+    #luny-homepage .luny-home-tool-pair { width: 100%; max-width: 760px; margin: 0 auto; }
+    #luny-homepage .luny-home-editorial-grid,
+    #luny-homepage .luny-home-guide-grid { grid-template-columns: 1fr; }
+    #luny-homepage .luny-home-editorial-card { display: grid; grid-template-columns: .85fr 1.15fr; }
+    #luny-homepage .luny-home-editorial-card img { height: 100%; min-height: 260px; }
+  }
+
+  @media (max-width: 680px) {
+    #luny-homepage .luny-home-hero,
+    #luny-homepage .luny-home-hero-track,
+    #luny-homepage .luny-home-hero-slide { min-height: 620px; }
+    #luny-homepage .luny-home-hero-slide img { height: 620px; }
+    #luny-homepage .luny-home-hero-slide::after { background: linear-gradient(180deg, rgba(15,13,11,.18), rgba(15,13,11,.7) 68%, rgba(15,13,11,.86)); }
+    #luny-homepage .luny-home-hero-overlay { align-items: flex-end; padding-bottom: 92px; }
+    #luny-homepage .luny-home-hero-overlay .luny-home-shell { width: calc(100% - 32px); }
+    #luny-homepage .luny-home-hero-overlay h1 { font-size: 48px; }
+    #luny-homepage .luny-home-hero-overlay .luny-home-hero-lead { font-size: 19px; }
+    #luny-homepage .luny-home-hero-overlay .luny-home-hero-checks { display: flex; gap: 8px 13px; font-size: 13px; }
+    #luny-homepage .luny-home-hero-overlay .luny-home-actions { margin-top: 22px; }
+    #luny-homepage .luny-home-hero-controls { bottom: 22px; justify-content: center; }
+    #luny-homepage .luny-home-hero-dots { gap: 5px; }
+    #luny-homepage .luny-home-hero-dots button { width: 7px; height: 7px; }
+    #luny-homepage .luny-home-hero-dots button.is-active { width: 20px; }
+    #luny-homepage .luny-home-hero-arrow { width: 36px; height: 36px; }
+    #luny-homepage .luny-home-preview-panel { padding: 15px; border-radius: 20px; }
+    #luny-homepage .luny-home-tool-pair { grid-template-columns: 1fr; gap: 14px; }
+    #luny-homepage .luny-home-quote-panel { padding: 15px; border-radius: 20px; }
+    #luny-homepage .luny-home-quote-shapes > span { min-height: 78px; font-size: 12px; }
+    #luny-homepage .luny-home-quote-row > span { font-size: 12px; }
+    #luny-homepage .luny-home-simple-steps strong { font-size: 20px; }
+    #luny-homepage .luny-home-editorial-card { display: block; }
+    #luny-homepage .luny-home-editorial-card img { height: 230px; min-height: 0; }
+    #luny-homepage .luny-home-guide-card { padding: 24px; }
+  }
