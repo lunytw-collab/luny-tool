@@ -1239,7 +1239,6 @@
   #luny-homepage .luny-home-editorial-card:hover,
   #luny-homepage .luny-home-guide-card:hover { transform: translateY(-5px); box-shadow: var(--lh-shadow); }
   #luny-homepage .luny-home-editorial-card img { display: block; width: 100%; height: 250px; object-fit: cover; }
-  #luny-homepage .luny-home-editorial-card--focus-bottom img { object-position: center bottom; }
   #luny-homepage .luny-home-editorial-card > div { padding: 25px; }
   #luny-homepage .luny-home-editorial-card span,
   #luny-homepage .luny-home-guide-card small { color: var(--lh-gold-dark); font-size: 12px; font-weight: 900; letter-spacing: .08em; }
