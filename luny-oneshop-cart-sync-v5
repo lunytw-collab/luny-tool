@@ -1,6 +1,6 @@
 /**
  * LUNY 1SHOP exact cart synchronization bridge
- * Version: 2026-08-06.1
+ * Version: 2026-08-06.4
  *
  * Replaces luny-oneshop-autofill-v2.html.
  * The formal 1SHOP product is NT$1, so expected quantity equals product subtotal.
@@ -9,8 +9,8 @@
   "use strict";
 
   if (window.__LUNY_ONESHOP_CART_SYNC_V3__) return;
-  window.__LUNY_ONESHOP_CART_SYNC_V3__ = "2026-08-06.1";
-  window.__LUNY_ONESHOP_NOTE_AUTOFILL_V2__ = "2026-08-06.1";
+  window.__LUNY_ONESHOP_CART_SYNC_V3__ = "2026-08-06.4";
+  window.__LUNY_ONESHOP_NOTE_AUTOFILL_V2__ = "2026-08-06.4";
   window.__LUNY_ONESHOP_NOTE_AUTOFILL__ = true;
 
   var ALLOWED_QTY_PRODUCT_IDS = [
@@ -18,7 +18,7 @@
     "N6qx3aVnzXNaKbO87jZWBXY2",
     "YVolg4PvkgMlyAy51mneq3GR"
   ];
-  var VERSION = "2026-08-06.1";
+  var VERSION = "2026-08-06.4";
   var runTimer = 0;
   var observer = null;
   var observerSuspended = 0;
@@ -30,6 +30,8 @@
   var cartRepairAttemptedKey = "";
   var replayClickElement = null;
   var allowNextSubmit = false;
+  var lastStatusState = "";
+  var lastStatusMessage = "";
 
   function clean(value){
     return String(value == null ? "" : value).trim();
@@ -310,10 +312,26 @@
 
   function isAllowedQtyProductPage(){
     var id = productIdFromLocation();
-    return ALLOWED_QTY_PRODUCT_IDS.indexOf(id) >= 0 ||
+    var idMatches = ALLOWED_QTY_PRODUCT_IDS.indexOf(id) >= 0 ||
       ALLOWED_QTY_PRODUCT_IDS.some(function(productId){
         return String(location.href || "").indexOf(productId) >= 0;
       });
+    if (idMatches) return true;
+
+    // 桌機版 1SHOP 有時開啟商品視窗後不保留 Type/ID hash。
+    // 只有明確命中 LUNY 專用付款商品名稱時才允許自動代入，
+    // 避免把結帳金額誤填到一般商品。
+    var modal = document.querySelector("#viewProduct");
+    var modalText = clean(modal && modal.textContent).replace(/\s+/g, "");
+    return !!(
+      modal &&
+      /客製化貼紙專用付款商品|LUNY客製化貼紙專用付款商品/.test(modalText)
+    );
+  }
+
+  function isCartFlowPage(){
+    return isAllowedQtyProductPage() ||
+      !!document.querySelector("form.one-step-checkout");
   }
 
   function findQtyInput(){
@@ -434,13 +452,24 @@
   }
 
   function setStatus(state, message){
+    state = clean(state);
+    message = clean(message);
+    var existing = document.getElementById("luny-cart-sync-status");
+    if (
+      existing && lastStatusState === state &&
+      lastStatusMessage === message
+    ) return;
     try {
-      document.documentElement.setAttribute("data-luny-cart-sync-status", state);
+      if (
+        document.documentElement.getAttribute("data-luny-cart-sync-status") !== state
+      ) document.documentElement.setAttribute("data-luny-cart-sync-status", state);
     } catch (_) {}
-    var element = statusElement();
+    var element = existing || statusElement();
     if (!element) return;
-    element.setAttribute("data-state", state);
-    element.textContent = message;
+    if (element.getAttribute("data-state") !== state) {
+      element.setAttribute("data-state", state);
+    }
+    if (clean(element.textContent) !== message) element.textContent = message;
     if (state === "verified") {
       element.style.background = "#eaf8ef";
       element.style.color = "#176b36";
@@ -454,6 +483,8 @@
       element.style.color = "#7a4b00";
       element.style.borderColor = "#f3d48b";
     }
+    lastStatusState = state;
+    lastStatusMessage = message;
   }
 
   function delay(ms){
@@ -463,6 +494,11 @@
   async function synchronizeProductEditor(){
     var meta = getSyncMeta();
     if (!meta.expectedTotal || !isAllowedQtyProductPage()) return false;
+    var verificationKey = meta.syncKey || ("legacy:" + meta.expectedTotal);
+    if (
+      productVerifiedKey === verificationKey &&
+      productEditorSnapshot().ok
+    ) return true;
     if (syncingPromise) return syncingPromise;
 
     syncingPromise = (async function(){
@@ -476,7 +512,7 @@
         if (snapshot.ok) stable += 1;
         else stable = 0;
         if (stable >= 2) {
-          productVerifiedKey = meta.syncKey || ("legacy:" + meta.expectedTotal);
+          productVerifiedKey = verificationKey;
           setStatus("product_verified", "付款商品金額已同步，請按「加入購物車」。");
           return true;
         }
@@ -633,6 +669,8 @@
     var button = event.target && event.target.closest &&
       event.target.closest("button,a,input[type='submit'],input[type='button'],[role='button']");
     if (!button) return;
+    var meta = getSyncMeta();
+    if (!meta.present || !isCartFlowPage()) return;
     fillNote();
 
     if (replayClickElement === button) {
@@ -646,7 +684,6 @@
       return;
     }
 
-    var meta = getSyncMeta();
     if (!meta.present) return;
     if (!meta.complete) {
       event.preventDefault();
@@ -723,10 +760,11 @@
 
   function run(){
     saveBridgeFromUrl();
-    fillNote();
     var meta = getSyncMeta();
-    if (!meta.expectedTotal || !isAllowedQtyProductPage()) return;
-    fillQty();
+    if (!meta.expectedTotal || !isCartFlowPage()) return;
+    fillNote();
+    var productPage = isAllowedQtyProductPage();
+    if (productPage) fillQty();
     if (meta.present && !meta.complete) {
       setStatus("error", "結帳安全資料不完整，請回到設計頁重新前往結帳。");
       return;
@@ -738,7 +776,7 @@
           if (ok) setStatus("verified", "正式購物車與伺服器金額核對完成，可以安全送出訂單。");
         });
       } else {
-        synchronizeProductEditor();
+        if (productPage) synchronizeProductEditor();
       }
     }
   }
@@ -755,8 +793,17 @@
   });
 
   try {
-    observer = new MutationObserver(function(){
-      if (!observerSuspended) scheduleRun(90);
+    observer = new MutationObserver(function(records){
+      if (observerSuspended || !isCartFlowPage()) return;
+      var relevant = Array.prototype.some.call(records || [], function(record){
+        var target = record && record.target;
+        var element = target && target.nodeType === 3 ? target.parentNode : target;
+        return !(
+          element && element.closest &&
+          element.closest("#luny-cart-sync-status")
+        );
+      });
+      if (relevant) scheduleRun(90);
     });
     observer.observe(document.documentElement, {
       childList: true,
@@ -767,6 +814,11 @@
 
   document.addEventListener("click", handleClick, true);
   document.addEventListener("submit", handleSubmit, true);
+  if (window.addEventListener) {
+    window.addEventListener("hashchange", function(){ scheduleRun(0); });
+    window.addEventListener("popstate", function(){ scheduleRun(0); });
+    window.addEventListener("pageshow", function(){ scheduleRun(0); });
+  }
 
   window.LUNY_ONESHOP_CART_SYNC = {
     version: VERSION,
