@@ -1,6 +1,6 @@
 /**
- * LUNY 1SHOP exact cart synchronization bridge
- * Version: 2026-08-06.4
+ * LUNY 1SHOP exact cart synchronization bridge v6
+ * Version: 2026-08-06.5
  *
  * Replaces luny-oneshop-autofill-v2.html.
  * The formal 1SHOP product is NT$1, so expected quantity equals product subtotal.
@@ -9,8 +9,9 @@
   "use strict";
 
   if (window.__LUNY_ONESHOP_CART_SYNC_V3__) return;
-  window.__LUNY_ONESHOP_CART_SYNC_V3__ = "2026-08-06.4";
-  window.__LUNY_ONESHOP_NOTE_AUTOFILL_V2__ = "2026-08-06.4";
+  window.__LUNY_ONESHOP_CART_SYNC_V3__ = "2026-08-06.5";
+  window.__LUNY_ONESHOP_CART_SYNC_V6__ = "2026-08-06.5";
+  window.__LUNY_ONESHOP_NOTE_AUTOFILL_V2__ = "2026-08-06.5";
   window.__LUNY_ONESHOP_NOTE_AUTOFILL__ = true;
 
   var ALLOWED_QTY_PRODUCT_IDS = [
@@ -18,7 +19,7 @@
     "N6qx3aVnzXNaKbO87jZWBXY2",
     "YVolg4PvkgMlyAy51mneq3GR"
   ];
-  var VERSION = "2026-08-06.4";
+  var VERSION = "2026-08-06.5";
   var runTimer = 0;
   var observer = null;
   var observerSuspended = 0;
@@ -672,34 +673,39 @@
     var meta = getSyncMeta();
     if (!meta.present || !isCartFlowPage()) return;
     fillNote();
+    var addToCart = isAddToCartButton(button);
+    var finalSubmit = isFinalSubmitButton(button);
+
+    // Do not interfere with modal close, quantity +/- or other 1SHOP controls.
+    if (!addToCart && !finalSubmit) return;
 
     if (replayClickElement === button) {
       replayClickElement = null;
-      if (isAddToCartButton(button)) {
+      if (addToCart) {
         cartVerifiedKey = "";
         backendVerifiedKey = "";
-        setStatus("syncing", "付款商品已加入，正在核對正式購物車…");
-        window.setTimeout(function(){ ensureCheckoutReady(); }, 250);
+        if (meta.complete) {
+          setStatus("syncing", "付款商品已加入，正在核對正式購物車…");
+          window.setTimeout(function(){ ensureCheckoutReady(); }, 250);
+        }
       }
       return;
     }
 
-    if (!meta.present) return;
-    if (!meta.complete) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-      setStatus("error", "結帳安全資料不完整，已阻止操作。請回到設計頁重新前往結帳。");
-      return;
-    }
-
-    if (isAddToCartButton(button)) {
+    if (addToCart) {
       var snapshot = productEditorSnapshot();
-      if (snapshot.ok && productVerifiedKey === meta.syncKey) {
+      if (snapshot.ok) {
+        // Keep the user's real click. Some 1SHOP desktop handlers do not accept
+        // a delayed synthetic button.click(), even when the quantity is valid.
+        productVerifiedKey = meta.syncKey || ("legacy:" + meta.expectedTotal);
         cartVerifiedKey = "";
         backendVerifiedKey = "";
-        setStatus("syncing", "付款商品已加入，正在核對正式購物車…");
-        window.setTimeout(function(){ ensureCheckoutReady(); }, 250);
+        if (meta.complete) {
+          setStatus("syncing", "付款商品已加入，正在核對正式購物車…");
+          window.setTimeout(function(){ ensureCheckoutReady(); }, 250);
+        } else {
+          setStatus("product_verified", "付款商品數量已同步，正在加入正式購物車。");
+        }
         return;
       }
       event.preventDefault();
@@ -711,7 +717,17 @@
       return;
     }
 
-    if (isFinalSubmitButton(button)) {
+    // Missing safety metadata must block only the final order submission, not
+    // the preceding add-to-cart action.
+    if (!meta.complete) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      setStatus("error", "結帳安全資料不完整，已阻止送出。請回到設計頁重新前往結帳。");
+      return;
+    }
+
+    if (finalSubmit) {
       if (
         cartVerifiedKey === meta.syncKey &&
         backendVerifiedKey === meta.syncKey &&
@@ -830,5 +846,5 @@
     ensureCheckoutReady: ensureCheckoutReady
   };
 
-  console.log("✅ LUNY 1shop exact cart sync v3 installed");
+  console.log("✅ LUNY 1shop exact cart sync v6 installed");
 })();
