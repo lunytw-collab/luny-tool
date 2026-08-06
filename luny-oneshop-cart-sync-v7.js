@@ -1,0 +1,875 @@
+/**
+ * LUNY 1SHOP exact cart synchronization bridge v7
+ * Version: 2026-08-06.6
+ *
+ * Replaces luny-oneshop-autofill-v2.html.
+ * The formal 1SHOP product is NT$1, so expected quantity equals product subtotal.
+ */
+(function installLunyOneShopCartSync(){
+  "use strict";
+
+  if (window.__LUNY_ONESHOP_CART_SYNC_V3__) return;
+  window.__LUNY_ONESHOP_CART_SYNC_V3__ = "2026-08-06.6";
+  window.__LUNY_ONESHOP_CART_SYNC_V6__ = "2026-08-06.6";
+  window.__LUNY_ONESHOP_CART_SYNC_V7__ = "2026-08-06.6";
+  window.__LUNY_ONESHOP_NOTE_AUTOFILL_V2__ = "2026-08-06.6";
+  window.__LUNY_ONESHOP_NOTE_AUTOFILL__ = true;
+
+  var ALLOWED_QTY_PRODUCT_IDS = [
+    "4ONXbQLVzDZljaLr7a8jnvo5",
+    "N6qx3aVnzXNaKbO87jZWBXY2",
+    "YVolg4PvkgMlyAy51mneq3GR"
+  ];
+  var VERSION = "2026-08-06.6";
+  var runTimer = 0;
+  var observer = null;
+  var observerSuspended = 0;
+  var syncingPromise = null;
+  var backendVerifyPromise = null;
+  var productVerifiedKey = "";
+  var cartVerifiedKey = "";
+  var backendVerifiedKey = "";
+  var cartRepairAttemptedKey = "";
+  var replayClickElement = null;
+  var checkoutScrollRunId = 0;
+  var allowNextSubmit = false;
+  var lastStatusState = "";
+  var lastStatusMessage = "";
+
+  function clean(value){
+    return String(value == null ? "" : value).trim();
+  }
+
+  function readParams(){
+    var out = {};
+    function merge(raw){
+      try {
+        var params = new URLSearchParams(clean(raw).replace(/^[?#]/, ""));
+        params.forEach(function(value, key){ out[key] = value; });
+      } catch (_) {}
+    }
+    merge(location.search);
+    merge(location.hash);
+    return out;
+  }
+
+  function normalizeProductType(value){
+    return clean(value).toLowerCase() || "label";
+  }
+
+  function getProductType(){
+    var params = readParams();
+    var direct = params.productType || params.product || params.lunyProductType || "";
+    if (direct) return normalizeProductType(direct);
+    try {
+      return normalizeProductType(
+        window.LUNY_PRODUCT_TYPE ||
+        localStorage.getItem("LUNY_LAST_PRODUCT_TYPE") ||
+        "label"
+      );
+    } catch (_) {
+      return normalizeProductType(window.LUNY_PRODUCT_TYPE || "label");
+    }
+  }
+
+  function scopedKey(key){
+    return clean(key) + "_" + getProductType();
+  }
+
+  function setCookie(name, value){
+    try {
+      document.cookie =
+        name + "=" + encodeURIComponent(value || "") +
+        "; path=/; max-age=" + (60 * 60 * 24 * 7) +
+        "; SameSite=Lax; Secure";
+    } catch (_) {}
+  }
+
+  function getCookie(name){
+    try {
+      var escaped = name.replace(/[.$?*|{}()[\]\\\/+^]/g, "\\$&");
+      var match = document.cookie.match(new RegExp("(?:^|; )" + escaped + "=([^;]*)"));
+      return match ? decodeURIComponent(match[1]) : "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function tokenKey(){ return scopedKey("LUNY_CHECKOUT_TOKEN"); }
+  function totalKey(){ return scopedKey("LUNY_CHECKOUT_TOTAL_AMOUNT"); }
+  function noteKey(){ return scopedKey("LUNY_CHECKOUT_NOTE_TEXT"); }
+  function qtyKey(){ return scopedKey("LUNY_ONESHOP_QTY_VALUE"); }
+  function syncMetaKey(){ return scopedKey("LUNY_CART_SYNC_META_V1"); }
+
+  function noteWithToken(note, token){
+    note = clean(note);
+    token = clean(token);
+    if (!token) return note;
+    var marker = "對帳編號：" + token;
+    if (note.indexOf(token) >= 0) return note;
+    return note ? marker + "｜" + note : marker;
+  }
+
+  function directSyncMeta(){
+    var params = readParams();
+    var meta = {
+      configurationId: clean(params.configurationId || params.groupId || params.cartKey),
+      revision: Number(params.cartRevision || params.revision || 0) || 0,
+      syncKey: clean(params.syncKey || params.idempotencyKey),
+      cartFingerprint: clean(params.cartFingerprint),
+      checkoutToken: clean(params.checkoutToken || params.token),
+      expectedTotal: Number(params.checkoutTotal || params.luny_qty || 0) || 0,
+      gasSyncUrl: clean(params.gasSyncUrl)
+    };
+    meta.present = !!(
+      meta.configurationId || meta.revision || meta.syncKey ||
+      meta.cartFingerprint || params.gasSyncUrl
+    );
+    return meta;
+  }
+
+  function saveBridgeFromUrl(){
+    var params = readParams();
+    var token = clean(params.checkoutToken || params.token);
+    var total = clean(params.checkoutTotal || params.luny_qty);
+    var note = noteWithToken(params.note || "", token);
+    var meta = directSyncMeta();
+
+    try {
+      if (params.productType) {
+        localStorage.setItem("LUNY_LAST_PRODUCT_TYPE", normalizeProductType(params.productType));
+      }
+      if (token) {
+        localStorage.setItem(tokenKey(), token);
+        setCookie(tokenKey(), token);
+      }
+      if (total) {
+        localStorage.setItem(totalKey(), total);
+        localStorage.setItem(qtyKey(), total);
+        setCookie(totalKey(), total);
+      }
+      if (note) {
+        localStorage.setItem(noteKey(), note);
+        setCookie(noteKey(), note);
+      }
+      if (
+        meta.configurationId && meta.revision && meta.syncKey &&
+        meta.cartFingerprint && meta.checkoutToken &&
+        meta.expectedTotal && meta.gasSyncUrl
+      ) {
+        localStorage.setItem(syncMetaKey(), JSON.stringify(meta));
+      } else if (meta.present || token || total) {
+        // A new direct handoff must never inherit another order's sync identity.
+        localStorage.removeItem(syncMetaKey());
+      }
+    } catch (_) {}
+  }
+
+  function getToken(){
+    var params = readParams();
+    try {
+      return clean(
+        params.checkoutToken ||
+        params.token ||
+        localStorage.getItem(tokenKey()) ||
+        getCookie(tokenKey())
+      );
+    } catch (_) {
+      return clean(params.checkoutToken || params.token);
+    }
+  }
+
+  function getTotal(){
+    var params = readParams();
+    try {
+      return clean(
+        params.checkoutTotal ||
+        params.luny_qty ||
+        localStorage.getItem(totalKey()) ||
+        localStorage.getItem(qtyKey()) ||
+        getCookie(totalKey())
+      );
+    } catch (_) {
+      return clean(params.checkoutTotal || params.luny_qty);
+    }
+  }
+
+  function getSyncMeta(){
+    var direct = directSyncMeta();
+    var stored = null;
+    try { stored = JSON.parse(localStorage.getItem(syncMetaKey()) || "null"); }
+    catch (_) { stored = null; }
+    stored = stored || {};
+
+    var meta = {
+      configurationId: direct.configurationId || clean(stored.configurationId),
+      revision: direct.revision || Number(stored.revision || 0) || 0,
+      syncKey: direct.syncKey || clean(stored.syncKey),
+      cartFingerprint: direct.cartFingerprint || clean(stored.cartFingerprint),
+      checkoutToken: direct.checkoutToken || getToken() || clean(stored.checkoutToken),
+      expectedTotal: direct.expectedTotal || Number(getTotal() || 0) || Number(stored.expectedTotal || 0) || 0,
+      gasSyncUrl: direct.gasSyncUrl || clean(stored.gasSyncUrl),
+      present: direct.present || !!(
+        stored.configurationId || stored.revision || stored.syncKey ||
+        stored.cartFingerprint || stored.gasSyncUrl
+      )
+    };
+    meta.complete = !!(
+      meta.configurationId && meta.revision && meta.syncKey &&
+      meta.cartFingerprint && meta.checkoutToken &&
+      meta.expectedTotal > 0 && meta.gasSyncUrl
+    );
+    return meta;
+  }
+
+  function getNote(){
+    var params = readParams();
+    var token = getToken();
+    var note = "";
+    try {
+      note = params.note || localStorage.getItem(noteKey()) || getCookie(noteKey()) || "";
+    } catch (_) {
+      note = params.note || "";
+    }
+    return noteWithToken(note, token);
+  }
+
+  function withObserverSuspended(callback){
+    observerSuspended += 1;
+    try { return callback(); }
+    finally {
+      window.setTimeout(function(){ observerSuspended = Math.max(0, observerSuspended - 1); }, 0);
+    }
+  }
+
+  function fireValueEvents(element){
+    ["input", "change", "blur"].forEach(function(type){
+      try { element.dispatchEvent(new Event(type, { bubbles: true })); }
+      catch (_) {}
+    });
+  }
+
+  function setExactInputValue(element, value){
+    value = String(value);
+    if (!element) return false;
+    var matches = String(element.value || "") === value;
+    var alreadyApplied = element.getAttribute("data-luny-qty-applied") === value;
+    if (matches && alreadyApplied) return false;
+
+    withObserverSuspended(function(){
+      try {
+        var prototype = window.HTMLInputElement && window.HTMLInputElement.prototype;
+        var descriptor = prototype && Object.getOwnPropertyDescriptor(prototype, "value");
+        if (descriptor && descriptor.set) descriptor.set.call(element, value);
+        else element.value = value;
+      } catch (_) {
+        element.value = value;
+      }
+      element.setAttribute("data-luny-qty-applied", value);
+      fireValueEvents(element);
+    });
+    return true;
+  }
+
+  function looksLikeNoteField(element){
+    if (!element) return false;
+    var tag = clean(element.tagName).toLowerCase();
+    var type = clean(element.getAttribute("type")).toLowerCase();
+    if (type === "password" || type === "file") return false;
+    var text = [
+      element.name, element.id, element.className, element.placeholder,
+      element.getAttribute("aria-label"), element.getAttribute("data-name")
+    ].join(" ").toLowerCase();
+    if (tag === "textarea") return true;
+    return /note|remark|memo|comment|message|備註|留言|附註|訂單備註/.test(text);
+  }
+
+  function fillNote(){
+    var note = getNote();
+    if (!note) return false;
+    var found = false;
+    var selector = [
+      'textarea[name="Note"]', 'textarea[name="note"]', "textarea",
+      'input[name="Note"]', 'input[name="note"]', 'input[name="remark"]',
+      'input[name="memo"]', 'input[name="comment"]',
+      'input[name="order_note"]', 'input[name="customer_note"]'
+    ].join(",");
+    Array.prototype.forEach.call(document.querySelectorAll(selector), function(element){
+      if (!looksLikeNoteField(element)) return;
+      found = true;
+      var oldValue = clean(element.value);
+      var nextValue = noteWithToken(oldValue || note, getToken());
+      if (nextValue !== oldValue) {
+        withObserverSuspended(function(){
+          element.value = nextValue;
+          fireValueEvents(element);
+        });
+      }
+    });
+    return found;
+  }
+
+  function productIdFromLocation(){
+    return clean(readParams().ID || readParams().id);
+  }
+
+  function isAllowedQtyProductPage(){
+    var id = productIdFromLocation();
+    var idMatches = ALLOWED_QTY_PRODUCT_IDS.indexOf(id) >= 0 ||
+      ALLOWED_QTY_PRODUCT_IDS.some(function(productId){
+        return String(location.href || "").indexOf(productId) >= 0;
+      });
+    if (idMatches) return true;
+
+    // 桌機版 1SHOP 有時開啟商品視窗後不保留 Type/ID hash。
+    // 只有明確命中 LUNY 專用付款商品名稱時才允許自動代入，
+    // 避免把結帳金額誤填到一般商品。
+    var modal = document.querySelector("#viewProduct");
+    var modalText = clean(modal && modal.textContent).replace(/\s+/g, "");
+    return !!(
+      modal &&
+      /客製化貼紙專用付款商品|LUNY客製化貼紙專用付款商品/.test(modalText)
+    );
+  }
+
+  function isCartFlowPage(){
+    return isAllowedQtyProductPage() ||
+      !!document.querySelector("form.one-step-checkout");
+  }
+
+  function findQtyInput(){
+    var selectors = [
+      '#viewProduct input[name="Quantity"]',
+      'input[name="Quantity"]', 'input[name="quantity"]',
+      "input.qty", 'input[class*="qty"]',
+      'input[id*="qty"]', 'input[id*="quantity"]'
+    ];
+    for (var i = 0; i < selectors.length; i++) {
+      var element = document.querySelector(selectors[i]);
+      if (element) return element;
+    }
+    return null;
+  }
+
+  function fillQty(){
+    if (!isAllowedQtyProductPage()) return false;
+    var total = parseInt(getTotal() || "0", 10);
+    if (!total || total <= 0) return false;
+    var element = findQtyInput();
+    if (!element || element.disabled) return false;
+    if (element.readOnly) element.readOnly = false;
+    setExactInputValue(element, total);
+    return String(element.value || "") === String(total);
+  }
+
+  function parseMoney(value){
+    var matches = clean(value).replace(/,/g, "").match(/-?\d+(?:\.\d+)?/g);
+    if (!matches || !matches.length) return NaN;
+    var number = Number(matches[matches.length - 1]);
+    return isFinite(number) ? number : NaN;
+  }
+
+  function productEditorSnapshot(){
+    var target = Number(getTotal() || 0) || 0;
+    var input = findQtyInput();
+    var priceNode = document.querySelector("#viewProduct .price");
+    var subtotalNode =
+      document.querySelector("#viewProduct .modal-total .total") ||
+      document.querySelector("#viewProduct .subtotal .total");
+    var modal = document.querySelector("#viewProduct");
+    var modalText = clean(modal && modal.textContent);
+    var unitPrice = parseMoney(priceNode && priceNode.textContent);
+    var subtotal = parseMoney(subtotalNode && subtotalNode.textContent);
+    var quantity = Number(input && input.value || 0) || 0;
+    var busy = /資料轉換中|轉換中|計算中|載入中/.test(modalText);
+    // 1SHOP 的商品視窗在按下「加入購物車」前，可能仍把「小計」顯示為
+    // 單價 NT$1，即使數量欄已正確代入。此處不能因此鎖死加入按鈕；
+    // 真正的商品小計會在加入後由 cartSnapshot + GAS 再做強制核對。
+    var modalSubtotalConfirmed = isFinite(subtotal) && subtotal === target;
+    var ok = !!(
+      target > 0 && input && quantity === target && !busy &&
+      (!isFinite(unitPrice) || unitPrice === 1)
+    );
+    return {
+      ok: ok,
+      target: target,
+      quantity: quantity,
+      unitPrice: unitPrice,
+      subtotal: subtotal,
+      modalSubtotalConfirmed: modalSubtotalConfirmed,
+      busy: busy,
+      hasInput: !!input
+    };
+  }
+
+  function cartSnapshot(){
+    var target = Number(getTotal() || 0) || 0;
+    var cartContent = document.querySelector("#cart-section .cart-content, .cart-content");
+    var cartText = clean(cartContent && cartContent.textContent);
+    var empty = !cartContent || /沒有產品|購物車是空的|尚無商品/.test(cartText);
+    var itemNodes = document.querySelectorAll(
+      "#cart-section .cart-content .cart-item:not(.cart-empty), .cart-content .cart-item:not(.cart-empty)"
+    );
+    var subtotalNode =
+      document.querySelector("#cart-section .cart-total .row.total") ||
+      document.querySelector(".cart-total .row.total") ||
+      document.querySelector("#cart-section .list-cart-summary .total");
+    var subtotal = parseMoney(subtotalNode && subtotalNode.textContent);
+    var cartQtyInputs = document.querySelectorAll(
+      "#cart-section .cart-content input[name='Quantity']," +
+      "#cart-section .cart-content input.qty," +
+      ".cart-content input[name='Quantity'],.cart-content input.qty"
+    );
+    var productNameMatches = !cartText ||
+      /客製化貼紙專用付款商品|專用付款商品/.test(cartText);
+    var itemCountAcceptable = itemNodes.length === 0 || itemNodes.length === 1;
+    var ok = !!(
+      target > 0 && !empty && itemCountAcceptable && productNameMatches &&
+      isFinite(subtotal) && subtotal === target
+    );
+    return {
+      ok: ok,
+      target: target,
+      subtotal: subtotal,
+      empty: empty,
+      itemCount: itemNodes.length,
+      productNameMatches: productNameMatches,
+      cartQtyInputs: cartQtyInputs
+    };
+  }
+
+  function statusElement(){
+    var existing = document.getElementById("luny-cart-sync-status");
+    if (existing) return existing;
+    if (!document.createElement) return null;
+    var element = document.createElement("div");
+    element.id = "luny-cart-sync-status";
+    element.style.cssText =
+      "margin:10px 0;padding:10px 12px;border-radius:8px;" +
+      "font-size:14px;line-height:1.5;background:#fff8e1;color:#7a4b00;" +
+      "border:1px solid #f3d48b;";
+    var target = document.querySelector("#cart-section") ||
+      document.querySelector("form.one-step-checkout") || document.body;
+    if (target && target.insertBefore) target.insertBefore(element, target.firstChild || null);
+    return element;
+  }
+
+  function setStatus(state, message){
+    state = clean(state);
+    message = clean(message);
+    var existing = document.getElementById("luny-cart-sync-status");
+    if (
+      existing && lastStatusState === state &&
+      lastStatusMessage === message
+    ) return;
+    try {
+      if (
+        document.documentElement.getAttribute("data-luny-cart-sync-status") !== state
+      ) document.documentElement.setAttribute("data-luny-cart-sync-status", state);
+    } catch (_) {}
+    var element = existing || statusElement();
+    if (!element) return;
+    if (element.getAttribute("data-state") !== state) {
+      element.setAttribute("data-state", state);
+    }
+    if (clean(element.textContent) !== message) element.textContent = message;
+    if (state === "verified") {
+      element.style.background = "#eaf8ef";
+      element.style.color = "#176b36";
+      element.style.borderColor = "#9ed8b2";
+    } else if (state === "error") {
+      element.style.background = "#fff0f0";
+      element.style.color = "#a12626";
+      element.style.borderColor = "#efb2b2";
+    } else {
+      element.style.background = "#fff8e1";
+      element.style.color = "#7a4b00";
+      element.style.borderColor = "#f3d48b";
+    }
+    lastStatusState = state;
+    lastStatusMessage = message;
+  }
+
+  function delay(ms){
+    return new Promise(function(resolve){ window.setTimeout(resolve, ms); });
+  }
+
+  async function synchronizeProductEditor(){
+    var meta = getSyncMeta();
+    if (!meta.expectedTotal || !isAllowedQtyProductPage()) return false;
+    var verificationKey = meta.syncKey || ("legacy:" + meta.expectedTotal);
+    if (
+      productVerifiedKey === verificationKey &&
+      productEditorSnapshot().ok
+    ) return true;
+    if (syncingPromise) return syncingPromise;
+
+    syncingPromise = (async function(){
+      setStatus("syncing", "正在將正式付款商品同步為 NT$ " + meta.expectedTotal + "…");
+      var waits = [0, 120, 260, 520, 900, 1500];
+      var stable = 0;
+      for (var i = 0; i < waits.length; i++) {
+        if (waits[i]) await delay(waits[i]);
+        fillQty();
+        var snapshot = productEditorSnapshot();
+        if (snapshot.ok) stable += 1;
+        else stable = 0;
+        if (stable >= 2) {
+          productVerifiedKey = verificationKey;
+          setStatus("product_verified", "付款商品金額已同步，請按「加入購物車」。");
+          return true;
+        }
+      }
+      productVerifiedKey = "";
+      setStatus("error", "付款金額尚未完成同步，請勿送出訂單並重新整理頁面。");
+      return false;
+    })();
+
+    try { return await syncingPromise; }
+    finally { syncingPromise = null; }
+  }
+
+  async function repairCartOnce(){
+    var meta = getSyncMeta();
+    if (cartRepairAttemptedKey === meta.syncKey) return false;
+    cartRepairAttemptedKey = meta.syncKey;
+    var snapshot = cartSnapshot();
+    var inputs = snapshot.cartQtyInputs;
+    if (!inputs || inputs.length !== 1) return false;
+    setExactInputValue(inputs[0], meta.expectedTotal);
+    await delay(500);
+    return cartSnapshot().ok;
+  }
+
+  async function postSyncVerify(meta){
+    var controller = window.AbortController ? new AbortController() : null;
+    var timer = window.setTimeout(function(){
+      try { if (controller) controller.abort(); } catch (_) {}
+    }, 7000);
+    try {
+      var response = await fetch(meta.gasSyncUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        body: JSON.stringify({
+          type: "cartSyncVerify",
+          source: "oneshop-cart-sync-v3",
+          configurationId: meta.configurationId,
+          groupId: meta.configurationId,
+          cartRevision: meta.revision,
+          revision: meta.revision,
+          syncKey: meta.syncKey,
+          idempotencyKey: meta.syncKey,
+          cartFingerprint: meta.cartFingerprint,
+          checkoutToken: meta.checkoutToken,
+          expectedTotal: meta.expectedTotal,
+          checkoutTotal: meta.expectedTotal,
+          pageHref: location.href
+        }),
+        signal: controller ? controller.signal : undefined
+      });
+      var text = await response.text();
+      var json = null;
+      try { json = JSON.parse(text || "{}"); }
+      catch (_) { json = null; }
+      if (!response.ok || !json) throw new Error("GAS_CART_SYNC_RESPONSE_INVALID");
+      return json;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
+  async function verifyBackendIntent(){
+    var meta = getSyncMeta();
+    if (!meta.present) return true;
+    if (!meta.complete) {
+      setStatus("error", "結帳安全資料不完整，已阻止送出。請回到設計頁重新前往結帳。");
+      return false;
+    }
+    if (backendVerifiedKey === meta.syncKey) return true;
+    if (backendVerifyPromise) return backendVerifyPromise;
+
+    backendVerifyPromise = (async function(){
+      var last = null;
+      for (var attempt = 0; attempt < 4; attempt++) {
+        if (attempt) await delay(Math.min(2400, 500 * Math.pow(2, attempt - 1)));
+        try { last = await postSyncVerify(meta); }
+        catch (error) {
+          last = { ok:false, retryable:true, code:"CART_SYNC_NETWORK_ERROR", error:clean(error && error.message) };
+        }
+        if (last && last.ok === true) {
+          if (Number(last.serverExpectedTotal || 0) !== Number(meta.expectedTotal)) {
+            last = {
+              ok:false,
+              retryable:false,
+              code:"CART_SYNC_AMOUNT_MISMATCH",
+              error:"Server expected total changed"
+            };
+          } else {
+            backendVerifiedKey = meta.syncKey;
+            return true;
+          }
+        }
+        if (!last || last.retryable !== true) break;
+      }
+      backendVerifiedKey = "";
+      setStatus(
+        "error",
+        last && last.code === "STALE_CART_REVISION"
+          ? "這個分頁的購物車版本已過期，請使用最新分頁重新結帳。"
+          : "付款資料尚未通過伺服器核對，已阻止送出。請稍後重試。"
+      );
+      return false;
+    })();
+
+    try { return await backendVerifyPromise; }
+    finally { backendVerifyPromise = null; }
+  }
+
+  async function ensureCheckoutReady(){
+    var meta = getSyncMeta();
+    if (!meta.complete) return false;
+    var cart = cartSnapshot();
+    if (!cart.ok) {
+      setStatus("syncing", "正在重新核對正式購物車金額…");
+      if (await repairCartOnce()) cart = cartSnapshot();
+    }
+    if (!cart.ok) {
+      cartVerifiedKey = "";
+      setStatus(
+        "error",
+        cart.empty
+          ? "正式購物車尚未加入付款商品，請先按「加入購物車」。"
+          : "正式購物車金額不一致，已阻止送出。請移除舊商品後重新整理。"
+      );
+      return false;
+    }
+    cartVerifiedKey = meta.syncKey;
+    if (!await verifyBackendIntent()) return false;
+    setStatus("verified", "正式購物車與伺服器金額核對完成，可以安全送出訂單。");
+    return true;
+  }
+
+  function isAddToCartButton(button){
+    if (!button) return false;
+    if (button.matches && button.matches("#viewProduct .add-to-cart, button.add-to-cart")) return true;
+    return /加入購物車|加入購物袋|加到購物車|加入訂單|立即加入/.test(
+      clean(button.textContent || button.value).replace(/\s+/g, "")
+    );
+  }
+
+  function goToOneShopCheckout(){
+    var form = document.querySelector("form.one-step-checkout");
+    if (!form) return false;
+    try {
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function scheduleCheckoutScroll(){
+    var runId = ++checkoutScrollRunId;
+    [350, 700, 1200, 1900, 2800].forEach(function(delayMs){
+      window.setTimeout(function(){
+        if (runId !== checkoutScrollRunId) return;
+        goToOneShopCheckout();
+      }, delayMs);
+    });
+  }
+
+  function isFinalSubmitButton(button){
+    if (!button || !button.closest || !button.closest("form.one-step-checkout")) return false;
+    return clean(button.textContent || button.value).replace(/\s+/g, "") === "送出";
+  }
+
+  function replayClick(button){
+    if (!button || typeof button.click !== "function") return;
+    replayClickElement = button;
+    button.click();
+  }
+
+  function handleClick(event){
+    var button = event.target && event.target.closest &&
+      event.target.closest("button,a,input[type='submit'],input[type='button'],[role='button']");
+    if (!button) return;
+    var meta = getSyncMeta();
+    if (!meta.present || !isCartFlowPage()) return;
+    fillNote();
+    var addToCart = isAddToCartButton(button);
+    var finalSubmit = isFinalSubmitButton(button);
+
+    // Do not interfere with modal close, quantity +/- or other 1SHOP controls.
+    if (!addToCart && !finalSubmit) return;
+
+    if (replayClickElement === button) {
+      replayClickElement = null;
+      if (addToCart) {
+        scheduleCheckoutScroll();
+        cartVerifiedKey = "";
+        backendVerifiedKey = "";
+        if (meta.complete) {
+          setStatus("syncing", "付款商品已加入，正在核對正式購物車…");
+          window.setTimeout(function(){ ensureCheckoutReady(); }, 250);
+        }
+      }
+      return;
+    }
+
+    if (addToCart) {
+      var snapshot = productEditorSnapshot();
+      if (snapshot.ok) {
+        // Keep the user's real click. Some 1SHOP desktop handlers do not accept
+        // a delayed synthetic button.click(), even when the quantity is valid.
+        productVerifiedKey = meta.syncKey || ("legacy:" + meta.expectedTotal);
+        scheduleCheckoutScroll();
+        cartVerifiedKey = "";
+        backendVerifiedKey = "";
+        if (meta.complete) {
+          setStatus("syncing", "付款商品已加入，正在核對正式購物車…");
+          window.setTimeout(function(){ ensureCheckoutReady(); }, 250);
+        } else {
+          setStatus("product_verified", "付款商品數量已同步，正在加入正式購物車。");
+        }
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      synchronizeProductEditor().then(function(ok){
+        if (ok) replayClick(button);
+      });
+      return;
+    }
+
+    // Missing safety metadata must block only the final order submission, not
+    // the preceding add-to-cart action.
+    if (!meta.complete) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      setStatus("error", "結帳安全資料不完整，已阻止送出。請回到設計頁重新前往結帳。");
+      return;
+    }
+
+    if (finalSubmit) {
+      if (
+        cartVerifiedKey === meta.syncKey &&
+        backendVerifiedKey === meta.syncKey &&
+        cartSnapshot().ok
+      ) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      ensureCheckoutReady().then(function(ok){
+        if (ok) replayClick(button);
+      });
+    }
+  }
+
+  function handleSubmit(event){
+    var form = event.target;
+    if (!form || !form.matches || !form.matches("form.one-step-checkout")) return;
+    var meta = getSyncMeta();
+    if (!meta.present) return;
+    if (!meta.complete) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      setStatus("error", "結帳安全資料不完整，已阻止送出。請回到設計頁重新前往結帳。");
+      return;
+    }
+    if (allowNextSubmit) {
+      allowNextSubmit = false;
+      return;
+    }
+    if (
+      cartVerifiedKey === meta.syncKey &&
+      backendVerifiedKey === meta.syncKey &&
+      cartSnapshot().ok
+    ) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    ensureCheckoutReady().then(function(ok){
+      if (!ok) return;
+      allowNextSubmit = true;
+      if (typeof form.requestSubmit === "function") form.requestSubmit();
+      else if (typeof form.submit === "function") form.submit();
+    });
+  }
+
+  function run(){
+    saveBridgeFromUrl();
+    var meta = getSyncMeta();
+    if (!meta.expectedTotal || !isCartFlowPage()) return;
+    fillNote();
+    var productPage = isAllowedQtyProductPage();
+    if (productPage) fillQty();
+    if (meta.present && !meta.complete) {
+      setStatus("error", "結帳安全資料不完整，請回到設計頁重新前往結帳。");
+      return;
+    }
+    if (meta.complete) {
+      if (cartSnapshot().ok) {
+        cartVerifiedKey = meta.syncKey;
+        verifyBackendIntent().then(function(ok){
+          if (ok) setStatus("verified", "正式購物車與伺服器金額核對完成，可以安全送出訂單。");
+        });
+      } else {
+        if (productPage) synchronizeProductEditor();
+      }
+    }
+  }
+
+  function scheduleRun(delayMs){
+    if (observerSuspended) return;
+    window.clearTimeout(runTimer);
+    runTimer = window.setTimeout(run, Math.max(0, Number(delayMs || 0)));
+  }
+
+  run();
+  [120, 350, 800, 1600, 3200, 6000, 10000].forEach(function(delayMs){
+    window.setTimeout(run, delayMs);
+  });
+
+  try {
+    observer = new MutationObserver(function(records){
+      if (observerSuspended || !isCartFlowPage()) return;
+      var relevant = Array.prototype.some.call(records || [], function(record){
+        var target = record && record.target;
+        var element = target && target.nodeType === 3 ? target.parentNode : target;
+        return !(
+          element && element.closest &&
+          element.closest("#luny-cart-sync-status")
+        );
+      });
+      if (relevant) scheduleRun(90);
+    });
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+  } catch (_) {}
+
+  document.addEventListener("click", handleClick, true);
+  document.addEventListener("submit", handleSubmit, true);
+  if (window.addEventListener) {
+    window.addEventListener("hashchange", function(){ scheduleRun(0); });
+    window.addEventListener("popstate", function(){ scheduleRun(0); });
+    window.addEventListener("pageshow", function(){ scheduleRun(0); });
+  }
+
+  window.LUNY_ONESHOP_CART_SYNC = {
+    version: VERSION,
+    getSyncMeta: getSyncMeta,
+    fillQty: fillQty,
+    productEditorSnapshot: productEditorSnapshot,
+    cartSnapshot: cartSnapshot,
+    synchronizeProductEditor: synchronizeProductEditor,
+    ensureCheckoutReady: ensureCheckoutReady
+  };
+
+  console.log("✅ LUNY 1shop exact cart sync v7 installed");
+})();
