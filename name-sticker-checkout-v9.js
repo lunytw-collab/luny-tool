@@ -445,7 +445,310 @@
   }
   function getBackgroundText(background){
     if(!background) return "";
-    if(background.type === "color") return String(background.value…3167 tokens truncated…se();
+    if(background.type === "color") return String(background.value || "");
+    const v = background.value || {};
+    return `${v.kind || "pattern"} ${v.c1 || ""}/${v.c2 || ""}`.trim();
+  }
+  function getNameStickerDrawOptions(){
+    return {
+      shape:state.shape,
+      background:state.background,
+      icon:state.icon,
+      photoThumb:state.photoThumb,
+      line1:state.line1,
+      line2:state.line2,
+      fontFamily:state.fontFamily,
+      fontWeight:state.fontWeight,
+      textColor:state.textColor,
+      photoRaw:state.photo,
+      photoScale:state.photoScale,
+      photoOffsetX:state.photoOffsetX,
+      photoOffsetY:state.photoOffsetY,
+      fontScale:state.fontScale,
+      lineGapMm:state.lineGapMm,
+      letterSpacingMm:state.letterSpacingMm,
+      noWhiteBorder:getTypeConfig(selectedStickerType).noWhiteBorder
+    };
+  }
+  function renderPrintCanvas(){
+    const out = document.createElement("canvas");
+    out.width = LABEL_W;
+    out.height = LABEL_H;
+    const outCtx = out.getContext("2d");
+    drawLabel(outCtx, getNameStickerDrawOptions(), false);
+    return out;
+  }
+  function renderCutCanvas(){
+    const out = document.createElement("canvas");
+    out.width = LABEL_W;
+    out.height = LABEL_H;
+    const outCtx = out.getContext("2d");
+    outCtx.clearRect(0, 0, out.width, out.height);
+
+    const inset = Math.max(2, Math.round(PX_PER_MM * 0.18));
+    const lineWidth = Math.max(2, Math.round(PX_PER_MM * 0.22));
+    const rect = {
+      x:inset,
+      y:inset,
+      w:Math.max(1, LABEL_W - inset * 2),
+      h:Math.max(1, LABEL_H - inset * 2)
+    };
+
+    outCtx.save();
+    outCtx.strokeStyle = "#ff0000";
+    outCtx.lineWidth = lineWidth;
+    outCtx.lineJoin = "round";
+    outCtx.lineCap = "round";
+    drawStickerShapePath(outCtx, rect, Math.max(0, RADIUS_CUT - inset), state.shape);
+    outCtx.stroke();
+    outCtx.restore();
+    return out;
+  }
+  function syncCheckoutCanvas(){
+    const bridge = document.getElementById("canvasGuides");
+    if(!bridge) return;
+    const printCanvas = renderPrintCanvas();
+    bridge.width = printCanvas.width;
+    bridge.height = printCanvas.height;
+    const bctx = bridge.getContext("2d");
+    bctx.clearRect(0,0,bridge.width,bridge.height);
+    bctx.fillStyle = "#ffffff";
+    bctx.fillRect(0,0,bridge.width,bridge.height);
+    bctx.drawImage(printCanvas,0,0);
+  }
+
+  const originalDraw = draw;
+  draw = function(){
+    originalDraw.apply(this, arguments);
+    try{ syncCheckoutCanvas(); }catch(e){ console.warn("[NAME STICKER] 同步結帳預覽失敗",e); }
+  };
+  window.drawPreview = draw;
+
+  window.getPrintAndCutDataURLs = function(){
+    if(!(state.line1 || "").trim()){
+      throw new Error("請先輸入姓名，再加入結帳清單。");
+    }
+    const printCanvas = renderPrintCanvas();
+    const cutCanvas = renderCutCanvas();
+    const cfg = getTypeConfig(selectedStickerType);
+    const typeText = cfg.name;
+    const finishSuffix = cfg.noWhiteBorder ? "_無白邊" : "";
+    const n1 = safeFilename(state.line1 || "姓名");
+    const n2 = safeFilename(state.line2 || "");
+    const base = n2 ? `${typeText}${finishSuffix}_姓名貼_${n1}_${n2}_27x13mm` : `${typeText}${finishSuffix}_姓名貼_${n1}_27x13mm`;
+    let printDataURL;
+    let cutDataURL;
+    try{
+      printDataURL = printCanvas.toDataURL("image/png");
+      cutDataURL = cutCanvas.toDataURL("image/png");
+    }catch(err){
+      if(err && err.name === "SecurityError"){
+        throw new Error("目前選用的圖庫素材無法安全輸出，請重新選擇素材後再加入結帳清單。");
+      }
+      throw err;
+    }
+    if(!printDataURL || !cutDataURL || printDataURL === cutDataURL){
+      throw new Error("姓名貼印刷檔或刀模檔產生失敗，請重新整理後再試。");
+    }
+    return {
+      print:{filename:`${base}_印刷檔.png`,dataURL:printDataURL,ppi:PPI,widthPx:printCanvas.width,heightPx:printCanvas.height,targetPpi:PPI,capped:false},
+      cut:{filename:`${base}_刀模檔.png`,dataURL:cutDataURL,ppi:PPI,widthPx:cutCanvas.width,heightPx:cutCanvas.height,targetPpi:PPI,capped:false}
+    };
+  };
+
+  function repriceNameStickerCart(){
+    const all = loadAllItems();
+    const rowsByType = {waterproof:[], transfer:[]};
+    all.forEach((item, index)=>{
+      if(!isNameStickerItem(item)) return;
+      const type = getItemStickerType(item);
+      rowsByType[type].push({item,index});
+    });
+
+    TYPE_ORDER.forEach(type=>{
+      const rows = rowsByType[type];
+      ensurePackagePlanCoversSaved(type, rows.length);
+      const cfg = getTypeConfig(type);
+      rows.forEach((row, idx)=>{
+        const item = row.item;
+        const q = Object.assign({}, item.quote || {});
+        const placement = getPackagePlacement(type, idx + 1);
+        const packageSavedCount = Math.min(
+          placement.packageCount,
+          Math.max(0, rows.length - placement.packageStart)
+        );
+        q.price = itemIncrementForIndex(type, placement.styleIndex);
+        q.nameSticker = true;
+        q.nameStickerType = type;
+        q.nameStickerTypeText = cfg.name;
+        q.nameStickerFinishMode = cfg.finishMode;
+        q.nameStickerFinishText = cfg.finishText;
+        q.noWhiteBorder = cfg.noWhiteBorder;
+        q.whiteBorder = !cfg.noWhiteBorder;
+        q.printBackgroundToCutEdge = cfg.noWhiteBorder;
+        q.edgeOption = cfg.noWhiteBorder ? "no_white_border" : "standard_white_border";
+        q.edgeText = cfg.finishText;
+        q.nameStickerPackageIndex = placement.packageIndex;
+        q.nameStickerStyleIndex = placement.styleIndex;
+        q.nameStickerOverallStyleIndex = idx + 1;
+        q.nameStickerSavedCount = packageSavedCount;
+        q.nameStickerTotalSavedCount = rows.length;
+        q.nameStickerPackageCount = placement.packageCount;
+        q.nameStickerPackagePrice = getPackagePrice(type, placement.packageCount);
+        q.nameStickerPackageMarketingText = getPackageMarketingText(placement.packageCount);
+        q.freeStorePickupShipping = isFreeStorePickupShipping(placement.packageCount);
+        q.shippingPromotionText = q.freeStorePickupShipping ? "4 款超取免運" : "";
+        q.nameStickerPackageComplete = packageSavedCount === placement.packageCount;
+        q.quantity = 1;
+        q.quantityText = "一份";
+        q.quantityUnit = "份";
+        q.widthCm = 2.7;
+        q.heightCm = 1.3;
+        const shapeCode = q.designShape || q.shapeCode || q.shape || q.shapeText || "";
+        q.designShape = shapeCode;
+        q.shapeCode = shapeCode;
+        q.shapeText = getShapeText(shapeCode);
+        q.shape = q.shapeText;
+        q.material = cfg.materialText;
+        q.materialCode = cfg.materialCode;
+        q.materialText = cfg.materialText;
+        q.laminate = cfg.laminateText;
+        q.laminateCode = cfg.laminateCode;
+        q.laminateText = cfg.laminateText;
+        item.productType = "NAME_STICKER";
+        item.productCode = cfg.productName;
+        item.quote = q;
+        item.price = q.price;
+      });
+    });
+
+    if(typeof saveSavedDesignsForCheckout === "function") saveSavedDesignsForCheckout(all);
+    persistPackageState(all);
+    return all;
+  }
+
+  const baseBuildOrderPayload = typeof buildOrderPayload === "function" ? buildOrderPayload : null;
+  buildOrderPayload = function(){
+    syncCheckoutCanvas();
+    const images = window.getPrintAndCutDataURLs();
+    const cfg = getTypeConfig(selectedStickerType);
+    const allItems = loadAllItems();
+    const existingNameCount = getNameItemsByType(selectedStickerType, allItems).length;
+    const packageState = getPackageState(selectedStickerType, allItems);
+    if(packageState.complete){
+      throw new Error("目前套組已完成，請先重新選擇 1、2 或 4 入，再加入下一款。");
+    }
+    const overallStyleIndex = existingNameCount + 1;
+    const styleIndex = packageState.savedInPackage + 1;
+    const targetCount = packageState.packageCount;
+    const packageIndex = packageState.packageIndex;
+    const itemPrice = itemIncrementForIndex(selectedStickerType, styleIndex);
+    const packagePrice = getPackagePrice(selectedStickerType, targetCount);
+    const line1 = String(state.line1 || "").trim();
+    const line2 = String(state.line2 || "").trim();
+    const shapeText = getShapeText(state.shape);
+    const summary = [
+      `貼紙款式：${cfg.name}`,
+      `${cfg.productName}第 ${packageIndex} 組：第 ${styleIndex} 款／共 ${targetCount} 款（全部第 ${overallStyleIndex} 款）`,
+      `姓名：${line1}${line2 ? "｜" + line2 : ""}`,
+      `尺寸：2.7 × 1.3 cm`,
+      `數量：一份`,
+      `形狀：${shapeText}`,
+      `材質：${cfg.materialText}`,
+      `上膜：${cfg.laminateText}`,
+      `成品外觀：${cfg.finishText}`,
+      `本款式套組總價：NT$ ${packagePrice}`,
+      getPackageMarketingText(targetCount)
+    ].join("｜");
+    try{ currentSummary = summary; }catch(e){}
+
+    return {
+      productCode:cfg.productName,
+      quote:{
+        productCategory:"NAME_STICKER",
+        nameSticker:true,
+        nameStickerType:selectedStickerType,
+        nameStickerTypeText:cfg.name,
+        nameStickerFinishMode:cfg.finishMode,
+        nameStickerFinishText:cfg.finishText,
+        noWhiteBorder:cfg.noWhiteBorder,
+        whiteBorder:!cfg.noWhiteBorder,
+        printBackgroundToCutEdge:cfg.noWhiteBorder,
+        shape:shapeText,
+        shapeCode:state.shape,
+        shapeText,
+        widthCm:2.7,
+        heightCm:1.3,
+        material:cfg.materialText,
+        materialCode:cfg.materialCode,
+        materialText:cfg.materialText,
+        laminate:cfg.laminateText,
+        laminateCode:cfg.laminateCode,
+        laminateText:cfg.laminateText,
+        quantity:1,
+        quantityText:"一份",
+        quantityUnit:"份",
+        urgent:"normal",
+        urgentText:"一般件",
+        edgeOption:cfg.noWhiteBorder ? "no_white_border" : "standard_white_border",
+        edgeColor:getBackgroundText(state.background),
+        edgeText:cfg.finishText,
+        price:itemPrice,
+        packagePrice,
+        nameStickerPackageCount:targetCount,
+        nameStickerPackagePrice:packagePrice,
+        nameStickerPackageMarketingText:getPackageMarketingText(targetCount),
+        freeStorePickupShipping:isFreeStorePickupShipping(targetCount),
+        shippingPromotionText:isFreeStorePickupShipping(targetCount) ? "4 款超取免運" : "",
+        nameStickerPackageIndex:packageIndex,
+        nameStickerStyleIndex:styleIndex,
+        nameStickerOverallStyleIndex:overallStyleIndex,
+        nameStickerSavedCount:packageState.savedInPackage + 1,
+        nameStickerTotalSavedCount:existingNameCount + 1,
+        nameStickerPackageComplete:(packageState.savedInPackage + 1) === targetCount,
+        nameLine1:line1,
+        nameLine2:line2,
+        photoIncluded:!!state.photoThumb,
+        designShape:state.shape,
+        backgroundType:state.background && state.background.type || "",
+        backgroundValue:getBackgroundText(state.background),
+        fontFamily:primaryFontName(state.fontFamily),
+        textColor:state.textColor,
+        summary
+      },
+      images,
+      page:{href:location.href,path:location.pathname,title:document.title}
+    };
+  };
+
+  makeDesignFingerprint = function(payload){
+    const q = payload && payload.quote || {};
+    return [
+      "NAME_STICKER",
+      q.nameStickerType || selectedStickerType,
+      q.nameStickerFinishMode || getTypeConfig(q.nameStickerType || selectedStickerType).finishMode,
+      q.nameLine1 || "",
+      q.nameLine2 || "",
+      q.designShape || "",
+      q.backgroundType || "",
+      q.backgroundValue || "",
+      q.fontFamily || "",
+      q.textColor || "",
+      q.nameStickerPackageIndex || "",
+      q.nameStickerStyleIndex || "",
+      q.nameStickerOverallStyleIndex || "",
+      q.nameStickerPackageCount || "",
+      state.photoScale || "",
+      state.photoOffsetX || "",
+      state.photoOffsetY || "",
+      document.getElementById("imgFile")?.files?.[0]?.name || "",
+      document.getElementById("imgFileMobile")?.files?.[0]?.name || ""
+    ].join("|");
+  };
+
+  function productGroup(item){
+    if(isNameStickerItem(item)) return `NAME_STICKER:${getItemStickerType(item)}`;
+    const type = String(item && item.productType || "").toUpperCase();
     const code = String(item && item.productCode || "");
     if(type === "FULLCUT" || code.indexOf("全斷") >= 0) return "FULLCUT";
     return "LABEL";
