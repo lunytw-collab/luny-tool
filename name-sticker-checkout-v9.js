@@ -1,6 +1,6 @@
 /*
- * LUNY 姓名貼專用結帳轉接器 v5.3
- * 功能：防水／轉印款式分流、套組分開計價、4 款超取免運標記、轉印固定無白邊、結帳與 GAS 欄位同步。
+ * LUNY 姓名貼專用結帳轉接器 v5.4
+ * 功能：防水／轉印款式分流、套組分開計價、4 款超取免運標記、轉印固定無白邊、儲存期間鎖定設計選項、結帳與 GAS 欄位同步。
  * 載入順序：請放在姓名貼編輯器主程式、luny-storage-manager、luny-label-order-flow 之後。
  */
 (function installNameStickerV5VisualReset(){
@@ -131,6 +131,44 @@
   const packagePlans = {waterproof:[1], transfer:[1]};
   let selectedStickerType = "waterproof";
   window.LUNY_NAME_STICKER_TYPE = selectedStickerType;
+
+  const SAVE_EDITOR_LOCK_CLASS = "luny-save-design-editor-locked";
+  const SAVE_EDITOR_LOCK_STYLE_ID = "luny-name-sticker-save-editor-lock-style";
+
+  function ensureSaveEditorLockStyle(){
+    if(document.getElementById(SAVE_EDITOR_LOCK_STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = SAVE_EDITOR_LOCK_STYLE_ID;
+    style.textContent = `
+      .name-editor-card.${SAVE_EDITOR_LOCK_CLASS} .tabs{
+        pointer-events:none !important;
+        opacity:.58;
+        user-select:none;
+      }
+      .name-editor-card.${SAVE_EDITOR_LOCK_CLASS} .tabs,
+      .name-editor-card.${SAVE_EDITOR_LOCK_CLASS} .tabs *{
+        cursor:wait !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function setNameEditorSaveLocked(locked){
+    ensureSaveEditorLockStyle();
+    document.querySelectorAll(".name-editor-card").forEach(editor=>{
+      editor.classList.toggle(SAVE_EDITOR_LOCK_CLASS, !!locked);
+      editor.setAttribute("aria-busy", locked ? "true" : "false");
+    });
+  }
+
+  document.addEventListener("click", event=>{
+    if(!window.__LUNY_SAVE_DESIGN_GLOBAL_LOCK__ && !window.__LUNY_CHECKOUT_UI_LOCKED__) return;
+    const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+    if(!target?.closest(".name-editor-card .tabs")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if(event.stopImmediatePropagation) event.stopImmediatePropagation();
+  }, true);
 
   function normalizeStickerType(value){
     const key = String(value || "").toLowerCase();
@@ -879,6 +917,16 @@
       return result;
     };
     window.deleteSavedDesign = deleteSavedDesign;
+  }
+
+  const baseSetCheckoutUILocked = typeof setCheckoutUILocked === "function" ? setCheckoutUILocked : null;
+  if(baseSetCheckoutUILocked){
+    setCheckoutUILocked = function(locked){
+      const result = baseSetCheckoutUILocked.apply(this, arguments);
+      setNameEditorSaveLocked(locked);
+      return result;
+    };
+    window.setCheckoutUILocked = setCheckoutUILocked;
   }
 
   const baseSaveDesign = typeof saveDesignToGAS === "function" ? saveDesignToGAS : null;
