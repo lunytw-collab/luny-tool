@@ -1,4 +1,4 @@
-/* LUNY label order flow v9.2-phase5.1-timing-diagnostic
+/* LUNY label order flow v9.2-phase5.2-fast-reconcile
    Phase 3：preview/print/cut/customer_source 最多同時處理兩檔；成功檔案不重傳。
    Phase 3：print/cut 直接接收預覽主程式的 PNG Blob，不建立大型 Data URL / Base64。
    Phase 5：GAS 暫時回傳非 JSON / 網路結果不確定時，以同一 designId 重送 metadata 並安全對帳。
@@ -48,6 +48,8 @@ function scrollToCheckoutStep(){
 }
 
 const GAS_SAVE_URL="https://script.google.com/macros/s/AKfycbzspWqpmcIH6LtyjT1CMU4qGlNJXBFeugzZUqke5K-s5bso82DXiRlbPFUmLv4Vz10hzw/exec";
+// doPost 通常約 3～5 秒完成；若 Google 回應傳輸失聯，提早以同一 designId 安全對帳。
+const LUNY_DESIGN_SAVE_RESPONSE_TIMEOUT_MS=12000;
 const LUNY_PHASE2_FRONTEND_VERSION="2026-07-16.1";
 const LUNY_REQUEST_ID_PREFIX="LUNY_PHASE2_REQUEST_ID_V1::";
 function makeLunyRequestId(scope){
@@ -194,7 +196,7 @@ function newDesignId(){return"d_"+Date.now().toString(36)+"_"+Math.random().toSt
 const LUNY_PENDING_DESIGN_SAVE_KEY="LUNY_PENDING_DESIGN_SAVE_V1";
 const LUNY_PENDING_DESIGN_SAVE_MAX_AGE_MS=30*60*1000;
 const LUNY_FINISHED_DESIGN_DEDUPE_MS=12000;
-const LUNY_SAVE_TIMING_VERSION="phase5.1";
+const LUNY_SAVE_TIMING_VERSION="phase5.2";
 const LUNY_LAST_SAVE_TIMING_KEY="LUNY_LAST_SAVE_TIMING_V1";
 function lunyTimingNow_(){
   try{
@@ -2038,7 +2040,7 @@ async function saveDesignToGAS(){
       stripLargeImageDataForSheet(bodyObj),
       {
         attempts:4,
-        timeoutMs:30000,
+        timeoutMs:LUNY_DESIGN_SAVE_RESPONSE_TIMEOUT_MS,
         delays:[0,800,1600,3200],
         onRetry:function(attempt,waitMs,lastJson,lastErr){
           const isResponseUncertain=
