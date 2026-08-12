@@ -1,4 +1,4 @@
-/* LUNY label order flow v9.2-phase5.3-strict-confirmation
+/* LUNY label order flow v9.2-phase5.4-fast-strict-confirmation
    Phase 3：preview/print/cut/customer_source 最多同時處理兩檔；成功檔案不重傳。
    Phase 3：print/cut 直接接收預覽主程式的 PNG Blob，不建立大型 Data URL / Base64。
    Phase 5.3：GAS 暫時回傳非 JSON / 網路結果不確定時，以同一 designId 重送 metadata 並安全對帳。
@@ -49,8 +49,9 @@ function scrollToCheckoutStep(){
 }
 
 const GAS_SAVE_URL="https://script.google.com/macros/s/AKfycbzspWqpmcIH6LtyjT1CMU4qGlNJXBFeugzZUqke5K-s5bso82DXiRlbPFUmLv4Vz10hzw/exec";
-// doPost 通常約 3～5 秒完成；若 Google 回應傳輸失聯，提早以同一 designId 安全對帳。
-const LUNY_DESIGN_SAVE_RESPONSE_TIMEOUT_MS=12000;
+// 快速寫入版 GAS 通常應在第一輪完成；若 Google 回應傳輸失聯，
+// 以同一 designId 分段短逾時安全對帳，避免連續等待 30 秒才重試。
+const LUNY_DESIGN_SAVE_RESPONSE_TIMEOUT_MS=9000;
 const LUNY_PHASE2_FRONTEND_VERSION="2026-07-16.1";
 const LUNY_REQUEST_ID_PREFIX="LUNY_PHASE2_REQUEST_ID_V1::";
 function makeLunyRequestId(scope){
@@ -197,7 +198,7 @@ function newDesignId(){return"d_"+Date.now().toString(36)+"_"+Math.random().toSt
 const LUNY_PENDING_DESIGN_SAVE_KEY="LUNY_PENDING_DESIGN_SAVE_V1";
 const LUNY_PENDING_DESIGN_SAVE_MAX_AGE_MS=30*60*1000;
 const LUNY_FINISHED_DESIGN_DEDUPE_MS=12000;
-const LUNY_SAVE_TIMING_VERSION="phase5.3";
+const LUNY_SAVE_TIMING_VERSION="phase5.4";
 const LUNY_LAST_SAVE_TIMING_KEY="LUNY_LAST_SAVE_TIMING_V1";
 function lunyTimingNow_(){
   try{
@@ -700,17 +701,26 @@ function isRetryableGasError_(err){
 function validateDesignSaveResponse_(responseJson,expectedDesignId){
   const expected=String(expectedDesignId||"").trim();
   const returned=String(responseJson&&responseJson.designId||"").trim();
-  const confirmed=returned!==""&&returned===expected;
+  const responseKind=String(responseJson&&responseJson.responseKind||"").trim();
+  const responseTimestamp=String(responseJson&&responseJson.ts||"").trim();
+  const hasValidTimestamp=responseTimestamp!==""&&!Number.isNaN(Date.parse(responseTimestamp));
+  const confirmed=
+    returned!==""&&
+    returned===expected&&
+    responseKind==="design_saved"&&
+    hasValidTimestamp;
   return {
     ok:confirmed,
     code:"GAS_UNCONFIRMED_DESIGN_RESPONSE",
-    error:returned
+    error:returned!==expected
       ? "GAS 回傳的 designId 與本次設計不一致，將以相同設計編號重試。"
-      : "GAS 回應缺少本次 designId，可能是 doGet ping 或轉址回應，將安全重試。",
+      : responseKind!=="design_saved"
+        ? "GAS 回應不是設計儲存確認，將以相同設計編號安全對帳。"
+        : "GAS 回應缺少有效儲存時間，將以相同設計編號安全對帳。",
     expectedDesignId:expected,
     responseDesignId:returned,
-    responseKind:String(responseJson&&responseJson.responseKind||""),
-    responseHasTimestamp:!!(responseJson&&responseJson.ts)
+    responseKind,
+    responseHasTimestamp:hasValidTimestamp
   };
 }
 
@@ -719,6 +729,9 @@ async function postJsonToGASWithRetry(url,obj,options){
   const timingTrace=window.__LUNY_ACTIVE_SAVE_TIMING__||null;
   const attempts=Math.max(1,Number(options.attempts||4));
   const timeoutMs=Number(options.timeoutMs||30000);
+  const timeoutMsByAttempt=Array.isArray(options.timeoutMsByAttempt)
+    ? options.timeoutMsByAttempt
+    : [];
   const delays=Array.isArray(options.delays)&&options.delays.length
     ? options.delays
     : [0,800,1600,3200];
@@ -727,11 +740,15 @@ async function postJsonToGASWithRetry(url,obj,options){
 
   for(let attempt=1;attempt<=attempts;attempt++){
     if(attempt>1){
-      let waitMs=Number(
+      const scheduledWaitMs=Number(
+        delays[attempt-1]||delays[delays.length-1]||1500
+      );
+      const serverWaitMs=Number(
         lastJson&&lastJson.retryAfterMs
           ? lastJson.retryAfterMs
-          : (delays[attempt-1]||delays[delays.length-1]||1500)
+          : 0
       );
+      let waitMs=Math.max(scheduledWaitMs,serverWaitMs);
       waitMs=Math.max(250,waitMs)+Math.floor(Math.random()*250);
 
       if(typeof options.onRetry==="function"){
@@ -747,11 +764,15 @@ async function postJsonToGASWithRetry(url,obj,options){
       await sleepLuny(waitMs);
     }
 
+    const attemptTimeoutMs=Math.max(
+      1000,
+      Number(timeoutMsByAttempt[attempt-1]||timeoutMs)
+    );
     const gasAttemptStartedMs=lunyTimingNow_();
     if(timingTrace)timingTrace.gasAttempts=attempt;
-    markLunySaveTiming_(timingTrace,"gas_attempt_start",{attempt,timeoutMs});
+    markLunySaveTiming_(timingTrace,"gas_attempt_start",{attempt,timeoutMs:attemptTimeoutMs});
     try{
-      const json=await postJsonToGAS(url,obj,timeoutMs);
+      const json=await postJsonToGAS(url,obj,attemptTimeoutMs);
       lastJson=json;
       lastErr=null;
       markLunySaveTiming_(timingTrace,"gas_attempt_response",{
@@ -2106,7 +2127,10 @@ async function saveDesignToGAS(){
       {
         attempts:4,
         timeoutMs:LUNY_DESIGN_SAVE_RESPONSE_TIMEOUT_MS,
-        delays:[0,800,1600,3200],
+        // 第一輪給正常寫入 9 秒；若逾時，後續改成短確認並拉開重試間隔。
+        // 同一 designId 可安全確認已寫入，不會新增重複設計。
+        timeoutMsByAttempt:[9000,3500,3500,5000],
+        delays:[0,1000,3500,8000],
         validateSuccess:function(responseJson){
           return validateDesignSaveResponse_(responseJson,designId);
         },
