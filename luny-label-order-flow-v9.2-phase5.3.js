@@ -1,7 +1,8 @@
-/* LUNY label order flow v9.2-phase5.2-fast-reconcile
+/* LUNY label order flow v9.2-phase5.3-strict-confirmation
    Phase 3：preview/print/cut/customer_source 最多同時處理兩檔；成功檔案不重傳。
    Phase 3：print/cut 直接接收預覽主程式的 PNG Blob，不建立大型 Data URL / Base64。
-   Phase 5：GAS 暫時回傳非 JSON / 網路結果不確定時，以同一 designId 重送 metadata 並安全對帳。
+   Phase 5.3：GAS 暫時回傳非 JSON / 網路結果不確定時，以同一 designId 重送 metadata 並安全對帳。
+   嚴格確認：只有後端明確回傳本次完全相同的 designId 才算成功；doGet ping / 缺少 designId / 錯誤 designId 一律不解鎖結帳。
    安全並行版：不同裝置可同時上傳；GAS 忙碌時只重送 metadata，不重傳三份正式圖檔。
    客戶原圖：由最初 imgFile 完整等比例壓縮後，另存 customer_source.jpg/png，不套用預覽編輯。
    低風險拆檔版：儲存/結帳/訂單回寫流程。
@@ -196,7 +197,7 @@ function newDesignId(){return"d_"+Date.now().toString(36)+"_"+Math.random().toSt
 const LUNY_PENDING_DESIGN_SAVE_KEY="LUNY_PENDING_DESIGN_SAVE_V1";
 const LUNY_PENDING_DESIGN_SAVE_MAX_AGE_MS=30*60*1000;
 const LUNY_FINISHED_DESIGN_DEDUPE_MS=12000;
-const LUNY_SAVE_TIMING_VERSION="phase5.2";
+const LUNY_SAVE_TIMING_VERSION="phase5.3";
 const LUNY_LAST_SAVE_TIMING_KEY="LUNY_LAST_SAVE_TIMING_V1";
 function lunyTimingNow_(){
   try{
@@ -690,9 +691,27 @@ function isRetryableGasError_(err){
   if(!err)return false;
   if(err.retryable===true)return true;
   if(String(err.code||"").toUpperCase()==="GAS_NON_JSON_RESPONSE")return true;
+  if(String(err.code||"").toUpperCase()==="GAS_UNCONFIRMED_DESIGN_RESPONSE")return true;
   if(err.name==="AbortError")return true;
   const msg=String(err&&err.message?err.message:err);
   return /network|fetch|timeout|timed out|abort|failed to fetch/i.test(msg);
+}
+
+function validateDesignSaveResponse_(responseJson,expectedDesignId){
+  const expected=String(expectedDesignId||"").trim();
+  const returned=String(responseJson&&responseJson.designId||"").trim();
+  const confirmed=returned!==""&&returned===expected;
+  return {
+    ok:confirmed,
+    code:"GAS_UNCONFIRMED_DESIGN_RESPONSE",
+    error:returned
+      ? "GAS 回傳的 designId 與本次設計不一致，將以相同設計編號重試。"
+      : "GAS 回應缺少本次 designId，可能是 doGet ping 或轉址回應，將安全重試。",
+    expectedDesignId:expected,
+    responseDesignId:returned,
+    responseKind:String(responseJson&&responseJson.responseKind||""),
+    responseHasTimestamp:!!(responseJson&&responseJson.ts)
+  };
 }
 
 async function postJsonToGASWithRetry(url,obj,options){
@@ -739,10 +758,56 @@ async function postJsonToGASWithRetry(url,obj,options){
         attempt,
         durationMs:lunyRoundMs_(lunyTimingNow_()-gasAttemptStartedMs),
         ok:!!(json&&json.ok),
-        resultCode:String(json&&json.code||"")
+        resultCode:String(json&&json.code||""),
+        responseDesignId:String(json&&json.designId||""),
+        responseKind:String(json&&json.responseKind||""),
+        responseHasTimestamp:!!(json&&json.ts)
       });
 
-      if(json&&json.ok)return json;
+      if(json&&json.ok){
+        let validation={ok:true};
+        if(typeof options.validateSuccess==="function"){
+          const checked=options.validateSuccess(json);
+          if(checked===false){
+            validation={ok:false};
+          }else if(checked&&typeof checked==="object"){
+            validation=checked;
+          }
+        }
+
+        if(validation&&validation.ok===false){
+          const err=new Error(
+            String(validation.error||"GAS 回應未明確確認本次設計，將以相同設計編號重試。")
+          );
+          err.code=String(validation.code||"GAS_UNCONFIRMED_DESIGN_RESPONSE");
+          err.retryable=true;
+          err.expectedDesignId=String(validation.expectedDesignId||"");
+          err.responseDesignId=String(validation.responseDesignId||json.designId||"");
+          err.responseKind=String(validation.responseKind||json.responseKind||"");
+          err.responseHasTimestamp=!!(
+            validation.responseHasTimestamp!==undefined
+              ? validation.responseHasTimestamp
+              : (json&&json.ts)
+          );
+
+          lastErr=err;
+          lastJson=null;
+          markLunySaveTiming_(timingTrace,"gas_attempt_invalid_response",{
+            attempt,
+            durationMs:lunyRoundMs_(lunyTimingNow_()-gasAttemptStartedMs),
+            errorCode:err.code,
+            expectedDesignId:err.expectedDesignId,
+            responseDesignId:err.responseDesignId,
+            responseKind:err.responseKind,
+            responseHasTimestamp:err.responseHasTimestamp
+          });
+
+          if(attempt>=attempts)throw err;
+          continue;
+        }
+
+        return json;
+      }
       if(!isRetryableGasResult_(json)||attempt>=attempts)return json;
     }catch(err){
       lastErr=err;
@@ -2042,10 +2107,18 @@ async function saveDesignToGAS(){
         attempts:4,
         timeoutMs:LUNY_DESIGN_SAVE_RESPONSE_TIMEOUT_MS,
         delays:[0,800,1600,3200],
+        validateSuccess:function(responseJson){
+          return validateDesignSaveResponse_(responseJson,designId);
+        },
         onRetry:function(attempt,waitMs,lastJson,lastErr){
+          const priorErrorCode=String(lastErr&&lastErr.code||"").toUpperCase();
           const isResponseUncertain=
             lastErr&&
-            String(lastErr.code||"").toUpperCase()==="GAS_NON_JSON_RESPONSE";
+            (
+              priorErrorCode==="GAS_NON_JSON_RESPONSE"||
+              priorErrorCode==="GAS_UNCONFIRMED_DESIGN_RESPONSE"||
+              (lastErr&&lastErr.name==="AbortError")
+            );
           setSaveStatus(
             isResponseUncertain
               ? `伺服器回應確認中，${Math.ceil(waitMs/1000)} 秒後以同一設計編號進行第 ${attempt} 次安全對帳…`
@@ -2061,12 +2134,19 @@ async function saveDesignToGAS(){
       throw new Error((json&&json.error)?json.error:"GAS 儲存失敗");
     }
 
-    const finalDesignId=json.designId||designId;
+    const finalDesignId=String(json.designId||"").trim();
+    if(!finalDesignId||finalDesignId!==String(designId||"").trim()){
+      const err=new Error("GAS 未明確回傳本次 designId，設計尚未確認完成。");
+      err.code="GAS_UNCONFIRMED_DESIGN_RESPONSE";
+      err.retryable=true;
+      throw err;
+    }
     activeDesignId=finalDesignId;
     saveTiming.designId=finalDesignId;
     backendDesignConfirmed=true;
     markLunySaveTiming_(saveTiming,"gas_design_confirmed",{
-      returnedSameDesignId:String(finalDesignId)===String(designId)
+      returnedSameDesignId:true,
+      responseKind:String(json&&json.responseKind||"")
     });
 
     await waitCanvasReadyForSave();
@@ -2659,3 +2739,4 @@ async function saveDesignToGAS(){
 renderCheckoutSummary();isDesignReadyForCheckout=loadSavedDesignsForCheckout().length>0;updateOrderButtonState();
 
 (()=>{const P="LUNY_PENDING_ORDER_V1",Y="LUNY_CHECKOUT_PAYLOAD_V2",T="LUNY_CHECKOUT_TOKEN",M="LUNY_CHECKOUT_TOTAL_AMOUNT",C="LUNY_CART_KEY",S="LUNY_ORDER_SESSION_ID",B="LUNY_PENDING_DESIGN_BACKUP_V1",G="LUNY_CHECKOUT_IN_PROGRESS_V1",D=["LUNY_PENDING_DESIGN_IDS","pendingDesignIds","lunyDesignIds","luny_order_draft_ids"];const q=(x,d)=>{try{return x?JSON.parse(x):d}catch(e){return d}},r=(k,p)=>{let v=localStorage.getItem(k);if(!v){v=p+"_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8);localStorage.setItem(k,v)}return v},c=(k,v)=>{try{document.cookie=k+"="+encodeURIComponent(v)+";max-age=1209600;path=/;SameSite=Lax"}catch(e){}},z=k=>{try{localStorage.removeItem(k)}catch(e){}try{sessionStorage.removeItem(k)}catch(e){}try{document.cookie=k+"=;max-age=0;path=/;SameSite=Lax"}catch(e){}};function u(x){if(!x||!Array.isArray(x.items)||!x.items.length)return null;let its=x.items.filter(i=>i&&i.designId),ids=[...new Set(its.map(i=>String(i.designId)))];if(!ids.length)return null;let tk=x.checkoutToken||localStorage.getItem(T)||("LUNY-"+new Date().toISOString().slice(0,10).replace(/-/g,"")+"-"+Math.random().toString(36).slice(2,8).toUpperCase()),to=+(x.total||x.checkoutTotal||localStorage.getItem(M)||0),o={v:4,checkoutToken:tk,total:to,checkoutTotal:to,cartKey:x.cartKey||r(C,"ck"),orderSessionId:x.orderSessionId||r(S,"os"),designIds:ids,designIdsCount:ids.length,itemsCount:its.length,items:its,createdAt:new Date().toISOString(),receiverName:x.receiverName||"",page:{href:location.href,path:location.pathname,title:document.title}};localStorage.setItem(P,JSON.stringify(o));localStorage.setItem(Y,JSON.stringify({v:4,checkoutToken:tk,total:to,cartKey:o.cartKey,orderSessionId:o.orderSessionId,designIds:ids,items:its,createdAt:o.createdAt}));localStorage.setItem(T,tk);localStorage.setItem(M,String(to));localStorage.setItem(G,JSON.stringify({checkoutToken:tk,total:to,startedAt:Date.now()}));D.forEach(k=>localStorage.setItem(k,JSON.stringify(ids)));localStorage.setItem(B,JSON.stringify({v:4,checkoutToken:tk,checkoutTotal:to,designIds:ids,items:its,savedAt:o.createdAt}));c("LUNY_PENDING_DESIGN_IDS",JSON.stringify(ids));return o}const a=window.saveCheckoutStartedToGAS;if(typeof a=="function"&&!window.__lp1){window.__lp1=1;window.saveCheckoutStartedToGAS=async function(x){u(x);let y=await a.apply(this,arguments);u(x);return y}}const b=window.clearPendingDesignsAfterConfirmed;if(typeof b=="function"&&!window.__lp2){window.__lp2=1;window.clearPendingDesignsAfterConfirmed=function(){let y=b.apply(this,arguments);z(P);return y}}window.LUNY_FORCE_SAVE_PENDING_ORDER=()=>u(q(localStorage.getItem(Y),null));})();
+ 
