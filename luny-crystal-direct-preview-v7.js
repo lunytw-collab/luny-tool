@@ -3215,3 +3215,333 @@ window.getPrintAndCutBlobs=async function(){
   install();
   document.addEventListener('DOMContentLoaded',install);
 })();
+
+/* LUNY crystal-transfer original-PNG preview/output contract v2
+ * CRYSTAL_TRANSFER only:
+ * - show the uploaded PNG itself instead of the label-sticker bleed/cut renderer;
+ * - preserve the uploaded PNG bytes as the production print asset;
+ * - keep the required cut slot as an explicitly marked roll-uncut compatibility PNG.
+ */
+(function(){
+  "use strict";
+
+  if(window.__LUNY_CRYSTAL_ORIGINAL_PNG_CONTRACT_V2__) return;
+  window.__LUNY_CRYSTAL_ORIGINAL_PNG_CONTRACT_V2__ = true;
+
+  var PNG_SIGNATURE = [137,80,78,71,13,10,26,10];
+  var THUMB_MAX_SIDE = 360;
+  var cachedFile = null;
+  var cachedInfo = null;
+
+  function isCrystalPage(){
+    return String(window.LUNY_PRODUCT_TYPE || window.currentProductType || "").toUpperCase() === "CRYSTAL_TRANSFER";
+  }
+
+  function getInput(){
+    return document.getElementById("imgFile");
+  }
+
+  function getOriginalPng(){
+    var input = getInput();
+    return input && input.files && input.files[0] ? input.files[0] : null;
+  }
+
+  async function hasPngSignature(file){
+    if(!file || file.size < PNG_SIGNATURE.length) return false;
+    try{
+      var bytes = new Uint8Array(await file.slice(0,PNG_SIGNATURE.length).arrayBuffer());
+      return PNG_SIGNATURE.every(function(value,index){ return bytes[index] === value; });
+    }catch(error){
+      return false;
+    }
+  }
+
+  async function decodePng(file){
+    if(typeof createImageBitmap === "function"){
+      try{
+        var bitmap = await createImageBitmap(file);
+        if(bitmap && bitmap.width && bitmap.height){
+          return {
+            source:bitmap,
+            width:bitmap.width,
+            height:bitmap.height,
+            cleanup:function(){ try{ bitmap.close(); }catch(error){} }
+          };
+        }
+      }catch(error){}
+    }
+
+    return await new Promise(function(resolve,reject){
+      var url = URL.createObjectURL(file);
+      var image = new Image();
+      image.onload = function(){
+        resolve({
+          source:image,
+          width:image.naturalWidth || image.width,
+          height:image.naturalHeight || image.height,
+          cleanup:function(){ try{ URL.revokeObjectURL(url); }catch(error){} }
+        });
+      };
+      image.onerror = function(){
+        try{ URL.revokeObjectURL(url); }catch(error){}
+        reject(new Error("PNG 圖片無法讀取"));
+      };
+      image.src = url;
+    });
+  }
+
+  async function inspectOriginalPng(file){
+    if(cachedFile === file && cachedInfo) return cachedInfo;
+    if(!await hasPngSignature(file)) throw new Error("水晶貼僅支援有效的 PNG 圖檔");
+
+    var decoded = await decodePng(file);
+    var canvas = document.createElement("canvas");
+    try{
+      var ratio = Math.min(1,THUMB_MAX_SIDE / Math.max(decoded.width,decoded.height));
+      var width = Math.max(1,Math.round(decoded.width * ratio));
+      var height = Math.max(1,Math.round(decoded.height * ratio));
+      canvas.width = width;
+      canvas.height = height;
+      var ctx = canvas.getContext("2d",{alpha:true,willReadFrequently:true});
+      if(!ctx) throw new Error("瀏覽器無法建立透明 PNG 預覽");
+
+      ctx.clearRect(0,0,width,height);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(decoded.source,0,0,decoded.width,decoded.height,0,0,width,height);
+
+      var pixels = ctx.getImageData(0,0,width,height).data;
+      var hasTransparency = false;
+      for(var index=3;index<pixels.length;index+=4){
+        if(pixels[index] < 255){
+          hasTransparency = true;
+          break;
+        }
+      }
+
+      cachedFile = file;
+      cachedInfo = {
+        width:decoded.width,
+        height:decoded.height,
+        hasTransparency:hasTransparency,
+        thumbDataUrl:canvas.toDataURL("image/png")
+      };
+      window.__LUNY_CRYSTAL_ORIGINAL_PNG_INFO__ = cachedInfo;
+      window.__LUNY_CRYSTAL_ORIGINAL_PNG_THUMB__ = cachedInfo.thumbDataUrl;
+      return cachedInfo;
+    }finally{
+      try{ decoded.cleanup(); }catch(error){}
+      canvas.width = 1;
+      canvas.height = 1;
+    }
+  }
+
+  function ensureOriginalPreview(){
+    var canvas = document.getElementById("canvasGuides");
+    if(!canvas || !canvas.parentElement) return null;
+
+    var box = document.getElementById("lunyCrystalOriginalPngPreview");
+    if(!box){
+      box = document.createElement("div");
+      box.id = "lunyCrystalOriginalPngPreview";
+      box.style.cssText = "display:none;max-width:638px;margin:0 auto 10px;";
+      box.innerHTML =
+        '<div data-original-png-stage style="display:grid;place-items:center;overflow:hidden;min-height:220px;border:1px solid #d7dce2;border-radius:14px;background-color:#fff;background-image:linear-gradient(45deg,#e7eaee 25%,transparent 25%),linear-gradient(-45deg,#e7eaee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e7eaee 75%),linear-gradient(-45deg,transparent 75%,#e7eaee 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0;">'+
+          '<img data-original-png-image alt="水晶貼原始透明 PNG 預覽" style="display:block;max-width:100%;max-height:638px;object-fit:contain;">'+
+        '</div>'+
+        '<div data-original-png-status style="margin-top:8px;padding:9px 12px;border:1px solid #dbe7dd;border-radius:10px;background:#f5faf6;color:#45604a;font-size:12px;line-height:1.55;text-align:center;"></div>';
+      canvas.insertAdjacentElement("beforebegin",box);
+    }
+    return box;
+  }
+
+  function showOriginalPreview(file,info){
+    var box = ensureOriginalPreview();
+    var canvas = document.getElementById("canvasGuides");
+    if(!box || !canvas) return;
+
+    var image = box.querySelector("[data-original-png-image]");
+    var status = box.querySelector("[data-original-png-status]");
+    var url = URL.createObjectURL(file);
+    image.onload = function(){ try{ URL.revokeObjectURL(url); }catch(error){} };
+    image.src = url;
+
+    box.style.display = "block";
+    canvas.style.setProperty("display","none","important");
+    if(status){
+      status.style.background = info.hasTransparency ? "#f5faf6" : "#fff7ed";
+      status.style.borderColor = info.hasTransparency ? "#dbe7dd" : "#fdba74";
+      status.style.color = info.hasTransparency ? "#45604a" : "#9a3412";
+      status.innerHTML = info.hasTransparency
+        ? "<strong>正在顯示原始透明 PNG</strong><br>棋盤格代表透明、不會印刷；正式印刷檔直接使用上傳的原始 PNG。"
+        : "<strong>此 PNG 沒有透明區域</strong><br>白色背景會被視為圖案的一部分印出；如需去背效果，請改上傳透明背景 PNG。";
+    }
+  }
+
+  function clearOriginalPreview(){
+    cachedFile = null;
+    cachedInfo = null;
+    window.__LUNY_CRYSTAL_ORIGINAL_PNG_INFO__ = null;
+    window.__LUNY_CRYSTAL_ORIGINAL_PNG_THUMB__ = "";
+    var box = document.getElementById("lunyCrystalOriginalPngPreview");
+    var canvas = document.getElementById("canvasGuides");
+    if(box) box.style.display = "none";
+    if(canvas) canvas.style.removeProperty("display");
+  }
+
+  async function captureOriginalPng(){
+    var file = getOriginalPng();
+    if(!file){
+      clearOriginalPreview();
+      return;
+    }
+    try{
+      var info = await inspectOriginalPng(file);
+      if(getOriginalPng() !== file) return;
+      showOriginalPreview(file,info);
+    }catch(error){
+      console.error("[LUNY] 水晶貼原始 PNG 預覽建立失敗",error);
+    }
+  }
+
+  function installInputBinding(){
+    var input = getInput();
+    if(!input || input.__lunyCrystalOriginalPngBoundV2) return;
+    input.__lunyCrystalOriginalPngBoundV2 = true;
+    input.addEventListener("change",function(){
+      window.setTimeout(captureOriginalPng,0);
+    });
+
+    var continueButton = document.getElementById("continueShoppingBtn");
+    if(continueButton && !continueButton.__lunyCrystalOriginalPngBoundV2){
+      continueButton.__lunyCrystalOriginalPngBoundV2 = true;
+      continueButton.addEventListener("click",function(){
+        window.setTimeout(function(){ if(!getOriginalPng()) clearOriginalPreview(); },0);
+      });
+    }
+  }
+
+  function installPreviewThumbOverride(){
+    var original = window.makePreviewThumb;
+    if(typeof original !== "function") return false;
+    if(original.__lunyCrystalOriginalPngContractV2) return true;
+
+    function patched(){
+      if(isCrystalPage() && cachedInfo && cachedInfo.thumbDataUrl){
+        return cachedInfo.thumbDataUrl;
+      }
+      return original.apply(this,arguments);
+    }
+    patched.__lunyCrystalOriginalPngContractV2 = true;
+    patched.__lunyOriginal = original;
+    patched.__lunyFullBleedThumbPatchedV7 = true;
+    patched.__lunyFullBleedThumbPatchedV7947 = true;
+    window.makePreviewThumb = patched;
+    return true;
+  }
+
+  function cleanBaseName(name){
+    return String(name || "水晶貼原始圖")
+      .replace(/\.png$/i,"")
+      .replace(/[\\/:*?\"<>|]+/g,"_");
+  }
+
+  function getEffectivePpi(info){
+    var widthCm = Number((document.getElementById("widthCm") || {}).value || 0);
+    var heightCm = Number((document.getElementById("heightCm") || {}).value || 0);
+    if(!(widthCm > 0) || !(heightCm > 0)) return 0;
+    return Math.round(Math.min(info.width / (widthCm / 2.54),info.height / (heightCm / 2.54)));
+  }
+
+  function installPrintBlobOverride(){
+    var original = window.getPrintAndCutBlobs;
+    if(typeof original !== "function") return false;
+    if(original.__lunyCrystalOriginalPngContractV2) return true;
+
+    async function patched(){
+      if(!isCrystalPage()) return original.apply(this,arguments);
+
+      var file = getOriginalPng();
+      if(!file || !await hasPngSignature(file)){
+        throw new Error("水晶貼正式印刷檔必須是有效的 PNG 原始檔");
+      }
+
+      var info = await inspectOriginalPng(file);
+      var exactPng = file.slice(0,file.size,"image/png");
+      var base = cleanBaseName(file.name);
+      var ppi = getEffectivePpi(info);
+      var common = {
+        contentType:"image/png",
+        sizeBytes:exactPng.size,
+        widthPx:info.width,
+        heightPx:info.height,
+        ppi:ppi,
+        targetPpi:ppi,
+        capped:false,
+        originalPngPreserved:true,
+        hasTransparency:info.hasTransparency
+      };
+
+      window.__LUNY_CRYSTAL_PRINT_USES_ORIGINAL_PNG__ = true;
+      return {
+        print:Object.assign({
+          filename:base + "_水晶貼原始印刷檔.png",
+          blob:exactPng
+        },common),
+        cut:Object.assign({
+          filename:base + "_水晶貼整卷不裁切_相容檔.png",
+          blob:exactPng.slice(0,exactPng.size,"image/png"),
+          compatibilityOnly:true,
+          noCutlineRequired:true
+        },common)
+      };
+    }
+
+    patched.__lunyCrystalOriginalPngContractV2 = true;
+    patched.__lunyOriginal = original;
+    window.getPrintAndCutBlobs = patched;
+    return true;
+  }
+
+  function installPayloadFlag(){
+    var original = window.buildOrderPayload;
+    if(typeof original !== "function") return false;
+    if(original.__lunyCrystalOriginalPngContractV2) return true;
+
+    function patched(){
+      var payload = original.apply(this,arguments) || {};
+      if(isCrystalPage()){
+        payload.productType = "CRYSTAL_TRANSFER";
+        payload.quote = payload.quote || {};
+        payload.quote.previewMode = "original_png_no_label_renderer";
+        payload.quote.printAssetRule = "original_upload_png_exact_bytes";
+        payload.quote.cutAssetRule = "not_applicable_roll_uncut_compatibility_png";
+        payload.quote.noCutlineRequired = true;
+        payload.quote.hasTransparency = !!(cachedInfo && cachedInfo.hasTransparency);
+      }
+      return payload;
+    }
+
+    patched.__lunyCrystalOriginalPngContractV2 = true;
+    patched.__lunyOriginal = original;
+    window.buildOrderPayload = patched;
+    return true;
+  }
+
+  function installAll(){
+    if(!isCrystalPage()) return;
+    installInputBinding();
+    installPreviewThumbOverride();
+    installPrintBlobOverride();
+    installPayloadFlag();
+  }
+
+  installAll();
+  document.addEventListener("DOMContentLoaded",installAll);
+  window.addEventListener("load",function(){
+    installAll();
+    window.setTimeout(installAll,300);
+    window.setTimeout(installAll,1200);
+    window.setTimeout(installAll,4200);
+  });
+})();
