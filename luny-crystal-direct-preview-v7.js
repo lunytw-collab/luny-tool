@@ -3216,11 +3216,10 @@ window.getPrintAndCutBlobs=async function(){
   document.addEventListener('DOMContentLoaded',install);
 })();
 
-/* LUNY crystal-transfer original-image preview/output contract v2
+/* LUNY crystal-transfer original-PNG preview/output contract v2
  * CRYSTAL_TRANSFER only:
- * - preview the source image without label-sticker bleed/cut rendering;
- * - preserve an uploaded PNG byte-for-byte as the production print asset;
- * - convert JPEG/other browser-decodable sources to a full-resolution PNG;
+ * - show the uploaded PNG itself instead of the label-sticker bleed/cut renderer;
+ * - preserve the uploaded PNG bytes as the production print asset;
  * - keep the required cut slot as an explicitly marked roll-uncut compatibility PNG.
  */
 (function(){
@@ -3242,7 +3241,7 @@ window.getPrintAndCutBlobs=async function(){
     return document.getElementById("imgFile");
   }
 
-  function getSourceFile(){
+  function getOriginalPng(){
     var input = getInput();
     return input && input.files && input.files[0] ? input.files[0] : null;
   }
@@ -3257,7 +3256,7 @@ window.getPrintAndCutBlobs=async function(){
     }
   }
 
-  async function decodeImage(file){
+  async function decodePng(file){
     if(typeof createImageBitmap === "function"){
       try{
         var bitmap = await createImageBitmap(file);
@@ -3285,26 +3284,17 @@ window.getPrintAndCutBlobs=async function(){
       };
       image.onerror = function(){
         try{ URL.revokeObjectURL(url); }catch(error){}
-        reject(new Error("圖片無法讀取"));
+        reject(new Error("PNG 圖片無法讀取"));
       };
       image.src = url;
     });
   }
 
-  function canvasToPngBlob(canvas){
-    return new Promise(function(resolve,reject){
-      canvas.toBlob(function(blob){
-        if(blob) resolve(blob);
-        else reject(new Error("無法建立 PNG 印刷檔"));
-      },"image/png");
-    });
-  }
-
-  async function inspectSource(file){
+  async function inspectOriginalPng(file){
     if(cachedFile === file && cachedInfo) return cachedInfo;
+    if(!await hasPngSignature(file)) throw new Error("水晶貼僅支援有效的 PNG 圖檔");
 
-    var sourceIsPng = await hasPngSignature(file);
-    var decoded = await decodeImage(file);
+    var decoded = await decodePng(file);
     var canvas = document.createElement("canvas");
     try{
       var ratio = Math.min(1,THUMB_MAX_SIDE / Math.max(decoded.width,decoded.height));
@@ -3313,7 +3303,7 @@ window.getPrintAndCutBlobs=async function(){
       canvas.width = width;
       canvas.height = height;
       var ctx = canvas.getContext("2d",{alpha:true,willReadFrequently:true});
-      if(!ctx) throw new Error("瀏覽器無法建立圖片預覽");
+      if(!ctx) throw new Error("瀏覽器無法建立透明 PNG 預覽");
 
       ctx.clearRect(0,0,width,height);
       ctx.imageSmoothingEnabled = true;
@@ -3333,36 +3323,12 @@ window.getPrintAndCutBlobs=async function(){
       cachedInfo = {
         width:decoded.width,
         height:decoded.height,
-        sourceIsPng:sourceIsPng,
-        sourceContentType:String(file.type || ""),
         hasTransparency:hasTransparency,
         thumbDataUrl:canvas.toDataURL("image/png")
       };
       window.__LUNY_CRYSTAL_ORIGINAL_PNG_INFO__ = cachedInfo;
       window.__LUNY_CRYSTAL_ORIGINAL_PNG_THUMB__ = cachedInfo.thumbDataUrl;
       return cachedInfo;
-    }finally{
-      try{ decoded.cleanup(); }catch(error){}
-      canvas.width = 1;
-      canvas.height = 1;
-    }
-  }
-
-  async function makeProductionPng(file,info){
-    if(info.sourceIsPng){
-      return file.slice(0,file.size,"image/png");
-    }
-
-    var decoded = await decodeImage(file);
-    var canvas = document.createElement("canvas");
-    try{
-      canvas.width = decoded.width;
-      canvas.height = decoded.height;
-      var ctx = canvas.getContext("2d",{alpha:true});
-      if(!ctx) throw new Error("瀏覽器無法建立 PNG 印刷檔");
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.drawImage(decoded.source,0,0);
-      return await canvasToPngBlob(canvas);
     }finally{
       try{ decoded.cleanup(); }catch(error){}
       canvas.width = 1;
@@ -3381,7 +3347,7 @@ window.getPrintAndCutBlobs=async function(){
       box.style.cssText = "display:none;max-width:638px;margin:0 auto 10px;";
       box.innerHTML =
         '<div data-original-png-stage style="display:grid;place-items:center;overflow:hidden;min-height:220px;border:1px solid #d7dce2;border-radius:14px;background-color:#fff;background-image:linear-gradient(45deg,#e7eaee 25%,transparent 25%),linear-gradient(-45deg,#e7eaee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e7eaee 75%),linear-gradient(-45deg,transparent 75%,#e7eaee 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0;">'+
-          '<img data-original-png-image alt="水晶貼原始圖片預覽" style="display:block;max-width:100%;max-height:638px;object-fit:contain;">'+
+          '<img data-original-png-image alt="水晶貼原始透明 PNG 預覽" style="display:block;max-width:100%;max-height:638px;object-fit:contain;">'+
         '</div>'+
         '<div data-original-png-status style="margin-top:8px;padding:9px 12px;border:1px solid #dbe7dd;border-radius:10px;background:#f5faf6;color:#45604a;font-size:12px;line-height:1.55;text-align:center;"></div>';
       canvas.insertAdjacentElement("beforebegin",box);
@@ -3402,19 +3368,13 @@ window.getPrintAndCutBlobs=async function(){
 
     box.style.display = "block";
     canvas.style.setProperty("display","none","important");
-    if(!status) return;
-
-    var isTransparentPng = info.sourceIsPng && info.hasTransparency;
-    status.style.background = isTransparentPng ? "#f5faf6" : "#fff7ed";
-    status.style.borderColor = isTransparentPng ? "#dbe7dd" : "#fdba74";
-    status.style.color = isTransparentPng ? "#45604a" : "#9a3412";
-
-    if(isTransparentPng){
-      status.innerHTML = "<strong>正在顯示原始透明 PNG</strong><br>棋盤格代表透明、不會印刷；正式印刷檔直接使用上傳的原始 PNG。";
-    }else if(info.sourceIsPng){
-      status.innerHTML = "<strong>此 PNG 沒有透明區域</strong><br>白色背景會被視為圖案的一部分印出；如需去背效果，請改上傳透明背景 PNG。";
-    }else{
-      status.innerHTML = "<strong>此來源不是 PNG，儲存時會轉成完整 PNG</strong><br>JPG 沒有透明背景，白色背景仍會印出；如需去背效果，請改上傳透明背景 PNG。";
+    if(status){
+      status.style.background = info.hasTransparency ? "#f5faf6" : "#fff7ed";
+      status.style.borderColor = info.hasTransparency ? "#dbe7dd" : "#fdba74";
+      status.style.color = info.hasTransparency ? "#45604a" : "#9a3412";
+      status.innerHTML = info.hasTransparency
+        ? "<strong>正在顯示原始透明 PNG</strong><br>棋盤格代表透明、不會印刷；正式印刷檔直接使用上傳的原始 PNG。"
+        : "<strong>此 PNG 沒有透明區域</strong><br>白色背景會被視為圖案的一部分印出；如需去背效果，請改上傳透明背景 PNG。";
     }
   }
 
@@ -3429,18 +3389,18 @@ window.getPrintAndCutBlobs=async function(){
     if(canvas) canvas.style.removeProperty("display");
   }
 
-  async function captureSource(){
-    var file = getSourceFile();
+  async function captureOriginalPng(){
+    var file = getOriginalPng();
     if(!file){
       clearOriginalPreview();
       return;
     }
     try{
-      var info = await inspectSource(file);
-      if(getSourceFile() !== file) return;
+      var info = await inspectOriginalPng(file);
+      if(getOriginalPng() !== file) return;
       showOriginalPreview(file,info);
     }catch(error){
-      console.error("[LUNY] 水晶貼原圖預覽建立失敗",error);
+      console.error("[LUNY] 水晶貼原始 PNG 預覽建立失敗",error);
     }
   }
 
@@ -3449,14 +3409,14 @@ window.getPrintAndCutBlobs=async function(){
     if(!input || input.__lunyCrystalOriginalPngBoundV2) return;
     input.__lunyCrystalOriginalPngBoundV2 = true;
     input.addEventListener("change",function(){
-      window.setTimeout(captureSource,0);
+      window.setTimeout(captureOriginalPng,0);
     });
 
     var continueButton = document.getElementById("continueShoppingBtn");
     if(continueButton && !continueButton.__lunyCrystalOriginalPngBoundV2){
       continueButton.__lunyCrystalOriginalPngBoundV2 = true;
       continueButton.addEventListener("click",function(){
-        window.setTimeout(function(){ if(!getSourceFile()) clearOriginalPreview(); },0);
+        window.setTimeout(function(){ if(!getOriginalPng()) clearOriginalPreview(); },0);
       });
     }
   }
@@ -3482,7 +3442,7 @@ window.getPrintAndCutBlobs=async function(){
 
   function cleanBaseName(name){
     return String(name || "水晶貼原始圖")
-      .replace(/\.[^.]+$/,"")
+      .replace(/\.png$/i,"")
       .replace(/[\\/:*?\"<>|]+/g,"_");
   }
 
@@ -3501,24 +3461,24 @@ window.getPrintAndCutBlobs=async function(){
     async function patched(){
       if(!isCrystalPage()) return original.apply(this,arguments);
 
-      var file = getSourceFile();
-      if(!file) throw new Error("請先上傳水晶貼圖片");
+      var file = getOriginalPng();
+      if(!file || !await hasPngSignature(file)){
+        throw new Error("水晶貼正式印刷檔必須是有效的 PNG 原始檔");
+      }
 
-      var info = await inspectSource(file);
-      var productionPng = await makeProductionPng(file,info);
+      var info = await inspectOriginalPng(file);
+      var exactPng = file.slice(0,file.size,"image/png");
       var base = cleanBaseName(file.name);
       var ppi = getEffectivePpi(info);
       var common = {
         contentType:"image/png",
-        sizeBytes:productionPng.size,
+        sizeBytes:exactPng.size,
         widthPx:info.width,
         heightPx:info.height,
         ppi:ppi,
         targetPpi:ppi,
         capped:false,
-        originalPngPreserved:info.sourceIsPng,
-        sourceConvertedToPng:!info.sourceIsPng,
-        sourceContentType:info.sourceContentType,
+        originalPngPreserved:true,
         hasTransparency:info.hasTransparency
       };
 
@@ -3526,11 +3486,11 @@ window.getPrintAndCutBlobs=async function(){
       return {
         print:Object.assign({
           filename:base + "_水晶貼原始印刷檔.png",
-          blob:productionPng
+          blob:exactPng
         },common),
         cut:Object.assign({
           filename:base + "_水晶貼整卷不裁切_相容檔.png",
-          blob:productionPng.slice(0,productionPng.size,"image/png"),
+          blob:exactPng.slice(0,exactPng.size,"image/png"),
           compatibilityOnly:true,
           noCutlineRequired:true
         },common)
@@ -3553,10 +3513,8 @@ window.getPrintAndCutBlobs=async function(){
       if(isCrystalPage()){
         payload.productType = "CRYSTAL_TRANSFER";
         payload.quote = payload.quote || {};
-        payload.quote.previewMode = "source_image_no_label_renderer";
-        payload.quote.printAssetRule = cachedInfo && cachedInfo.sourceIsPng
-          ? "original_upload_png_exact_bytes"
-          : "source_image_full_resolution_png_conversion";
+        payload.quote.previewMode = "original_png_no_label_renderer";
+        payload.quote.printAssetRule = "original_upload_png_exact_bytes";
         payload.quote.cutAssetRule = "not_applicable_roll_uncut_compatibility_png";
         payload.quote.noCutlineRequired = true;
         payload.quote.hasTransparency = !!(cachedInfo && cachedInfo.hasTransparency);
@@ -3587,4 +3545,3 @@ window.getPrintAndCutBlobs=async function(){
     window.setTimeout(installAll,4200);
   });
 })();
-
