@@ -1,3 +1,195 @@
+(function(){
+  "use strict";
+  var NAME="__LUNY_PAID_CONVERSION_GATE_V2__";
+  var FLAG="__lunyPaidConfirmed";
+  var ADS="AW-11315109513/u0NeCKjg5tcYEIm9u5Mq";
+  var PENDING="LUNY_PENDING_CONVERSION_V2::";
+  var SENT="LUNY_PAID_CONVERSION_SENT_V2::";
+  var STATUS="LUNY_CHECKOUT_STATUS::";
+  var layer=window.dataLayer=window.dataLayer||[];
+  if(window[NAME])return;
+
+  function copy(value){
+    try{return JSON.parse(JSON.stringify(value||{}));}
+    catch(_){return {};}
+  }
+  function unpack(entry){
+    if(entry&&entry[0]==="event"){
+      return {name:String(entry[1]||"").toLowerCase(),params:entry[2]||{}};
+    }
+    if(entry&&typeof entry==="object"&&entry.event){
+      return {
+        name:String(entry.event||"").toLowerCase(),
+        params:entry.ecommerce&&typeof entry.ecommerce==="object"
+          ?entry.ecommerce
+          :entry
+      };
+    }
+    return {name:"",params:{}};
+  }
+  function orderId(params){
+    return String(params&&(
+      params.transaction_id||
+      params.transactionId||
+      params.order_id||
+      params.orderId
+    )||"").trim();
+  }
+  function key(kind,id){return PENDING+kind+"::"+id;}
+  function targetAds(params){
+    var send=params&&params.send_to;
+    var values=Array.isArray(send)?send:[send];
+    return values.some(function(value){
+      return String(value||"").indexOf(ADS)>=0;
+    });
+  }
+  function kind(entry){
+    var event=unpack(entry);
+    if(event.params&&event.params[FLAG]===true)return "";
+    if(event.name==="purchase")return "ga4";
+    if(event.name==="conversion"&&targetAds(event.params))return "ads";
+    return "";
+  }
+
+  var pending={ga4:null,ads:null};
+  function remember(eventKind,entry){
+    var params=copy(unpack(entry).params);
+    var id=orderId(params);
+    pending[eventKind]=params;
+    if(!id)return;
+    try{localStorage.setItem(key(eventKind,id),JSON.stringify(params));}
+    catch(_){}
+  }
+  function read(eventKind,id){
+    if(pending[eventKind]&&orderId(pending[eventKind])===id){
+      return copy(pending[eventKind]);
+    }
+    try{return copy(JSON.parse(localStorage.getItem(key(eventKind,id))||"{}"));}
+    catch(_){return {};}
+  }
+  function hold(entry){
+    var eventKind=kind(entry);
+    if(!eventKind)return false;
+    remember(eventKind,entry);
+    return true;
+  }
+
+  for(var existing=layer.length-1;existing>=0;existing-=1){
+    if(hold(layer[existing]))layer.splice(existing,1);
+  }
+
+  var nativePush=layer.push;
+  layer.push=function(){
+    var pass=[];
+    for(var i=0;i<arguments.length;i+=1){
+      if(!hold(arguments[i]))pass.push(arguments[i]);
+    }
+    return pass.length?nativePush.apply(this,pass):layer.length;
+  };
+
+  var gate=window[NAME]={
+    version:"2026-08-25.2",
+    release:function(id,fallback){
+      id=String(id||"").trim();
+      fallback=fallback||{};
+      if(!id)return {ok:false,code:"MISSING_ORDER_NO"};
+      try{
+        if(localStorage.getItem(SENT+id)==="1"){
+          return {ok:true,idempotent:true,orderNo:id};
+        }
+      }catch(_){}
+
+      var ga4=read("ga4",id);
+      var ads=read("ads",id);
+      var value=Number(
+        fallback.value||
+        ga4.value||
+        ads.value||
+        fallback.fallbackValue||
+        0
+      );
+      var currency=String(
+        fallback.currency||
+        ga4.currency||
+        ads.currency||
+        "TWD"
+      ).trim()||"TWD";
+      if(!Number.isFinite(value)||value<0)value=0;
+
+      if(!Array.isArray(ga4.items)||!ga4.items.length){
+        ga4.items=[{
+          item_id:"343424",
+          item_name:"客製化貼紙專用付款商品",
+          price:value,
+          quantity:1
+        }];
+      }
+      ga4.transaction_id=id;
+      ga4.value=value;
+      ga4.currency=currency;
+      ga4[FLAG]=true;
+
+      ads.send_to=ads.send_to||ADS;
+      ads.transaction_id=id;
+      ads.value=value;
+      ads.currency=currency;
+      ads[FLAG]=true;
+
+      if(typeof window.gtag!=="function"){
+        return {ok:false,code:"GTAG_NOT_READY",orderNo:id};
+      }
+      window.gtag("event","purchase",ga4);
+      window.gtag("event","conversion",ads);
+      try{
+        localStorage.setItem(SENT+id,"1");
+        localStorage.removeItem(key("ga4",id));
+        localStorage.removeItem(key("ads",id));
+      }catch(_){}
+      return {
+        ok:true,
+        idempotent:false,
+        orderNo:id,
+        value:value,
+        currency:currency
+      };
+    }
+  };
+
+  var bootAt=Date.now();
+  function scanConfirmedStatus(){
+    try{
+      for(var i=0;i<localStorage.length;i+=1){
+        var storageKey=localStorage.key(i);
+        if(!storageKey||storageKey.indexOf(STATUS)!==0)continue;
+        var state=JSON.parse(localStorage.getItem(storageKey)||"{}");
+        var status=String(state.bindStatus||state.status||"").toLowerCase();
+        var updatedAt=Date.parse(state.updatedAt||"")||0;
+        var result=state.result||{};
+        if(status!=="complete"||!state.orderNo)continue;
+        if(updatedAt<bootAt-3000)continue;
+        if(result.alreadyComplete===true)continue;
+        gate.release(state.orderNo,{
+          value:Number(
+            result.oneShopOrderTotal||
+            result.orderTotal||
+            result.paymentAmount||
+            result.paidAmount||
+            0
+          ),
+          currency:"TWD"
+        });
+      }
+    }catch(error){
+      if(window.console&&console.warn){
+        console.warn("LUNY paid conversion status scan skipped",error);
+      }
+    }
+  }
+  scanConfirmedStatus();
+  var timer=window.setInterval(scanConfirmedStatus,750);
+  window.setTimeout(function(){window.clearInterval(timer);},30*60*1000);
+})();
+
 /* LUNY GA4 item_id patch v1
  * Adds 1SHOP ProductSKU as GA4 item_id without sending a second purchase event.
  */
