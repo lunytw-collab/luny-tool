@@ -1,4 +1,4 @@
-/* LUNY v16.7 preflight：紅黃綠檔案檢查、可執行修正、單款檔案整理加購，以及同源 print/cut 輸出。 */
+/* LUNY v16.7.1 preflight：修正白邊／單色模式同步，加入建議邊緣色與明確方案預覽。 */
 /* LUNY Phase 3：正式 print/cut 以 Canvas.toBlob() 直接輸出 PNG Blob；不再經過大型 Data URL / Base64。 */
 /* Phase 3：移除 HTMLCanvasElement.prototype.toDataURL 全域攔截；滿版底色維持在 drawAll/renderPrintCanvas 正式繪製流程內。 */
 /* LUNY v7.9.49：即時預覽依尺寸動態降階，最長邊上限 1800px、總像素上限 320 萬；正式輸出仍維持 500／400／300 PPI。 */
@@ -1811,6 +1811,8 @@ function applyMirrorBleedFromCutLine(ctx,canvas,cm2px,forceForPrint){
 }function drawGuides(ctx,shapeValue,cx,cy,dims,b,gap,cm2px){if(shapeValue==='custom'&&lunyCustomDrawGuides(ctx,cx,cy,dims,b,gap,cm2px))return;const{cutW,cutH,rCut,safeW,safeH}=dims;const rpx=0.1*cm2px;const s=(shapeValue==='custom')?'roundrect':shapeValue;const edgeOption=getEdgeOption();const CUT_COLOR='#D3162D';const SAFE_COLOR='#32CD32';const BLEED_COLOR='#888888';function addShapeSubPath(w,h){if(s==='circle'){const r=Math.min(w,h)/2;ctx.arc(cx,cy,r,0,Math.PI*2);}else if(s==='roundrect'){const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}else if(s==='ellipse'){ctx.ellipse(cx,cy,w/2,h/2,0,0,Math.PI*2);}else if(s==='arch'){const x=cx-w/2;const y=cy-h/2;archPath(ctx,x,y,w,h,cm2px);ctx.closePath();}}function shapePath(w,h){ctx.beginPath();addShapeSubPath(w,h);}function strokeShape(w,h,color,lineWidth,dash){ctx.save();ctx.strokeStyle=color;ctx.lineWidth=lineWidth;ctx.setLineDash(dash||[]);shapePath(w,h);ctx.stroke();ctx.restore();}function drawOutsideMask(){ctx.save();ctx.beginPath();ctx.rect(0,0,ctx.canvas.width,ctx.canvas.height);addShapeSubPath(cutW+2*b,cutH+2*b);ctx.clip('evenodd');drawCheckerboard(ctx,0,0,ctx.canvas.width,ctx.canvas.height,16,'#f7f7f7','#e9e9e9');ctx.fillStyle='rgba(255,255,255,0.28)';ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);ctx.restore();}function drawWhiteEdgeArea(){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();addShapeSubPath(cutW+2*b,cutH+2*b);addShapeSubPath(safeW,safeH);ctx.fill('evenodd');ctx.restore();}drawOutsideMask();if(edgeOption==='on'){drawWhiteEdgeArea();}strokeShape(cutW+2*b,cutH+2*b,BLEED_COLOR,4,[8,8]);strokeShape(cutW,cutH,CUT_COLOR,4,[]);strokeShape(safeW,safeH,SAFE_COLOR,4,[8,8]);}function drawDimensions(ctx,W,H,b,cm2px){ctx.save();ctx.strokeStyle='#2D2D2D';ctx.fillStyle='#2D2D2D';ctx.lineWidth=1;ctx.setLineDash([]);const cmW=Math.round(((W-2*b)/cm2px)*10)/10;const cmH=Math.round(((H-2*b)/cm2px)*10)/10;const margin=0.1*cm2px,tick=0.2*cm2px;ctx.font=`${0.25 * cm2px}px "Noto Sans TC", sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.beginPath();ctx.moveTo(margin,b);ctx.lineTo(margin,H-b);ctx.moveTo(margin-tick,b);ctx.lineTo(margin+tick,b);ctx.moveTo(margin-tick,H-b);ctx.lineTo(margin+tick,H-b);ctx.stroke();ctx.fillText(`${cmH%1===0?cmH.toFixed(0):cmH}cm`,margin+tick+4,H/2);ctx.beginPath();ctx.moveTo(b,H-margin);ctx.lineTo(W-b,H-margin);ctx.moveTo(b,H-margin-tick);ctx.lineTo(b,H-margin+tick);ctx.moveTo(W-b,H-margin-tick);ctx.lineTo(W-b,H-margin+tick);ctx.stroke();ctx.fillText(`${cmW%1===0?cmW.toFixed(0):cmW}cm`,W/2,H-margin-tick-4);ctx.restore();}function drawCustomShapeHint(ctx,W,H,cm2px){return;}function drawSafeAreaWarning(ctx,W,H,b,cm2px){/* v7.9.6：預覽畫布內不再覆蓋提示文字；提示改由畫布下方動態警示區顯示。 */return;}function drawMinReadableText(ctx,W,H,b,cm2px){const text='小於這串文字將不容易閱讀';const margin=0.4*cm2px,fontPx=0.2*cm2px,padX=0.15*cm2px,padY=0.12*cm2px,radius=0.12*cm2px;ctx.save();ctx.font=`${fontPx}px "Noto Sans TC", sans-serif`;ctx.textAlign='center';ctx.textBaseline='alphabetic';const m=ctx.measureText(text),textW=m.width,asc=m.actualBoundingBoxAscent||fontPx*.8,dsc=m.actualBoundingBoxDescent||fontPx*.2;const boxW=textW+padX*2,boxH=asc+dsc+padY*2,x=(W-boxW)/2,y=H-b-margin-boxH;ctx.fillStyle='#ffffff';ctx.beginPath();roundedRectPath(ctx,x,y,boxW,boxH,radius);ctx.fill();ctx.fillStyle='#000';ctx.fillText(text,W/2,y+padY+asc);ctx.restore();}function lunyRgbToHex(r,g,b){return'#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');}function sampleCanvasAverageColor(x,y,radius){const r=Math.max(0,Math.round(radius||1));const sx=Math.max(0,Math.floor(x-r)),sy=Math.max(0,Math.floor(y-r));const ex=Math.min(cG.width-1,Math.ceil(x+r)),ey=Math.min(cG.height-1,Math.ceil(y+r));const w=Math.max(1,ex-sx+1),h=Math.max(1,ey-sy+1);let imgData;try{imgData=ctxG.getImageData(sx,sy,w,h).data;}catch(e){return null;}let rr=0,gg=0,bb=0,aa=0,count=0;for(let i=0;i<imgData.length;i+=4){const a=imgData[i+3];if(a<24)continue;rr+=imgData[i]*a;gg+=imgData[i+1]*a;bb+=imgData[i+2]*a;aa+=a;count++;}if(!count||!aa)return null;return lunyRgbToHex(rr/aa,gg/aa,bb/aa);}function closeNativeColorPicker(input){try{setTimeout(()=>{try{input&&input.blur&&input.blur();}catch(e){}try{if(document.body){if(!document.body.hasAttribute('tabindex'))document.body.setAttribute('tabindex','-1');document.body.focus({preventScroll:true});}}catch(e){}},80);}catch(e){}}function updateColorToolUI(){const tool=document.getElementById('lunyCanvasColorTool');const body=document.getElementById('lunyColorToolBody');const toggle=document.getElementById('lunyColorToolToggle');const edgeReset=document.getElementById('lunyEdgeColorReset');const bgReset=document.getElementById('lunyBgColorReset');const edgeSw=document.getElementById('lunyEdgeColorSwatch');const bgSw=document.getElementById('lunyBgColorSwatch');const edgePalette=document.getElementById('lunyEdgeColorPalette');const bgPalette=document.getElementById('lunyBgColorPalette');const edgeHas=!!eyedropperColor;const bgHas=!!backgroundColor;if(tool){tool.setAttribute('data-collapsed',lunyColorToolCollapsed?'1':'0');}if(toggle){toggle.textContent=lunyColorToolCollapsed?'＋':'−';toggle.setAttribute('aria-expanded',String(!lunyColorToolCollapsed));}if(body){body.style.display=lunyColorToolCollapsed?'none':'flex';}if(edgeReset){edgeReset.disabled=!edgeHas;edgeReset.style.opacity=edgeHas?'1':'0.45';edgeReset.style.cursor=edgeHas?'pointer':'not-allowed';}if(bgReset){bgReset.disabled=!bgHas;bgReset.style.opacity=bgHas?'1':'0.45';bgReset.style.cursor=bgHas?'pointer':'not-allowed';}if(edgeSw){edgeSw.style.background=eyedropperColor||'#ffffff';edgeSw.style.opacity=edgeHas?'1':'0.55';}if(bgSw){bgSw.style.background=backgroundColor||'#ffffff';bgSw.style.opacity=bgHas?'1':'0.55';}if(edgePalette){edgePalette.value=eyedropperColor||'#ffffff';}if(bgPalette){bgPalette.value=backgroundColor||'#ffffff';}}function clearEyedropperColor(){eyedropperColor='';window.LUNY_EYEDROPPER_COLOR='';window.LUNY_EDGE_COLOR='';window.LUNY_EDGE_FILL_MODE='off';const edgeColor=document.getElementById('edgeColor');if(edgeColor){edgeColor.value='#ffffff';try{edgeColor.dispatchEvent(new Event('input',{bubbles:true}));edgeColor.dispatchEvent(new Event('change',{bubbles:true}));}catch(e){}}const edgeColorEnabled=document.getElementById('edgeColorEnabled');if(edgeColorEnabled)edgeColorEnabled.checked=false;eyedropperMode=false;if(cG)cG.style.cursor='';updateColorToolUI();drawPreview();}function setEyedropperColor(hex,inputEl){if(!hex)return;eyedropperColor=hex;window.LUNY_EYEDROPPER_COLOR=hex;window.LUNY_EDGE_COLOR=hex;window.LUNY_EDGE_FILL_MODE='color';const edgeColor=document.getElementById('edgeColor');if(edgeColor){edgeColor.value=hex;try{edgeColor.dispatchEvent(new Event('input',{bubbles:true}));edgeColor.dispatchEvent(new Event('change',{bubbles:true}));}catch(e){}}const edgeColorEnabled=document.getElementById('edgeColorEnabled');if(edgeColorEnabled)edgeColorEnabled.checked=true;updateColorToolUI();drawPreview();if(inputEl)closeNativeColorPicker(inputEl);}function clearBackgroundColor(){backgroundColor='';window.LUNY_BACKGROUND_COLOR='';const bgEl=document.getElementById('bgColor');if(bgEl){bgEl.value='#ffffff';try{bgEl.dispatchEvent(new Event('input',{bubbles:true}));bgEl.dispatchEvent(new Event('change',{bubbles:true}));}catch(e){}}updateColorToolUI();drawPreview();}function setBackgroundColor(hex,inputEl){if(!hex)return;backgroundColor=hex;window.LUNY_BACKGROUND_COLOR=hex;const bgEl=document.getElementById('bgColor');if(bgEl){bgEl.value='#ffffff';try{bgEl.dispatchEvent(new Event('input',{bubbles:true}));bgEl.dispatchEvent(new Event('change',{bubbles:true}));}catch(e){}}updateColorToolUI();drawPreview();if(inputEl)closeNativeColorPicker(inputEl);}function setEyedropperMode(on){eyedropperMode=false;if(cG)cG.style.cursor='';updateColorToolUI();}function ensureEyedropperUI(){if(!cG||document.getElementById('lunyCanvasColorTool'))return;const tool=document.createElement('div');tool.id='lunyCanvasColorTool';tool.style.cssText='margin:10px 10px 12px auto;position:relative;z-index:5;width:max-content;max-width:calc(100% - 20px);display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 9px;border-radius:14px;border:1px solid #e7d8c8;background:#fffaf5;box-shadow:0 6px 16px rgba(80,54,32,.08);font-size:12px;color:#5f4634;box-sizing:border-box;';tool.innerHTML='<button id="lunyColorToolToggle" type="button" aria-expanded="true" title="展開／收合色彩工具" style="width:28px;height:28px;border:1px solid #d9c4b2;border-radius:999px;background:#fff;color:#6b4b2f;font-weight:900;cursor:pointer;line-height:1;">−</button><span style="font-weight:900;color:#6b4b2f;white-space:nowrap;">色彩調整</span><div id="lunyColorToolBody" style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;"><label style="display:inline-flex;align-items:center;gap:6px;font-weight:800;white-space:nowrap;"><span>邊緣色</span><input id="lunyEdgeColorPalette" type="color" value="#ffffff" style="width:42px;height:30px;padding:2px;border:1px solid #d9c4b2;border-radius:10px;background:#fff;cursor:pointer;"></label><button id="lunyEdgeColorReset" type="button" title="邊緣色回到自動補邊" style="width:30px;height:30px;border:1px solid #d9c4b2;border-radius:999px;background:#fff;color:#6b4b2f;font-size:16px;font-weight:900;cursor:pointer;line-height:1;">↩︎</button><span id="lunyEdgeColorSwatch" style="width:22px;height:22px;border-radius:999px;border:1px solid #c9b09c;background:#fff;display:inline-block;"></span><label style="display:inline-flex;align-items:center;gap:6px;font-weight:800;white-space:nowrap;margin-left:4px;"><span>背景色</span><input id="lunyBgColorPalette" type="color" value="#ffffff" style="width:42px;height:30px;padding:2px;border:1px solid #d9c4b2;border-radius:10px;background:#fff;cursor:pointer;"></label><button id="lunyBgColorReset" type="button" title="背景色恢復白色" style="width:30px;height:30px;border:1px solid #d9c4b2;border-radius:999px;background:#fff;color:#6b4b2f;font-size:16px;font-weight:900;cursor:pointer;line-height:1;">↩︎</button><span id="lunyBgColorSwatch" style="width:22px;height:22px;border-radius:999px;border:1px solid #c9b09c;background:#fff;display:inline-block;"></span></div>';cG.insertAdjacentElement('afterend',tool);const toggle=tool.querySelector('#lunyColorToolToggle');const edgePalette=tool.querySelector('#lunyEdgeColorPalette');const bgPalette=tool.querySelector('#lunyBgColorPalette');const edgeReset=tool.querySelector('#lunyEdgeColorReset');const bgReset=tool.querySelector('#lunyBgColorReset');toggle.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();lunyColorToolCollapsed=!lunyColorToolCollapsed;updateColorToolUI();});edgePalette.addEventListener('input',()=>{setEyedropperColor(edgePalette.value,edgePalette);});edgePalette.addEventListener('change',()=>{setEyedropperColor(edgePalette.value,edgePalette);closeNativeColorPicker(edgePalette);});bgPalette.addEventListener('input',()=>{setBackgroundColor(bgPalette.value,bgPalette);});bgPalette.addEventListener('change',()=>{setBackgroundColor(bgPalette.value,bgPalette);closeNativeColorPicker(bgPalette);});edgeReset.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();clearEyedropperColor();});bgReset.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();clearBackgroundColor();});updateColorToolUI();}/* v7.9.35：將使用者指定的邊框顏色真正套用到畫面。
    套用範圍為安全線外至出血線；預覽、切割檔與印刷檔使用相同顏色結果。 */
 function applySelectedEdgeColor(ctx,canvas,cm2px){
+  const mode=String(getEdgeOption()||'off').toLowerCase();
+  if(!['color','edgecolor','fullcolor'].includes(mode))return;
   const color=eyedropperColor||window.LUNY_EYEDROPPER_COLOR||window.LUNY_EDGE_COLOR||'';
   if(!color||!canvas||!ctx)return;
   const W=canvas.width||0,H=canvas.height||0;
@@ -2451,7 +2453,7 @@ async function lunyAssertDistinctOutputBlobs(printBlob,cutBlob,base){
   }
 }
 
-var LUNY_PREFLIGHT_VERSION='16.7.0';
+var LUNY_PREFLIGHT_VERSION='16.7.1';
 var LUNY_FILE_PREP_SKU='FILE_PREP_BASIC';
 var LUNY_FILE_PREP_LABEL='印刷檔案基礎整理';
 var LUNY_FILE_PREP_FEE=300;
@@ -2531,11 +2533,63 @@ function lunyImageBorderWhiteRatio(){
   return total?white/total:0;
 }
 
+function lunySuggestedEdgeColor(){
+  const info=getPhotoPixelInfo();
+  if(!info||!info.w||!info.h)return'#666666';
+  const resolution=lunyResolutionSnapshot();
+  const sourceW=Math.max(1,Number(resolution&&resolution.pixelWidth||info.w));
+  const sourceH=Math.max(1,Number(resolution&&resolution.pixelHeight||info.h));
+  const box=resolution&&resolution.contentBox&&resolution.contentBox.found
+    ? resolution.contentBox
+    : {x:0,y:0,width:sourceW,height:sourceH};
+  const x0=Math.max(0,Math.min(info.w-1,Number(box.x||0)*info.w/sourceW));
+  const y0=Math.max(0,Math.min(info.h-1,Number(box.y||0)*info.h/sourceH));
+  const x1=Math.max(x0,Math.min(info.w-1,(Number(box.x||0)+Number(box.width||sourceW))*info.w/sourceW-1));
+  const y1=Math.max(y0,Math.min(info.h-1,(Number(box.y||0)+Number(box.height||sourceH))*info.h/sourceH-1));
+  const bins=new Map();
+  function add(x,y){
+    const rgba=getPhotoPixelRGBA(info,x,y);
+    if(!rgba||rgba[3]<96)return;
+    const r=rgba[0],g=rgba[1],b=rgba[2];
+    if(r>=240&&g>=240&&b>=240)return;
+    const key=`${r>>5}|${g>>5}|${b>>5}`;
+    const old=bins.get(key)||{count:0,r:0,g:0,b:0};
+    old.count+=1;old.r+=r;old.g+=g;old.b+=b;bins.set(key,old);
+  }
+  const steps=220;
+  const insetMax=Math.max(2,Math.min(12,Math.round(Math.min(x1-x0,y1-y0)*0.008)));
+  for(let inset=0;inset<=insetMax;inset+=Math.max(1,Math.round(insetMax/3))){
+    for(let i=0;i<=steps;i++){
+      const t=i/steps;
+      const x=x0+(x1-x0)*t,y=y0+(y1-y0)*t;
+      add(x,y0+inset);add(x,y1-inset);add(x0+inset,y);add(x1-inset,y);
+    }
+  }
+  let best=null;
+  bins.forEach(value=>{if(!best||value.count>best.count)best=value;});
+  if(!best||best.count<4)return'#666666';
+  const color=lunyRgbToHex(best.r/best.count,best.g/best.count,best.b/best.count);
+  const avg=[best.r/best.count,best.g/best.count,best.b/best.count];
+  return rgbaLuma(avg)>232?'#d0c8bc':color;
+}
+
+function lunyUseSuggestedEdgeColor(){
+  if(!lunySetEdgeOption('color'))return false;
+  const suggested=lunySuggestedEdgeColor();
+  setEyedropperColor(suggested);
+  lunyColorToolCollapsed=false;
+  updateColorToolUI();
+  const color=document.getElementById('edgeColor');
+  if(color){color.disabled=false;color.style.opacity='1';color.style.cursor='pointer';}
+  drawPreview();
+  return true;
+}
+
 function lunyPhotoCoversBleed(){
   const edge=String(getEdgeOption()||'off').toLowerCase();
   if(['on','white','whiteedge','white-edge','border','edge'].includes(edge))return true;
   if(['color','edgecolor','fullcolor'].includes(edge))return true;
-  if(backgroundColor||eyedropperColor)return true;
+  if(backgroundColor)return true;
   if(!img)return false;
   return photoCoversPreviewShape(Math.max(1,cG.width-4),Math.max(1,cG.height-4));
 }
@@ -2658,6 +2712,22 @@ function lunyClassifyPreflight(){
     );
   }
 
+  const edgeMode=String(getEdgeOption()||'off').toLowerCase();
+  if(['on','white','whiteedge','white-edge','border','edge'].includes(edgeMode)){
+    return lunyMakePreflightResult(
+      'READY','green','已選擇保留白邊',[],
+      ['目前預覽中的白色區域會成為成品設計的一部分。','印刷檔與切割圖會使用相同的白邊設定。'],
+      {resolution:resolutionSummary,flattenedRisk,canProceed:true,edgeChoice:{mode:'white',label:'保留白邊',color:'#ffffff'}}
+    );
+  }
+  if(['color','edgecolor','fullcolor'].includes(edgeMode)){
+    const selectedColor=eyedropperColor||window.LUNY_EDGE_COLOR||document.getElementById('edgeColor')?.value||'#666666';
+    return lunyMakePreflightResult(
+      'READY','green','已套用單色補出血',[],
+      ['灰色出血線內的外圈會使用此顏色補滿。','可點預覽下方的「邊緣色」色票更換顏色。'],
+      {resolution:resolutionSummary,flattenedRisk,canProceed:true,edgeChoice:{mode:'color',label:'單色補出血',color:selectedColor}}
+    );
+  }
   return lunyMakePreflightResult(
     'READY','green','檔案檢查完成，可直接製作',[],
     ['印刷檔、切割圖與目前確認的製作內容將使用同一份輸出。'],
@@ -2685,10 +2755,18 @@ function lunyGetPreflightResult(){
 function lunySetEdgeOption(value){
   const radio=document.querySelector(`input[name="edgeOption"][value="${value}"]`);
   if(!radio)return false;
+  window.LUNY_EDGE_FILL_MODE=String(value||'off').toLowerCase();
   radio.checked=true;
   radio.dispatchEvent(new Event('change',{bubbles:true}));
   return true;
 }
+
+document.addEventListener('change',function(event){
+  const target=event&&event.target;
+  if(!target||!target.matches||!target.matches('input[name="edgeOption"]')||!target.checked)return;
+  window.LUNY_EDGE_FILL_MODE=String(target.value||'off').toLowerCase();
+  drawPreview();
+});
 
 function lunyFitPhotoContentToBleed(){
   if(!img)return false;
@@ -2767,13 +2845,17 @@ function lunyRenderPreflight(result){
   panel.style.color=colors.text;
   const issueHtml=(result.issues||[]).map(item=>`<li>${item}</li>`).join('');
   const adviceHtml=(result.recommendations||[]).map(item=>`<li>${item}</li>`).join('');
+  const choiceHtml=result.edgeChoice
+    ? `<div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 10px;border:1px solid ${colors.border};border-radius:6px;background:#ffffff;color:#1f2937;font-weight:800;"><span style="width:24px;height:24px;flex:0 0 24px;border:2px solid #9ca3af;border-radius:4px;background:${result.edgeChoice.color};box-shadow:inset 0 0 0 1px rgba(255,255,255,.7);"></span><span>目前方案：${result.edgeChoice.label}${result.edgeChoice.mode==='color'?` ${result.edgeChoice.color.toUpperCase()}`:''}</span></div>`
+    : '';
   const actions=[];
   if(result.autoFix==='TRIM_WHITE_AND_FILL')actions.push(lunyPreflightButton('裁掉白邊並放大','fit',true));
   if(result.autoFix==='FIT_TO_BLEED')actions.push(lunyPreflightButton('置中並放大到出血線','fit',true));
   if(result.autoFix==='MOVE_IMPORTANT_CONTENT')actions.push(lunyPreflightButton('移回安全區','safe',true));
-  if(result.status==='BLOCKED_FILE_PREP_ELIGIBLE'||result.status==='BLOCKED_AUTO_FIXABLE'){
-    actions.push(lunyPreflightButton('改為保留白邊','white',false));
-    actions.push(lunyPreflightButton('使用單色補出血','color',false));
+  const isBleedFix=result.autoFix==='TRIM_WHITE_AND_FILL'||result.autoFix==='FIT_TO_BLEED';
+  if(result.status==='BLOCKED_FILE_PREP_ELIGIBLE'||(result.status==='BLOCKED_AUTO_FIXABLE'&&isBleedFix)){
+    actions.push(lunyPreflightButton('接受目前白邊','white',false));
+    actions.push(lunyPreflightButton('套用建議邊緣色','color',false));
   }
   if(result.level==='red')actions.push(lunyPreflightButton('重新上傳圖片','upload',false));
   let decision='';
@@ -2783,19 +2865,14 @@ function lunyRenderPreflight(result){
   if(result.filePrepEligible){
     decision+=`<div style="margin-top:12px;padding-top:12px;border-top:1px solid ${colors.border};"><label style="display:flex;gap:8px;align-items:flex-start;font-weight:800;"><input id="lunyFilePrepBasic" type="checkbox" ${__lunyFilePrepSelected?'checked':''} style="margin-top:4px;"><span>加購${LUNY_FILE_PREP_LABEL}　NT$${LUNY_FILE_PREP_FEE}／款</span></label><div style="margin:5px 0 0 24px;font-size:12px;">含白邊裁除、置中、比例調整與單色出血；不含重繪、改字或重排。整理完成後提供預覽確認，製作天數從確認後起算。</div></div>`;
   }
-  panel.innerHTML=`<div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;"><div><div style="font-size:12px;font-weight:800;margin-bottom:3px;">印前檔案檢查</div><div style="font-size:16px;font-weight:900;color:${colors.text};">${result.title}</div></div><span style="flex:0 0 auto;padding:3px 8px;border-radius:999px;background:${colors.chip};font-size:12px;font-weight:900;">${result.level==='green'?'可製作':(result.level==='yellow'?'需確認':'需修正')}</span></div>${issueHtml?`<ul style="margin:9px 0 0 18px;padding:0;">${issueHtml}</ul>`:''}${adviceHtml?`<ol style="margin:9px 0 0 18px;padding:0;">${adviceHtml}</ol>`:''}${actions.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">${actions.join('')}</div>`:''}${decision}`;
+  panel.innerHTML=`<div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;"><div><div style="font-size:12px;font-weight:800;margin-bottom:3px;">印前檔案檢查</div><div style="font-size:16px;font-weight:900;color:${colors.text};">${result.title}</div></div><span style="flex:0 0 auto;padding:3px 8px;border-radius:999px;background:${colors.chip};font-size:12px;font-weight:900;">${result.level==='green'?'可製作':(result.level==='yellow'?'需確認':'需修正')}</span></div>${choiceHtml}${issueHtml?`<ul style="margin:9px 0 0 18px;padding:0;">${issueHtml}</ul>`:''}${adviceHtml?`<ol style="margin:9px 0 0 18px;padding:0;">${adviceHtml}</ol>`:''}${actions.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">${actions.join('')}</div>`:''}${decision}`;
   panel.querySelectorAll('[data-luny-preflight-action]').forEach(button=>{
     button.addEventListener('click',function(){
       const action=button.dataset.lunyPreflightAction;
       if(action==='fit')lunyFitPhotoContentToBleed();
       if(action==='safe')lunyMovePlacedContentInsideSafeArea();
       if(action==='white'){lunySetEdgeOption('on');drawPreview();}
-      if(action==='color'){
-        lunySetEdgeOption('color');
-        const color=document.getElementById('edgeColor');
-        if(color){color.disabled=false;color.click();}
-        drawPreview();
-      }
+      if(action==='color')lunyUseSuggestedEdgeColor();
       if(action==='upload')imgInput.click();
     });
   });
