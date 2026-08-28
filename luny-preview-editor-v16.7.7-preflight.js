@@ -129,7 +129,7 @@ function lunyResolveCustomPrintSpec(widthCm,heightCm){
 window.LUNY_getExportResolutionInfo=function(){
   const size=typeof lunyGetEffectiveSizeCm==='function'?lunyGetEffectiveSizeCm():{widthCm:Number(wIn&&wIn.value)||1,heightCm:Number(hIn&&hIn.value)||1};
   return lunyResolveExportSpec(size.widthCm,size.heightCm,true);
-};const BLEED_CM=0.2,GAP_CM=0.2,MIRROR_SOURCE_CM=0.1,MIN_QR_CM=1;const SNAP=0,ZOOM_STEP=1.03;const MOVE_SENSITIVITY=0.42;const MIN_MAIN=0.1,MAX_MAIN=5;const MIN_ICON=0.05,MAX_ICON=5;const MIN_TEXT=0.1,MAX_TEXT=5;const IS_TOUCH=window.matchMedia('(pointer:coarse)').matches;const HANDLE_R=IS_TOUCH?12:8;const HIT=IS_TOUCH?26:12;const TL_HIT=IS_TOUCH?44:18;const ICON_TL_ANCHOR_OPPOSITE=true;const imgInput=document.getElementById('imgFile');const iconInput=document.getElementById('iconFile');const imgMeta=document.getElementById('imgFileMeta');const iconMeta=document.getElementById('iconFileMeta');const shape=document.getElementById('shape');const wIn=document.getElementById('widthCm');const hIn=document.getElementById('heightCm');const bg=document.getElementById('bgColor');const btnDownloadPreview=document.getElementById('downloadPreview');const btnDownloadOriginal=document.getElementById('downloadOriginal');const cG=document.getElementById('canvasGuides');const ctxG=cG.getContext('2d');const txtInput=document.getElementById('textContent');const txtSizeCm=document.getElementById('textSizeCm');const txtColor=document.getElementById('textColor');const btnAddTxt=document.getElementById('addTextBtn');let img=null,imgFull=null,scale=1,offsetX=0,offsetY=0,angle=0;let iconImg=null,iconFull=null,iconScale=0.35,iconOffsetX=0,iconOffsetY=0,iconAngle=0;let showQRTest=false,showTestText=false;let activeTarget='photo';let textStr='';let textSizeCM=0.6;let textScale=1;let textOffsetX=0,textOffsetY=0,textAngle=0;let textFill='#000000';let eyedropperMode=false,eyedropperColor='',backgroundColor='',eyedropperRadiusPx=5,lunyColorToolCollapsed=false;window.LUNY_EDGE_FILL_MODE='off';const UPLOAD_PREVIEW_MAX_PX=1800,UPLOAD_ICON_PREVIEW_MAX_PX=1000,UPLOAD_PREVIEW_QUALITY=0.86;function formatBytes(bytes){bytes=Number(bytes)||0;if(bytes<1024)return bytes+' B';if(bytes<1024*1024)return(bytes/1024).toFixed(1)+' KB';return(bytes/1024/1024).toFixed(2)+' MB';}function loadImageFromURL(url){return new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(new Error('圖片載入失敗'));image.src=url;});}async function loadImageFromFile(file){const url=URL.createObjectURL(file);try{return await loadImageFromURL(url);}finally{setTimeout(()=>URL.revokeObjectURL(url),1000);}}function canvasToBlobSafe(canvas,type,quality){return new Promise(resolve=>{if(canvas.toBlob){canvas.toBlob(blob=>resolve(blob),type,quality);}else{resolve(null);}});}async function makePreviewImageFromFile(file,maxSide){const full=await loadImageFromFile(file);const longSide=Math.max(full.width,full.height);const ratio=longSide>maxSide?maxSide/longSide:1;const w=Math.max(1,Math.round(full.width*ratio));const h=Math.max(1,Math.round(full.height*ratio));if(ratio>=1){return{preview:full,full,previewBytes:file.size,compressed:false};}const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const c=canvas.getContext('2d',{alpha:true});c.imageSmoothingEnabled=true;c.imageSmoothingQuality='high';c.drawImage(full,0,0,w,h);let blob=await canvasToBlobSafe(canvas,'image/webp',UPLOAD_PREVIEW_QUALITY);let url;if(blob){url=URL.createObjectURL(blob);}else{url=canvas.toDataURL('image/png');}const preview=await loadImageFromURL(url);if(blob){setTimeout(()=>URL.revokeObjectURL(url),1000);}return{preview,full,previewBytes:blob?blob.size:Math.round((url.length*3)/4),compressed:true};}function setUploadMeta(meta,file,info,isIcon){if(!meta)return;const old=formatBytes(file&&file.size);const now=formatBytes(info&&info.previewBytes);const compressed=info&&info.compressed;meta.textContent=file?`${file.name}｜預覽${compressed?'已壓縮':'未壓縮'}：${old} → ${now}`:'尚未選擇檔案';if(isIcon&&file){const span=document.createElement('span');span.className='badge';span.textContent='建議 ≥ 1.5cm';meta.appendChild(document.createTextNode(' '));meta.appendChild(span);}}const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));const mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);const rot=(x,y,ang)=>{const c=Math.cos(ang),s=Math.sin(ang);return{x:x*c-y*s,y:x*s+y*c};};function toCanvasPoint(e){const r=cG.getBoundingClientRect();const x=(e.clientX-r.left)*(cG.width/r.width);const y=(e.clientY-r.top)*(cG.height/r.height);return{x,y};}function corners(cx,cy,w,h,ang){const hw=w/2,hh=h/2;const base=[{x:-hw,y:-hh},{x:hw,y:-hh},{x:hw,y:hh},{x:-hw,y:hh}];return base.map(p=>{const v=rot(p.x,p.y,ang);return{x:cx+v.x,y:cy+v.y};});}function pointInRotRect(px,py,cx,cy,w,h,ang){const v=rot(px-cx,py-cy,-ang);return Math.abs(v.x)<=w/2&&Math.abs(v.y)<=h/2;}function roundedRectPath(ctx,x,y,w,h,r){const rr=Math.min(r,Math.min(w,h)/2);ctx.moveTo(x+rr,y);ctx.lineTo(x+w-rr,y);ctx.arcTo(x+w,y,x+w,y+rr,rr);ctx.lineTo(x+w,y+h-rr);ctx.arcTo(x+w,y+h,x+w-rr,y+h,rr);ctx.lineTo(x+rr,y+h);ctx.arcTo(x,y+h,x,y+h-rr,rr);ctx.lineTo(x,y+rr);ctx.arcTo(x,y,x+rr,y,rr);}function archPath(ctx,x,y,w,h,cm2px){const r=Math.max(0.5,Math.min(w/2,h));const cx=x+w/2;const cy=y+r;const rr=0.1*cm2px;ctx.moveTo(x+rr,y+h);ctx.arcTo(x,y+h,x,y+h-rr,rr);ctx.lineTo(x,cy);ctx.arc(cx,cy,r,Math.PI,0,false);ctx.lineTo(x+w,y+h-rr);ctx.arcTo(x+w,y+h,x+w-rr,y+h,rr);}function drawCheckerboard(ctx,x,y,w,h,size,c1,c2){const cell=Math.max(6,Math.round(size||16));const endX=x+w,endY=y+h;for(let yy=y;yy<endY;yy+=cell){for(let xx=x;xx<endX;xx+=cell){const odd=((Math.floor((xx-x)/cell)+Math.floor((yy-y)/cell))%2)===1;ctx.fillStyle=odd?(c2||"#ececec"):(c1||"#f7f7f7");ctx.fillRect(xx,yy,Math.min(cell,endX-xx),Math.min(cell,endY-yy));}}}
+};const BLEED_CM=0.2,GAP_CM=0.25,MIRROR_SOURCE_CM=0.1,MIN_QR_CM=1;const SNAP=0,ZOOM_STEP=1.03;const MOVE_SENSITIVITY=0.42;const MIN_MAIN=0.1,MAX_MAIN=5;const MIN_ICON=0.05,MAX_ICON=5;const MIN_TEXT=0.1,MAX_TEXT=5;const IS_TOUCH=window.matchMedia('(pointer:coarse)').matches;const HANDLE_R=IS_TOUCH?12:8;const HIT=IS_TOUCH?26:12;const TL_HIT=IS_TOUCH?44:18;const ICON_TL_ANCHOR_OPPOSITE=true;const imgInput=document.getElementById('imgFile');const iconInput=document.getElementById('iconFile');const imgMeta=document.getElementById('imgFileMeta');const iconMeta=document.getElementById('iconFileMeta');const shape=document.getElementById('shape');const wIn=document.getElementById('widthCm');const hIn=document.getElementById('heightCm');const bg=document.getElementById('bgColor');const btnDownloadPreview=document.getElementById('downloadPreview');const btnDownloadOriginal=document.getElementById('downloadOriginal');const cG=document.getElementById('canvasGuides');const ctxG=cG.getContext('2d');const txtInput=document.getElementById('textContent');const txtSizeCm=document.getElementById('textSizeCm');const txtColor=document.getElementById('textColor');const btnAddTxt=document.getElementById('addTextBtn');let img=null,imgFull=null,scale=1,offsetX=0,offsetY=0,angle=0;let iconImg=null,iconFull=null,iconScale=0.35,iconOffsetX=0,iconOffsetY=0,iconAngle=0;let showQRTest=false,showTestText=false;let activeTarget='photo';let textStr='';let textSizeCM=0.6;let textScale=1;let textOffsetX=0,textOffsetY=0,textAngle=0;let textFill='#000000';let eyedropperMode=false,eyedropperColor='',backgroundColor='',eyedropperRadiusPx=5,lunyColorToolCollapsed=false;window.LUNY_EDGE_FILL_MODE='off';const UPLOAD_PREVIEW_MAX_PX=1800,UPLOAD_ICON_PREVIEW_MAX_PX=1000,UPLOAD_PREVIEW_QUALITY=0.86;function formatBytes(bytes){bytes=Number(bytes)||0;if(bytes<1024)return bytes+' B';if(bytes<1024*1024)return(bytes/1024).toFixed(1)+' KB';return(bytes/1024/1024).toFixed(2)+' MB';}function loadImageFromURL(url){return new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(new Error('圖片載入失敗'));image.src=url;});}async function loadImageFromFile(file){const url=URL.createObjectURL(file);try{return await loadImageFromURL(url);}finally{setTimeout(()=>URL.revokeObjectURL(url),1000);}}function canvasToBlobSafe(canvas,type,quality){return new Promise(resolve=>{if(canvas.toBlob){canvas.toBlob(blob=>resolve(blob),type,quality);}else{resolve(null);}});}async function makePreviewImageFromFile(file,maxSide){const full=await loadImageFromFile(file);const longSide=Math.max(full.width,full.height);const ratio=longSide>maxSide?maxSide/longSide:1;const w=Math.max(1,Math.round(full.width*ratio));const h=Math.max(1,Math.round(full.height*ratio));if(ratio>=1){return{preview:full,full,previewBytes:file.size,compressed:false};}const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const c=canvas.getContext('2d',{alpha:true});c.imageSmoothingEnabled=true;c.imageSmoothingQuality='high';c.drawImage(full,0,0,w,h);let blob=await canvasToBlobSafe(canvas,'image/webp',UPLOAD_PREVIEW_QUALITY);let url;if(blob){url=URL.createObjectURL(blob);}else{url=canvas.toDataURL('image/png');}const preview=await loadImageFromURL(url);if(blob){setTimeout(()=>URL.revokeObjectURL(url),1000);}return{preview,full,previewBytes:blob?blob.size:Math.round((url.length*3)/4),compressed:true};}function setUploadMeta(meta,file,info,isIcon){if(!meta)return;const old=formatBytes(file&&file.size);const now=formatBytes(info&&info.previewBytes);const compressed=info&&info.compressed;meta.textContent=file?`${file.name}｜預覽${compressed?'已壓縮':'未壓縮'}：${old} → ${now}`:'尚未選擇檔案';if(isIcon&&file){const span=document.createElement('span');span.className='badge';span.textContent='建議 ≥ 1.5cm';meta.appendChild(document.createTextNode(' '));meta.appendChild(span);}}const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));const mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);const rot=(x,y,ang)=>{const c=Math.cos(ang),s=Math.sin(ang);return{x:x*c-y*s,y:x*s+y*c};};function toCanvasPoint(e){const r=cG.getBoundingClientRect();const x=(e.clientX-r.left)*(cG.width/r.width);const y=(e.clientY-r.top)*(cG.height/r.height);return{x,y};}function corners(cx,cy,w,h,ang){const hw=w/2,hh=h/2;const base=[{x:-hw,y:-hh},{x:hw,y:-hh},{x:hw,y:hh},{x:-hw,y:hh}];return base.map(p=>{const v=rot(p.x,p.y,ang);return{x:cx+v.x,y:cy+v.y};});}function pointInRotRect(px,py,cx,cy,w,h,ang){const v=rot(px-cx,py-cy,-ang);return Math.abs(v.x)<=w/2&&Math.abs(v.y)<=h/2;}function roundedRectPath(ctx,x,y,w,h,r){const rr=Math.min(r,Math.min(w,h)/2);ctx.moveTo(x+rr,y);ctx.lineTo(x+w-rr,y);ctx.arcTo(x+w,y,x+w,y+rr,rr);ctx.lineTo(x+w,y+h-rr);ctx.arcTo(x+w,y+h,x+w-rr,y+h,rr);ctx.lineTo(x+rr,y+h);ctx.arcTo(x,y+h,x,y+h-rr,rr);ctx.lineTo(x,y+rr);ctx.arcTo(x,y,x+rr,y,rr);}function archPath(ctx,x,y,w,h,cm2px){const r=Math.max(0.5,Math.min(w/2,h));const cx=x+w/2;const cy=y+r;const rr=0.1*cm2px;ctx.moveTo(x+rr,y+h);ctx.arcTo(x,y+h,x,y+h-rr,rr);ctx.lineTo(x,cy);ctx.arc(cx,cy,r,Math.PI,0,false);ctx.lineTo(x+w,y+h-rr);ctx.arcTo(x+w,y+h,x+w-rr,y+h,rr);}function drawCheckerboard(ctx,x,y,w,h,size,c1,c2){const cell=Math.max(6,Math.round(size||16));const endX=x+w,endY=y+h;for(let yy=y;yy<endY;yy+=cell){for(let xx=x;xx<endX;xx+=cell){const odd=((Math.floor((xx-x)/cell)+Math.floor((yy-y)/cell))%2)===1;ctx.fillStyle=odd?(c2||"#ececec"):(c1||"#f7f7f7");ctx.fillRect(xx,yy,Math.min(cell,endX-xx),Math.min(cell,endY-yy));}}}
 
 /* LUNY 預覽減壓：棋盤格改用可重複圖樣，避免大畫布逐格 fillRect。 */
 const __lunyCheckerboardTileCache=new Map();
@@ -183,7 +183,7 @@ const LUNY_CUSTOM_CLOSE_GAP_MM=0.8;
 const LUNY_CUSTOM_BRIDGE_WARN_MM=6;
 const LUNY_CUSTOM_SIMPLIFY_MM=0.22;
 const LUNY_CUSTOM_SMOOTHING_PASSES=2;
-const LUNY_CUSTOM_CONTOUR_OFFSETS_MM=Object.freeze([0,1,2,4]);
+const LUNY_CUSTOM_CONTOUR_OFFSETS_MM=Object.freeze([-0.5,0,1,2,4,5]);
 const __lunyCustomSourceMaskCache=new WeakMap();
 const __lunyCustomObjectIds=new WeakMap();
 let __lunyCustomObjectIdSeed=1;
@@ -483,7 +483,9 @@ function lunyCustomContourFromRequiredMask(required,w,h,pxPerMm){
   return fallback.length>=3?lunyCustomSimplifyClosed(fallback,Math.max(.35,.1*pxPerMm)):[];
 }
 function lunyCustomBuildOutline(baseMask,w,h,pxPerMm,offsetMm){
-  const required=offsetMm>0?lunyCustomDilate(baseMask,w,h,offsetMm*pxPerMm):baseMask;
+  const required=offsetMm>0
+    ?lunyCustomDilate(baseMask,w,h,offsetMm*pxPerMm)
+    :(offsetMm<0?lunyCustomErode(baseMask,w,h,Math.abs(offsetMm)*pxPerMm):baseMask);
   return lunyCustomContourFromRequiredMask(required,w,h,pxPerMm);
 }
 function lunyCustomBounds(points){let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;for(const p of points){minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);}return{minX,minY,maxX,maxY};}
@@ -579,7 +581,8 @@ function lunyCustomGenerateAndLockCutline(force){
     key:'locked-'+(++__lunyCustomCutlineVersion),pointsByOffset,minAngle,aspect,
     analysisWidth:w,analysisHeight:h,warnings:[],generatedAt:Date.now(),locked:true,
     topology:'single-outer-contour',outerOnly:true,
-    contentOffsetMm:0,cutOffsetMm:2,bleedOffsetMm:4,bleedOutsideCutMm:2,
+    contentOffsetMm:0,cutOffsetMm:2,safeOffsetMm:-0.5,safeInsideCutMm:2.5,
+    bleedOffsetMm:4,bleedOutsideCutMm:2,technicalLineOffsetMm:5,technicalLineOutsideCutMm:3,
     sourceComponentCount:preparedInfo.componentCountBefore,
     finalComponentCount:preparedInfo.componentCountAfter,
     closedGapMm:preparedInfo.closedGapMm,
@@ -598,7 +601,7 @@ function lunyCustomGenerateAndLockCutline(force){
 }
 function lunyCustomComputeCutline(){if(shape.value!=='custom')return null;return __lunyCustomCutlineCache||lunyCustomGenerateAndLockCutline(false);}
 function lunyCustomInvalidateCutline(){__lunyCustomCutlineCache=null;__lunyCustomLayoutFrame=null;lunyCustomResetActualSize();}
-function lunyCustomNearestOffset(offsetMm){const values=[0,1,2,4];let best=values[0],distance=Infinity;for(const v of values){const d=Math.abs(v-offsetMm);if(d<distance){distance=d;best=v;}}return best;}
+function lunyCustomNearestOffset(offsetMm){const values=[-0.5,0,1,2,4,5];let best=values[0],distance=Infinity;for(const v of values){const d=Math.abs(v-offsetMm);if(d<distance){distance=d;best=v;}}return best;}
 function lunyCustomRequestedOffsetMm(ctx,w,cm2px){const cutW=ctx.canvas.width-2*BLEED_CM*cm2px;return 2+((w-cutW)/2)/cm2px*10;}
 function lunyCustomGetPoints(ctx,w,h,cm2px){
   const data=lunyCustomComputeCutline();if(!data)return null;
@@ -1851,16 +1854,16 @@ function drawAll(ctx,canvas,cm2px,opts){const{includeGuides=true,includeSelectio
     return{level:0,zone:'bleed',title:'已選擇滿版底色 / 邊框顏色，系統會以指定顏色補滿出血區。',important:false};
   }
 
-  // 預設原始預覽仍必須偵測裁切線內側 2mm 危險區。
+  // 預設原始預覽仍必須偵測裁切線內側 2.5mm 危險區。
   const danger=!!(typeof window.__lunyCheckDangerZoneHit==='function'&&window.__lunyCheckDangerZoneHit());
   window.__lunyDangerZoneHit=danger;
   if(danger){
-    return{level:1,zone:'danger',title:'有圖文內容碰到裁切線內側 2mm 危險區域，請再往內縮。',important:true};
+    return{level:1,zone:'danger',title:'有圖文內容碰到裁切線內側 2.5mm 危險區域，請再往內縮。',important:true};
   }
 
   // 畫面維持原始狀態，但正式印刷檔會自動由裁切線內側 1mm 延伸至裁切線外 2mm。
   return{level:0,zone:'cut',title:'目前為原始成品預覽；正式印刷檔會自動抓裁切線內側 1mm，延伸至裁切線外 2mm 製作出血。',important:false};
-}function updateBleedRiskUI(){const box=ensureBleedRiskUI();const msg=box&&box.querySelector('#lunyBleedRiskMessage');if(!box||!msg)return;const st=getBleedRiskStatus();let bgc='#f0fff4',bd='#a8dfb3',fg='#166534',prefix='✅ ';if(st.level===1){bgc='#fffaf0';bd='#f2d29b';fg='#9a5a00';prefix='⚠️ ';}if(st.level>=2){bgc='#fff1f2';bd='#f0a8b2';fg='#b42336';prefix='🚫 ';}box.style.background=bgc;box.style.borderColor=bd;box.style.color=fg;let zoneHint='';if(st.zone==='safe'||st.zone==='inside'){zoneHint='\n對應範圍：綠色虛線以內';}else if(st.zone==='cut'){zoneHint='\n對應範圍：紅色裁切線';}else if(st.zone==='bleed'){zoneHint='\n對應範圍：灰線';}else if(st.zone==='danger'){zoneHint='\n對應範圍：裁切線內側 2mm 危險區域';}else if(st.zone==='custom'){zoneHint='\n紅線為實際客製刀線；灰線為出血線；綠線為刀線內縮 2mm。';}let extra=st.important?'\n文字、Logo、QR Code、電話請放在綠線內，建議再離綠線 1–2mm。':'';msg.innerHTML=(prefix+st.title+zoneHint+extra).replace(/\n/g,'<br>');}let __lunyBleedCancelUntil=0;
+}function updateBleedRiskUI(){const box=ensureBleedRiskUI();const msg=box&&box.querySelector('#lunyBleedRiskMessage');if(!box||!msg)return;const st=getBleedRiskStatus();let bgc='#f0fff4',bd='#a8dfb3',fg='#166534',prefix='✅ ';if(st.level===1){bgc='#fffaf0';bd='#f2d29b';fg='#9a5a00';prefix='⚠️ ';}if(st.level>=2){bgc='#fff1f2';bd='#f0a8b2';fg='#b42336';prefix='🚫 ';}box.style.background=bgc;box.style.borderColor=bd;box.style.color=fg;let zoneHint='';if(st.zone==='safe'||st.zone==='inside'){zoneHint='\n對應範圍：綠色虛線以內';}else if(st.zone==='cut'){zoneHint='\n對應範圍：紅色裁切線';}else if(st.zone==='bleed'){zoneHint='\n對應範圍：灰線';}else if(st.zone==='danger'){zoneHint='\n對應範圍：裁切線內側 2.5mm 危險區域';}else if(st.zone==='custom'){zoneHint='\n紅線為實際客製刀線；灰線為出血線；綠線為刀線內縮 2.5mm。';}let extra=st.important?'\n文字、Logo、QR Code、電話請放在綠線內，建議再離綠線 1–2mm。':'';msg.innerHTML=(prefix+st.title+zoneHint+extra).replace(/\n/g,'<br>');}let __lunyBleedCancelUntil=0;
 let __lunyBleedApprovedUntil=0;
 let __lunyBleedUserCancelled=false;
 let __lunyBleedPromptOpen=false;
@@ -1937,7 +1940,7 @@ function validateDesignBeforeExport(action,opts){
   let ok=false;
   try{
     if(st.zone==='danger'){
-      ok=confirm('有圖文內容碰到裁切線內側 2mm 危險區域。\n\n成品裁切可能有 1–2mm 誤差，建議將文字 / Logo / QR Code 往內移到綠線內。\n\n仍要繼續嗎？');
+      ok=confirm('有圖文內容碰到裁切線內側 2.5mm 危險區域。\n\n成品裁切可能有 1–2mm 誤差，建議將文字 / Logo / QR Code 往內移到綠線內。\n\n仍要繼續嗎？');
     }else if(st.level>=2){
       ok=confirm('目前圖片只到紅色裁切線，沒有延伸到灰線，成品邊緣很可能出現白邊。\n\n建議將圖片放大到最外圈灰線，或勾選「套用滿版底色 / 邊框顏色」，或改成「加白邊」。\n\n仍要繼續嗎？');
     }else{
@@ -2211,6 +2214,12 @@ function drawPreview(){
   if(txtBtn)txtBtn.setAttribute('aria-pressed',String(!!showTestText));
 }
 window.drawPreview=drawPreview;
+window.LUNY_clearPreviewSelection=function(){
+  activeTarget=null;
+  handles=null;
+  drawPreview();
+  return true;
+};
 function resizePreviewCanvas(){
   const size=lunyGetEffectiveSizeCm();
   const wcm=Math.max(.01,Number(size.widthCm)||1);
@@ -2258,8 +2267,8 @@ function resizePreviewCanvas(){
 function renderExportCanvas(includeGuides,useFullImage,productionMode){const size=lunyGetEffectiveSizeCm();const spec=lunyResolveExportSpec(size.widthCm,size.heightCm,!!productionMode);const exportCm2Px=spec.actualPpi/2.54;const out=document.createElement('canvas');out.width=spec.pxW;out.height=spec.pxH;out.__lunyExportPpi=spec.actualPpi;out.__lunyExportSpec=spec;const octx=out.getContext('2d');octx.imageSmoothingEnabled=true;octx.imageSmoothingQuality='high';drawAll(octx,out,exportCm2Px,{includeGuides:!!includeGuides,includeSelection:false,showQRTestMark:showQRTest,showMinText:showMinText,isPreview:false,useFullImage:!!useFullImage,autoBleedForPrint:!!productionMode});return out;}function addExportShapePath(ctx,shapeValue,cx,cy,w,h,cm2px){if(shapeValue==='custom'&&lunyCustomAddPath(ctx,w,h,cm2px))return;const s=shapeValue;const rpx=0.1*cm2px;if(s==='circle'){const r=Math.min(w,h)/2;ctx.arc(cx,cy,r,0,Math.PI*2);}else if(s==='roundrect'){const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}else if(s==='ellipse'){ctx.ellipse(cx,cy,w/2,h/2,0,0,Math.PI*2);}else if(s==='arch'){const x=cx-w/2;const y=cy-h/2;archPath(ctx,x,y,w,h,cm2px);ctx.closePath();}else{const x=cx-w/2;const y=cy-h/2;roundedRectPath(ctx,x,y,w,h,rpx);ctx.closePath();}}function clearOutsideExportShape(ctx,W,H,shapeValue,cx,cy,bleedW,bleedH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();ctx.rect(0,0,W,H);addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);ctx.fill('evenodd');ctx.restore();}function drawPrintWhiteEdgeArea(ctx,shapeValue,cx,cy,bleedW,bleedH,safeW,safeH,cm2px){ctx.save();ctx.fillStyle='#ffffff';ctx.beginPath();addExportShapePath(ctx,shapeValue,cx,cy,bleedW,bleedH,cm2px);addExportShapePath(ctx,shapeValue,cx,cy,safeW,safeH,cm2px);ctx.fill('evenodd');ctx.restore();}function lunyCustomAddTechnicalCutPath(ctx,baseW,baseH,cm2px,technicalMarginPx){
   const data=lunyCustomComputeCutline();
   if(!data)return false;
-  /* 4mm = 最外圈出血邊界；辨識線供後續 Adobe 腳本讀取。 */
-  const normalized=data.pointsByOffset[4]||data.pointsByOffset[lunyCustomNearestOffset(4)];
+  /* 5mm = 實際裁切線外側 3mm；辨識線供後續 Adobe 腳本讀取。 */
+  const normalized=data.pointsByOffset[5]||data.pointsByOffset[lunyCustomNearestOffset(5)];
   if(!normalized||normalized.length<3)return false;
   const b=BLEED_CM*cm2px;
   const baseCutW=Math.max(1,baseW-2*b),baseCutH=Math.max(1,baseH-2*b);
@@ -2741,7 +2750,7 @@ function lunyClassifyPreflight(){
     if(placed.iconDanger)names.push('QR Code 或圖示');
     return lunyMakePreflightResult(
       'BLOCKED_AUTO_FIXABLE','red','重要內容太靠近裁切區',
-      [`${names.join('、')}碰到紅線內側 2mm 的危險區域。`],
+      [`${names.join('、')}碰到紅線內側 2.5mm 的危險區域。`],
       ['按「移回安全區」讓系統將新增內容移到綠線內。','或自行縮小並拖曳到綠線內，再重新檢查。'],
       {resolution:resolutionSummary,autoFix:'MOVE_IMPORTANT_CONTENT'}
     );
@@ -3167,7 +3176,7 @@ window.getPrintAndCutBlobs=async function(){
    7. 滿版底色可預設透明，讓已自行預留出血的客戶不需要再額外套色。 */
 (function(){
   const BLEED_CM = 0.2;
-  const GAP_CM = 0.2;
+  const GAP_CM = 0.25;
   const OVERLAY_ID = 'lunyFullBleedOverlayCanvas';
   const OVERLAY_MAX_SIDE_PX = 1800;
   const OVERLAY_MAX_TOTAL_PIXELS = 3200000;
