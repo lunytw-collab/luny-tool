@@ -1092,7 +1092,7 @@ async function uploadCustomerSourceToCloud_(args){
   if(!designId)throw new Error("缺少 designId，無法上傳客戶原圖");
   if(!file)throw new Error("找不到客戶最初上傳的原圖");
 
-  setSaveStatus("正在準備客戶原圖…");
+  setSaveProgress(saveProgressPercent,"正在準備客戶原圖");
   const compressStartedMs=lunyTimingNow_();
   let prepared=null;
   try{
@@ -1116,10 +1116,10 @@ async function uploadCustomerSourceToCloud_(args){
   for(let attempt=1;attempt<=2;attempt++){
     try{
       if(attempt>1){
-        setSaveStatus("客戶原圖上傳未完成，正在單獨重試…");
+        setSaveProgress(saveProgressPercent,"客戶原圖上傳未完成，正在單獨重試");
         await sleepLuny(800);
       }else{
-        setSaveStatus("正在上傳客戶原圖…");
+        setSaveProgress(saveProgressPercent,"正在上傳客戶原圖");
       }
 
       const signerStartedMs=lunyTimingNow_();
@@ -1229,7 +1229,7 @@ async function uploadDesignAssetsToCloud(designId,formalAssets,previewAsset,exis
       key,
       label,
       run:async()=>{
-        setSaveStatus(statusText);
+        setSaveProgress(saveProgressPercent,String(statusText||"正在上傳圖檔").replace(/…$/,""));
         result[key]=await uploadBlobAssetToCloud({
           designId,
           assetType,
@@ -1238,6 +1238,7 @@ async function uploadDesignAssetsToCloud(designId,formalAssets,previewAsset,exis
         });
         // 成功後只保留雲端 metadata，釋放本地 Blob 參考；失敗檔仍保留供下一輪單檔重試。
         try{asset.blob=null;}catch(e){}
+        updateLunyAssetUploadProgress_(result);
       }
     });
   }
@@ -1252,10 +1253,12 @@ async function uploadDesignAssetsToCloud(designId,formalAssets,previewAsset,exis
       label:"客戶原圖",
       run:async()=>{
         result.customerSource=await uploadCustomerSourceToCloud_({designId,file:customerSourceFile});
+        updateLunyAssetUploadProgress_(result);
       }
     });
   }
 
+  updateLunyAssetUploadProgress_(result);
   await runLunyUploadJobsWithLimit_(jobs,LUNY_ASSET_UPLOAD_CONCURRENCY);
   return result;
 }
@@ -1947,9 +1950,23 @@ autoConfirmOrderRunning=false;
   const msg = String((err && (err.message || err.name)) || err || "");
   return /LUNY_BLEED_RISK|USER_CANCELLED|WAITING_USER_CONFIRM|出血|白邊/.test(msg);
 }
+let saveProgressPercent=0;
+let saveProgressTarget=0;
+let saveProgressText="正在儲存設計";
+let saveProgressTimer=null;
+function renderSaveProgress_(){const shown=Math.max(0,Math.min(100,Math.floor(saveProgressPercent)));setSaveStatus(`${saveProgressText} ${shown}%`);setSaveButtonText(`儲存中 ${shown}%`);}
+function stopSaveProgressAnimation_(){if(saveProgressTimer){clearInterval(saveProgressTimer);saveProgressTimer=null;}}
+function ensureSaveProgressAnimation_(){if(saveProgressTimer)return;saveProgressTimer=setInterval(()=>{const distance=saveProgressTarget-saveProgressPercent;if(distance<=0.01){saveProgressPercent=saveProgressTarget;renderSaveProgress_();if(saveProgressTarget>=100)stopSaveProgressAnimation_();return;}let step;if(saveProgressTarget>=100){step=Math.max(0.65,distance*0.22);}else if(saveProgressTarget>=94&&saveProgressPercent>=80){step=Math.max(0.08,Math.min(0.24,distance*0.04));}else{step=Math.max(0.25,Math.min(1.25,distance*0.14));}saveProgressPercent=Math.min(saveProgressTarget,saveProgressPercent+step);renderSaveProgress_();},80);}
+function resetSaveProgress(){stopSaveProgressAnimation_();saveProgressPercent=0;saveProgressTarget=0;saveProgressText="正在儲存設計";}
+function setSaveProgress(percent,text){const next=Math.max(0,Math.min(100,Number(percent)||0));saveProgressTarget=Math.max(saveProgressTarget,next);if(text)saveProgressText=String(text);renderSaveProgress_();ensureSaveProgressAnimation_();}
+function completeSaveProgress_(text){saveProgressText=String(text||"儲存完成");saveProgressTarget=100;ensureSaveProgressAnimation_();return new Promise(resolve=>{const startedAt=Date.now();const watcher=setInterval(()=>{if(saveProgressPercent>=99.9||Date.now()-startedAt>=900){clearInterval(watcher);saveProgressPercent=100;saveProgressTarget=100;renderSaveProgress_();stopSaveProgressAnimation_();resolve();}},40);});}
+function clearUploadCountdown(){/* 相容既有呼叫：上傳階段改為百分比完成度。 */}
+function startUploadCountdown(){setSaveProgress(Math.max(saveProgressTarget,35),"正在上傳圖檔");}
+function updateLunyAssetUploadProgress_(result){const a=result||{};const total=3+(a.customerSourceRequired?1:0);const done=[a.preview,a.print,a.cut].filter(Boolean).length+(a.customerSourceRequired&&a.customerSource?1:0);const percent=35+Math.round((done/Math.max(1,total))*45);setSaveProgress(percent,`正在上傳圖檔（${done}/${total}）`);}
 function markLunyBleedSaveCancelled(){
   try{
     clearUploadCountdown();
+    stopSaveProgressAnimation_();
   }catch(e){}
   try{
     if(typeof setSaveStatus === "function") setSaveStatus("已取消儲存設計，請調整圖片後再按一次儲存。");
@@ -2029,17 +2046,19 @@ async function saveDesignToGAS(){
   window.__LUNY_SAVE_DESIGN_GLOBAL_LOCK__=true;
   isSavingDesign=true;
   isDesignReadyForCheckout=false;
+  resetSaveProgress();
   updateOrderButtonState();
   btn.disabled=true;
-  setSaveButtonText("儲存中…");
   setCheckoutUILocked(true);
+  setSaveProgress(5,"正在準備設計");
 
   try{
+    setSaveProgress(8,"正在準備預覽圖");
     if(typeof window.LUNY_clearPreviewSelection==="function"){
       window.LUNY_clearPreviewSelection();
     }
-    setSaveStatus("正在準備預覽圖…");
     await waitCanvasReadyForSave();
+    setSaveProgress(10,"預覽圖已準備");
     markLunySaveTiming_(saveTiming,"initial_canvas_ready");
 
     const formalExportStartedMs=lunyTimingNow_();
@@ -2051,6 +2070,7 @@ async function saveDesignToGAS(){
       printSizeBytes:Number(formalAssets&&formalAssets.print&&formalAssets.print.blob&&formalAssets.print.blob.size||0),
       cutSizeBytes:Number(formalAssets&&formalAssets.cut&&formalAssets.cut.blob&&formalAssets.cut.blob.size||0)
     });
+    setSaveProgress(25,"正式圖檔已產生");
     const fingerprintStartedMs=lunyTimingNow_();
     const designId=await getIdempotentDesignId(payload,formalAssets);
     activeDesignId=designId;
@@ -2058,6 +2078,7 @@ async function saveDesignToGAS(){
     markLunySaveTiming_(saveTiming,"design_identity_ready",{
       durationMs:lunyRoundMs_(lunyTimingNow_()-fingerprintStartedMs)
     });
+    setSaveProgress(30,"設計資料已整理");
 
     await waitCanvasReadyForSave();
     const previewBlobStartedMs=lunyTimingNow_();
@@ -2066,6 +2087,7 @@ async function saveDesignToGAS(){
       durationMs:lunyRoundMs_(lunyTimingNow_()-previewBlobStartedMs),
       sizeBytes:Number(previewAsset&&previewAsset.blob&&previewAsset.blob.size||0)
     });
+    setSaveProgress(35,"預覽縮圖已產生");
 
     const uploadedAssets=createLunyUploadState_(!!getCustomerSourceFile_());
     let uploadErr=null;
@@ -2076,7 +2098,7 @@ async function saveDesignToGAS(){
       try{
         if(attempt>1){
           clearUploadCountdown();
-          setSaveStatus(`第 ${attempt-1} 次圖檔上傳未完成，正在重試上傳…`);
+          setSaveProgress(saveProgressPercent,`第 ${attempt-1} 次圖檔上傳未完成，正在重試上傳`);
           await sleepLuny(uploadRetryDelays[attempt-1]||2500);
         }
 
@@ -2133,7 +2155,8 @@ async function saveDesignToGAS(){
       imageInfo:{storage:"google_cloud_storage",base64MovedToCloud:true,phase3BlobPipeline:true,uploadConcurrency:LUNY_ASSET_UPLOAD_CONCURRENCY}
     };
 
-    setSaveStatus("正在建立設計資料…");
+    // 後端確認期間只平滑前進到 94%；未收到相同 designId 前絕不顯示完成。
+    setSaveProgress(94,"正在建立設計資料");
     designMetadataWriteStarted=true;
 
     const json=await postJsonToGASWithRetry(
@@ -2158,7 +2181,8 @@ async function saveDesignToGAS(){
               priorErrorCode==="GAS_UNCONFIRMED_DESIGN_RESPONSE"||
               (lastErr&&lastErr.name==="AbortError")
             );
-          setSaveStatus(
+          setSaveProgress(
+            85,
             isResponseUncertain
               ? `伺服器回應確認中，${Math.ceil(waitMs/1000)} 秒後以同一設計編號進行第 ${attempt} 次安全對帳…`
               : `伺服器忙碌，${Math.ceil(waitMs/1000)} 秒後進行第 ${attempt} 次資料寫入重試…`
@@ -2187,6 +2211,7 @@ async function saveDesignToGAS(){
       returnedSameDesignId:true,
       responseKind:String(json&&json.responseKind||"")
     });
+    setSaveProgress(97,"伺服器已確認設計");
 
     await waitCanvasReadyForSave();
     const localPersistStartedMs=lunyTimingNow_();
@@ -2219,13 +2244,15 @@ async function saveDesignToGAS(){
       durationMs:lunyRoundMs_(lunyTimingNow_()-localPersistStartedMs),
       savedItems:loadSavedDesignsForCheckout().length
     });
-    setSaveStatus("已加入下方清單，可選購其他商品或前往結帳");
-    setSaveButtonText("已儲存 ");
+    await completeSaveProgress_("正在完成儲存");
+    setSaveStatus("儲存完成 100%｜已加入下方清單，可選購其他商品或前往結帳");
+    setSaveButtonText("已儲存 100%");
     setTimeout(()=>{setSaveButtonText("儲存設計");},1200);
     finishLunySaveTiming_(saveTiming,"success",{finalDesignId});
     return finalDesignId;
   }catch(err){
     clearUploadCountdown();
+    stopSaveProgressAnimation_();
     isDesignReadyForCheckout=false;
 
     if(isLunyBleedRiskCancelError(err)){
