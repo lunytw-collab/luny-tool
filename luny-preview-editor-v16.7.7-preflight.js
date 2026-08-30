@@ -3103,6 +3103,25 @@ function renderExportCanvas(includeGuides,useFullImage,productionMode){
   return out;
 }
 
+/* Public, lightweight clean artwork source for packaging/application previews.
+   It intentionally excludes guides, cut lines and selection handles. */
+window.LUNY_captureCleanPreviewDataUrl=function(maxSide){
+  const source=renderExportCanvas(false,true,false);
+  if(!source||!source.width||!source.height)throw new Error('LUNY_CLEAN_PREVIEW_NOT_READY');
+  const limit=Math.max(320,Math.min(1600,Number(maxSide)||1200));
+  const longest=Math.max(source.width,source.height);
+  if(longest<=limit)return source.toDataURL('image/png');
+  const ratio=limit/longest;
+  const output=document.createElement('canvas');
+  output.width=Math.max(1,Math.round(source.width*ratio));
+  output.height=Math.max(1,Math.round(source.height*ratio));
+  const context=output.getContext('2d',{alpha:true});
+  context.imageSmoothingEnabled=true;
+  context.imageSmoothingQuality='high';
+  context.drawImage(source,0,0,output.width,output.height);
+  return output.toDataURL('image/png');
+};
+
 window.getPrintAndCutBlobs=async function(){
   if(!validateDesignBeforeExport('printcut',{manual:false,silent:true})){
     throw new Error("LUNY_BLEED_RISK_USER_CANCELLED");
