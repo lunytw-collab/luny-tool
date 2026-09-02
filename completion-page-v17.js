@@ -9,6 +9,7 @@
   var layer=window.dataLayer=window.dataLayer||[];
   if(window[NAME])return;
 
+
   function copy(value){
     try{return JSON.parse(JSON.stringify(value||{}));}
     catch(_){return {};}
@@ -51,6 +52,7 @@
     return "";
   }
 
+
   var pending={ga4:null,ads:null};
   function remember(eventKind,entry){
     var params=copy(unpack(entry).params);
@@ -74,9 +76,11 @@
     return true;
   }
 
+
   for(var existing=layer.length-1;existing>=0;existing-=1){
     if(hold(layer[existing]))layer.splice(existing,1);
   }
+
 
   var nativePush=layer.push;
   layer.push=function(){
@@ -86,6 +90,7 @@
     }
     return pass.length?nativePush.apply(this,pass):layer.length;
   };
+
 
   var gate=window[NAME]={
     version:"2026-08-25.2",
@@ -98,6 +103,7 @@
           return {ok:true,idempotent:true,orderNo:id};
         }
       }catch(_){}
+
 
       var ga4=read("ga4",id);
       var ads=read("ads",id);
@@ -116,6 +122,7 @@
       ).trim()||"TWD";
       if(!Number.isFinite(value)||value<0)value=0;
 
+
       if(!Array.isArray(ga4.items)||!ga4.items.length){
         ga4.items=[{
           item_id:"343424",
@@ -129,11 +136,13 @@
       ga4.currency=currency;
       ga4[FLAG]=true;
 
+
       ads.send_to=ads.send_to||ADS;
       ads.transaction_id=id;
       ads.value=value;
       ads.currency=currency;
       ads[FLAG]=true;
+
 
       if(typeof window.gtag!=="function"){
         return {ok:false,code:"GTAG_NOT_READY",orderNo:id};
@@ -154,6 +163,7 @@
       };
     }
   };
+
 
   var bootAt=Date.now();
   function scanConfirmedStatus(){
@@ -190,11 +200,13 @@
   window.setTimeout(function(){window.clearInterval(timer);},30*60*1000);
 })();
 
+
 /* LUNY GA4 item_id patch v1
  * Adds 1SHOP ProductSKU as GA4 item_id without sending a second purchase event.
  */
 (function () {
   'use strict';
+
 
   function collectItemIds() {
     var ids = [];
@@ -206,12 +218,14 @@
         ? _pageData.Order.c.Product
         : [];
 
+
     function add(value) {
       var id = String(value == null ? '' : value).trim();
       if (!id || Object.prototype.hasOwnProperty.call(seen, id)) return;
       seen[id] = true;
       ids.push(id);
     }
+
 
     products.forEach(function (product) {
       if (Number(product.OrderProductType) === 2 && Array.isArray(product.extra)) {
@@ -223,14 +237,17 @@
       }
     });
 
+
     return ids;
   }
+
 
   function patchPurchase(args) {
     try {
       if (!args || args[0] !== 'event' || args[1] !== 'purchase') return;
       var params = args[2];
       if (!params || !Array.isArray(params.items) || !params.items.length) return;
+
 
       var ids = collectItemIds();
       params.items.forEach(function (item, index) {
@@ -242,8 +259,10 @@
     }
   }
 
+
   var dataLayer = window.dataLayer = window.dataLayer || [];
   if (dataLayer.__lunyGa4ItemIdPatchV1) return;
+
 
   var originalPush = dataLayer.push;
   dataLayer.push = function () {
@@ -254,10 +273,12 @@
   };
   dataLayer.__lunyGa4ItemIdPatchV1 = true;
 
+
   for (var i = 0; i < dataLayer.length; i += 1) {
     patchPurchase(dataLayer[i]);
   }
 })();
+
 
 /*
 LUNY Checkout v17 — Order Completion Page Replacement
@@ -269,12 +290,15 @@ Amount/time/group guessing is forbidden.
 (function installLunyPhase1CompletionPage(){
   "use strict";
 
+
   if (window.__LUNY_PHASE1_COMPLETION_PAGE__) return;
-  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-08-06.17.0";
+  window.__LUNY_PHASE1_COMPLETION_PAGE__ = "2026-09-02.17.1-snapshot-summary";
+
 
   const GAS_URL =
     window.LUNY_GAS_SAVE_URL ||
     "https://script.google.com/macros/s/AKfycbzspWqpmcIH6LtyjT1CMU4qGlNJXBFeugzZUqke5K-s5bso82DXiRlbPFUmLv4Vz10hzw/exec";
+
 
   const CFG = {
     payloadPrefix: "LUNY_CHECKOUT_PAYLOAD_V3::",
@@ -298,6 +322,7 @@ Amount/time/group guessing is forbidden.
   };
   CFG.handoffMaxAgeMs = CFG.handoffMaxAgeHours * 60 * 60 * 1000;
 
+
   let running = false;
   let completed = false;
   let observer = null;
@@ -306,6 +331,8 @@ Amount/time/group guessing is forbidden.
   let lastDetectedOrderNo = "";
   let receiverCaptureStartedAt = 0;
   let receiverCaptureTimer = null;
+  let completionSummarySnapshot = null;
+
 
   function clean(value){
     return String(value == null ? "" : value)
@@ -315,9 +342,11 @@ Amount/time/group guessing is forbidden.
       .trim();
   }
 
+
   function safeParse(text, fallback){
     try { return JSON.parse(text); } catch (_) { return fallback; }
   }
+
 
   function getUrlValue(name){
     try{
@@ -329,6 +358,7 @@ Amount/time/group guessing is forbidden.
     }
   }
 
+
   function getUrlCheckoutToken(){
     return (
       getUrlValue("checkoutToken") ||
@@ -337,17 +367,21 @@ Amount/time/group guessing is forbidden.
     );
   }
 
+
   function payloadKey(token){
     return CFG.payloadPrefix + token;
   }
 
+
   function loadTokenPayload(token){
     if (!token) return null;
+
 
     const keys = [
       CFG.payloadPrefix + token,
       CFG.payloadCompatPrefix + token
     ];
+
 
     for (const key of keys){
       try{
@@ -362,8 +396,12 @@ Amount/time/group guessing is forbidden.
       }catch(_){}
     }
 
+
     return null;
   }
+
+
+
 
 
 
@@ -373,16 +411,20 @@ Amount/time/group guessing is forbidden.
         .replace(/-/g, "+")
         .replace(/_/g, "/");
 
+
       while(base64.length % 4){
         base64 += "=";
       }
 
+
       const binary = atob(base64);
       const bytes = new Uint8Array(binary.length);
+
 
       for(let i = 0; i < binary.length; i++){
         bytes[i] = binary.charCodeAt(i);
       }
+
 
       return safeParse(
         new TextDecoder().decode(bytes),
@@ -393,6 +435,7 @@ Amount/time/group guessing is forbidden.
     }
   }
 
+
   function readWindowNameCompletionHandoff(){
     try{
       const marker = CFG.completionWindowMarker;
@@ -402,6 +445,7 @@ Amount/time/group guessing is forbidden.
         "\\$&"
       );
 
+
       const match = current.match(
         new RegExp(
           "(?:^|\\\\|)" +
@@ -410,12 +454,14 @@ Amount/time/group guessing is forbidden.
         )
       );
 
+
       if(!match || !match[1]) return null;
       return decodeBase64UrlJson(match[1]);
     }catch(_){
       return null;
     }
   }
+
 
   function removeWindowNameCompletionHandoff(token){
     try{
@@ -426,12 +472,14 @@ Amount/time/group guessing is forbidden.
         "\\$&"
       );
 
+
       const pattern = new RegExp(
         "(^|\\\\|)" +
         escapedMarker +
         "[A-Za-z0-9_-]+(?=\\\\||$)",
         "g"
       );
+
 
       const decoded = readWindowNameCompletionHandoff();
       if(
@@ -442,6 +490,7 @@ Amount/time/group guessing is forbidden.
         return;
       }
 
+
       window.name = current
         .replace(pattern, "")
         .replace(/^\|+|\|+$/g, "")
@@ -449,23 +498,29 @@ Amount/time/group guessing is forbidden.
     }catch(_){}
   }
 
+
   function orderTokenKey(orderNo){
     return CFG.orderTokenPrefix + clean(orderNo);
   }
 
+
   function validateTokenPayloadIdentity(token, handoff){
     if (!token) return null;
+
 
     const payload = loadTokenPayload(token);
     if (!payload) return null;
 
+
     if (clean(payload.checkoutToken) !== token) return null;
+
 
     if (handoff){
       const payloadGroup = clean(payload.groupId || payload.cartKey);
       const handoffGroup = clean(handoff.groupId || handoff.cartKey);
       const payloadSession = clean(payload.orderSessionId);
       const handoffSession = clean(handoff.orderSessionId);
+
 
       if (
         handoffGroup &&
@@ -474,6 +529,7 @@ Amount/time/group guessing is forbidden.
       ){
         return null;
       }
+
 
       if (
         handoffSession &&
@@ -484,19 +540,24 @@ Amount/time/group guessing is forbidden.
       }
     }
 
+
     return payload;
   }
+
 
   function readOrderTokenMapping(orderNo){
     if (!orderNo) return "";
 
+
     const key = orderTokenKey(orderNo);
     const stores = [sessionStorage, localStorage];
+
 
     for (const store of stores){
       try{
         const obj = safeParse(store.getItem(key), null);
         const token = clean(obj && obj.checkoutToken);
+
 
         if (
           token &&
@@ -508,11 +569,14 @@ Amount/time/group guessing is forbidden.
       }catch(_){}
     }
 
+
     return "";
   }
 
+
   function persistOrderTokenMapping(orderNo, token, payload, source){
     if (!orderNo || !token || !payload) return false;
+
 
     const record = {
       v: 1,
@@ -525,22 +589,28 @@ Amount/time/group guessing is forbidden.
       createdAt: new Date().toISOString()
     };
 
+
     const key = orderTokenKey(orderNo);
+
 
     try{
       sessionStorage.setItem(key, JSON.stringify(record));
     }catch(_){}
 
+
     try{
       localStorage.setItem(key, JSON.stringify(record));
     }catch(_){}
 
+
     return true;
   }
+
 
   function readValidatedCompletionHandoff(orderNo){
     let handoff = null;
     let handoffSource = "";
+
 
     try{
       handoff = safeParse(
@@ -549,6 +619,7 @@ Amount/time/group guessing is forbidden.
       );
       if(handoff) handoffSource = "session_handoff_v2";
     }catch(_){}
+
 
     if(!handoff){
       try{
@@ -560,10 +631,12 @@ Amount/time/group guessing is forbidden.
       }catch(_){}
     }
 
+
     if(!handoff){
       handoff = readWindowNameCompletionHandoff();
       if(handoff) handoffSource = "window_name_handoff_v2";
     }
+
 
     // Backward-compatible recovery for an order that was already started
     // with Phase 1 v2 before the explicit handoff key existed.
@@ -574,12 +647,14 @@ Amount/time/group guessing is forbidden.
         "LUNY_PHASE1_RESERVED_CHECKOUT_CONTEXT_V2"
       ];
 
+
       for (const key of legacyKeys){
         try{
           const legacy = safeParse(
             sessionStorage.getItem(key),
             null
           );
+
 
           if (
             legacy &&
@@ -614,19 +689,24 @@ Amount/time/group guessing is forbidden.
       }
     }
 
+
     if (!handoff || typeof handoff !== "object") return null;
+
 
     const token = clean(handoff.checkoutToken);
     if (!token) return null;
+
 
     const createdAtMs =
       Number(handoff.createdAtMs || 0) ||
       Date.parse(handoff.createdAt || "") ||
       0;
 
+
     const expiresAtMs =
       Number(handoff.expiresAtMs || 0) ||
       (createdAtMs + CFG.handoffMaxAgeMs);
+
 
     if (
       !createdAtMs ||
@@ -636,13 +716,16 @@ Amount/time/group guessing is forbidden.
       return null;
     }
 
+
     const claimedOrderNo = clean(handoff.claimedOrderNo);
     if (claimedOrderNo && claimedOrderNo !== clean(orderNo)){
       return null;
     }
 
+
     const payload = validateTokenPayloadIdentity(token, handoff);
     if (!payload) return null;
+
 
     const claimed = Object.assign({}, handoff, {
       claimedOrderNo: clean(orderNo),
@@ -653,6 +736,7 @@ Amount/time/group guessing is forbidden.
         "validated_completion_handoff"
     });
 
+
     try{
       sessionStorage.setItem(
         CFG.completionHandoffKey,
@@ -660,12 +744,14 @@ Amount/time/group guessing is forbidden.
       );
     }catch(_){}
 
+
     persistOrderTokenMapping(
       orderNo,
       token,
       payload,
       "validated_same_tab_handoff"
     );
+
 
     return {
       token,
@@ -676,11 +762,14 @@ Amount/time/group guessing is forbidden.
     };
   }
 
+
   function getTrustedCheckoutIdentity(orderNo){
     const urlToken = getUrlCheckoutToken();
 
+
     if (urlToken){
       const payload = validateTokenPayloadIdentity(urlToken, null);
+
 
       if (payload){
         persistOrderTokenMapping(
@@ -690,6 +779,7 @@ Amount/time/group guessing is forbidden.
           "url_checkout_token"
         );
 
+
         return {
           token: urlToken,
           payload,
@@ -697,12 +787,14 @@ Amount/time/group guessing is forbidden.
         };
       }
 
+
       return {
         token: urlToken,
         payload: null,
         source: "url_token_payload_missing"
       };
     }
+
 
     const mappedToken = readOrderTokenMapping(orderNo);
     if (mappedToken){
@@ -713,8 +805,10 @@ Amount/time/group guessing is forbidden.
       };
     }
 
+
     const handoff = readValidatedCompletionHandoff(orderNo);
     if (handoff) return handoff;
+
 
     return {
       token: "",
@@ -723,22 +817,27 @@ Amount/time/group guessing is forbidden.
     };
   }
 
+
   function sanitize(value, seen){
     if (value == null) return value;
     if (typeof value === "string") return value;
     if (typeof value !== "object") return value;
 
+
     seen = seen || new WeakSet();
     if (seen.has(value)) return null;
     seen.add(value);
+
 
     if (Array.isArray(value)){
       return value.map(v => sanitize(v, seen));
     }
 
+
     const out = {};
     Object.keys(value).forEach(key => {
       const lower = key.toLowerCase();
+
 
       if (
         lower === "previewthumb" ||
@@ -749,11 +848,14 @@ Amount/time/group guessing is forbidden.
         return;
       }
 
+
       let v = value[key];
+
 
       if (lower === "previewurl" && typeof v === "string" && /^data:image\//i.test(v)){
         v = "";
       }
+
 
       if (
         (lower === "orderpagetext" || lower === "oneshoptext") &&
@@ -762,28 +864,35 @@ Amount/time/group guessing is forbidden.
         v = v.slice(0, CFG.maxOrderPageText);
       }
 
+
       out[key] = sanitize(v, seen);
     });
+
 
     return out;
   }
 
+
   function collectPageText(){
     const pieces = [];
 
+
     try { pieces.push(location.href || ""); } catch(_){}
     try { pieces.push(document.title || ""); } catch(_){}
+
 
     if (document.body){
       pieces.push(document.body.innerText || "");
       pieces.push(document.body.textContent || "");
     }
 
+
     try{
       document.querySelectorAll("input,textarea,select").forEach(el => {
         if (el.value) pieces.push(String(el.value));
       });
     }catch(_){}
+
 
     return pieces
       .join("\n")
@@ -796,8 +905,11 @@ Amount/time/group guessing is forbidden.
   }
 
 
+
+
   function collectReceiverSearchText(){
     const pieces = [];
+
 
     try{
       if (document.body){
@@ -805,6 +917,7 @@ Amount/time/group guessing is forbidden.
         pieces.push(document.body.textContent || "");
       }
     }catch(_){}
+
 
     try{
       document
@@ -819,11 +932,13 @@ Amount/time/group guessing is forbidden.
             el.value
           ].filter(Boolean);
 
+
           if (parts.length){
             pieces.push(parts.join(" : "));
           }
         });
     }catch(_){}
+
 
     try{
       document
@@ -836,6 +951,7 @@ Amount/time/group guessing is forbidden.
             el.getAttribute("data-value")
           ].filter(Boolean);
 
+
           if (
             parts.length &&
             /收件|收貨|取件|取貨|recipient|receiver|consignee|customer.?name/i.test(
@@ -846,6 +962,7 @@ Amount/time/group guessing is forbidden.
           }
         });
     }catch(_){}
+
 
     try{
       document
@@ -865,6 +982,7 @@ Amount/time/group guessing is forbidden.
         });
     }catch(_){}
 
+
     return pieces
       .join("\n")
       .replace(/\u00a0/g, " ")
@@ -875,6 +993,7 @@ Amount/time/group guessing is forbidden.
       .slice(0, CFG.maxReceiverSearchText);
   }
 
+
   function isLikelyCompletionPage(text){
     const href = String(location.href || "");
     return (
@@ -883,13 +1002,16 @@ Amount/time/group guessing is forbidden.
     );
   }
 
+
   function extractOrderNo(text){
     const direct =
       getUrlValue("orderNo") ||
       getUrlValue("order_no") ||
       getUrlValue("orderId");
 
+
     if (direct) return direct;
+
 
     const patterns = [
       /(?:訂單號碼|訂單編號|訂單號|Order\s*(?:No\.?|Number|ID))\s*[:：#]?\s*([A-Z]{1,5}\d{6,20})/i,
@@ -897,19 +1019,23 @@ Amount/time/group guessing is forbidden.
       /(?:訂單號碼|訂單編號)\s*[:：#]?\s*([A-Z0-9_-]{7,40})/i
     ];
 
+
     for (const pattern of patterns){
       const match = String(text || "").match(pattern);
       if (match && match[1]) return clean(match[1]);
     }
 
+
     return "";
   }
+
 
   function extractMoney(text){
     const patterns = [
       /(?:訂單總額|訂單金額|總金額|應付金額|合計)\s*[:：]?\s*(?:NT\$|NTD|\$)?\s*([\d,]+)/i,
       /(?:NT\$|NTD|\$)\s*([\d,]+)\s*(?:元)?/i
     ];
+
 
     for (const pattern of patterns){
       const match = String(text || "").match(pattern);
@@ -918,17 +1044,21 @@ Amount/time/group guessing is forbidden.
       }
     }
 
+
     return 0;
   }
+
 
   function extractLogistics(text){
     const source = String(text || "")
       .replace(/\u00a0/g, " ")
       .replace(/[ \t]+/g, " ");
 
+
     if (/現場自取|門市自取|到店自取|自取/i.test(source)){
       return "現場自取";
     }
+
 
     if (
       /宅配到府|宅配|黑貓|新竹物流|大榮|嘉里大榮|順豐/i.test(source)
@@ -936,18 +1066,22 @@ Amount/time/group guessing is forbidden.
       return "宅配到府";
     }
 
+
     if (
       /超商取貨|超商門市|店到店|門市取貨|7[\s-]*11|統一超商|全家|萊爾富|OK超商|蝦皮店到店/i.test(source)
     ){
       return "超商取貨";
     }
 
+
     if (/郵寄|中華郵政|郵局/i.test(source)){
       return "郵寄";
     }
 
+
     return "";
   }
+
 
   function isBadReceiverName(value){
     const name = clean(value)
@@ -956,10 +1090,12 @@ Amount/time/group guessing is forbidden.
       .replace(/[，,。；;｜|].*$/, "")
       .trim();
 
+
     if (!name) return true;
     if (/^哈囉/i.test(name)) return true;
     if (/LUNY\s*TW/i.test(name)) return true;
     if (/如你所願|小嚕|LUNY/i.test(name)) return true;
+
 
     if (
       /訂單|付款|金額|超商|宅配|地址|電話|手機|Email|電子郵件|發票|物流|取貨方式|運送方式|付款方式|商品|明細/i.test(
@@ -969,12 +1105,15 @@ Amount/time/group guessing is forbidden.
       return true;
     }
 
+
     if (/^(?:09\d{8}|\+?886\d{8,10})$/.test(name.replace(/\D/g, ""))){
       return true;
     }
 
+
     return name.length > 30;
   }
+
 
   function normalizeReceiverName(value){
     let name = clean(value)
@@ -986,8 +1125,10 @@ Amount/time/group guessing is forbidden.
       .replace(/[，,。；;｜|].*$/, "")
       .trim();
 
+
     return isBadReceiverName(name) ? "" : name;
   }
+
 
   function receiverLabels(){
     return [
@@ -1014,6 +1155,7 @@ Amount/time/group guessing is forbidden.
     ];
   }
 
+
   function extractReceiverNameFromDom(){
     const directSelectors = [
       "[name*='receiver' i]",
@@ -1029,10 +1171,12 @@ Amount/time/group guessing is forbidden.
       "[autocomplete='name']"
     ];
 
+
     try{
       const elements = document.querySelectorAll(
         directSelectors.join(",")
       );
+
 
       for (const el of elements){
         const candidates = [
@@ -1041,6 +1185,7 @@ Amount/time/group guessing is forbidden.
           el.getAttribute && el.getAttribute("data-value"),
           el.textContent
         ];
+
 
         for (const candidate of candidates){
           const name = normalizeReceiverName(candidate);
@@ -1054,20 +1199,24 @@ Amount/time/group guessing is forbidden.
       }
     }catch(_){}
 
+
     const labels = receiverLabels();
     const exactLabel = new RegExp(
       "^(?:" + labels.join("|") + ")\\s*[:：]?$",
       "i"
     );
 
+
     try{
       const nodes = document.querySelectorAll(
         "label,dt,th,strong,b,span,p,div"
       );
 
+
       for (const node of nodes){
         const labelText = clean(node.textContent || "");
         if (!exactLabel.test(labelText)) continue;
+
 
         const forId = node.getAttribute && node.getAttribute("for");
         if (forId){
@@ -1080,6 +1229,7 @@ Amount/time/group guessing is forbidden.
             )
           );
 
+
           if (name){
             return {
               name,
@@ -1087,6 +1237,7 @@ Amount/time/group guessing is forbidden.
             };
           }
         }
+
 
         const nextCandidates = [
           node.nextElementSibling,
@@ -1096,6 +1247,7 @@ Amount/time/group guessing is forbidden.
           node.closest && node.closest("tr,dl,li,.row,.form-group,.field")
         ].filter(Boolean);
 
+
         for (const candidateNode of nextCandidates){
           const candidateValues = [
             candidateNode.value,
@@ -1104,8 +1256,10 @@ Amount/time/group guessing is forbidden.
             candidateNode.textContent
           ];
 
+
           for (const candidateValue of candidateValues){
             const candidateText = clean(candidateValue);
+
 
             if (
               candidateNode === node.parentElement ||
@@ -1121,6 +1275,7 @@ Amount/time/group guessing is forbidden.
                 ),
                 ""
               );
+
 
               const name = normalizeReceiverName(withoutLabel);
               if (name){
@@ -1143,16 +1298,19 @@ Amount/time/group guessing is forbidden.
       }
     }catch(_){}
 
+
     return {
       name: "",
       source: ""
     };
   }
 
+
   function extractReceiverNameFromPage(text){
     const source = String(text || "")
       .replace(/\u00a0/g, " ")
       .replace(/\r\n?/g, "\n");
+
 
     const lines = source
       .split("\n")
@@ -1161,16 +1319,20 @@ Amount/time/group guessing is forbidden.
       })
       .filter(Boolean);
 
+
     const labels = receiverLabels();
     const labelSource = labels.join("|");
+
 
     const sameLine = new RegExp(
       "^(?:" + labelSource + ")\\s*[:：]?\\s+(.+)$",
       "i"
     );
 
+
     for (const line of lines){
       const match = line.match(sameLine);
+
 
       if (match && match[1]){
         const name = normalizeReceiverName(match[1]);
@@ -1183,13 +1345,16 @@ Amount/time/group guessing is forbidden.
       }
     }
 
+
     const exactLabel = new RegExp(
       "^(?:" + labelSource + ")\\s*[:：]?$",
       "i"
     );
 
+
     for (let index = 0; index < lines.length; index++){
       if (!exactLabel.test(lines[index])) continue;
+
 
       for (
         let offset = 1;
@@ -1206,6 +1371,7 @@ Amount/time/group guessing is forbidden.
       }
     }
 
+
     const inlinePatterns = [
       new RegExp(
         "(?:" + labelSource + ")\\s*[:：]\\s*([^\\n\\r，,。；;｜|]{1,40})",
@@ -1218,8 +1384,10 @@ Amount/time/group guessing is forbidden.
       /"(?:receiverName|recipientName|consigneeName|customerName|receiver_name|recipient_name)"\s*:\s*"([^"]{1,40})"/i
     ];
 
+
     for (const pattern of inlinePatterns){
       const match = source.match(pattern);
+
 
       if (match && match[1]){
         const name = normalizeReceiverName(match[1]);
@@ -1232,14 +1400,17 @@ Amount/time/group guessing is forbidden.
       }
     }
 
+
     const greetingPatterns = [
       /哈囉\s*[！!,，]\s*([^\n\r！!，,]{1,30})\s*[！!，,]?/i,
       /哈囉\s+([^\n\r！!，,]{1,30})\s*[！!]/i
     ];
 
+
     for (const pattern of greetingPatterns){
       const match = source.match(pattern);
       if (!match || !match[1]) continue;
+
 
       const name = normalizeReceiverName(match[1]);
       if (name){
@@ -1250,18 +1421,22 @@ Amount/time/group guessing is forbidden.
       }
     }
 
+
     return {
       name: "",
       source: ""
     };
   }
 
+
   function extractReceiverIdentity(payload, pageText){
     const dom = extractReceiverNameFromDom();
     if (dom.name) return dom;
 
+
     const page = extractReceiverNameFromPage(pageText);
     if (page.name) return page;
+
 
     const candidates = [
       ["payload.receiverName", payload && payload.receiverName],
@@ -1271,12 +1446,15 @@ Amount/time/group guessing is forbidden.
       ["payload.name", payload && payload.name]
     ];
 
+
     const items = payload && Array.isArray(payload.items)
       ? payload.items
       : [];
 
+
     items.forEach(function(item, index){
       const q = item && item.quote || {};
+
 
       candidates.push(
         ["item[" + index + "].receiverName", item && item.receiverName],
@@ -1288,6 +1466,7 @@ Amount/time/group guessing is forbidden.
       );
     });
 
+
     for (const entry of candidates){
       const name = normalizeReceiverName(entry[1]);
       if (name){
@@ -1298,44 +1477,55 @@ Amount/time/group guessing is forbidden.
       }
     }
 
+
     return {
       name: "",
       source: "not_found"
     };
   }
 
+
   function shouldWaitForReceiverName(receiverIdentity, trigger){
     if (receiverIdentity && receiverIdentity.name) return false;
+
 
     if (!receiverCaptureStartedAt){
       receiverCaptureStartedAt = Date.now();
     }
 
+
     const elapsed = Date.now() - receiverCaptureStartedAt;
+
 
     if (elapsed >= CFG.receiverCaptureMaxWaitMs){
       return false;
     }
+
 
     clearTimeout(receiverCaptureTimer);
     receiverCaptureTimer = setTimeout(function(){
       attemptBind("receiver_capture_wait");
     }, CFG.receiverCapturePollMs);
 
+
     return true;
   }
+
 
   function retryKey(token, orderNo){
     return CFG.retryPrefix + token + "::" + (orderNo || "pending");
   }
 
+
   function sentKey(token, orderNo){
     return CFG.sentPrefix + token + "::" + orderNo;
   }
 
+
   function statusKey(token){
     return CFG.statusPrefix + token;
   }
+
 
   function readRetry(token, orderNo){
     try{
@@ -1344,6 +1534,7 @@ Amount/time/group guessing is forbidden.
       return null;
     }
   }
+
 
   function removeAllRetryKeysForToken(token){
     try{
@@ -1357,6 +1548,7 @@ Amount/time/group guessing is forbidden.
     }catch(_){}
   }
 
+
   function saveStatus(token, status, extra){
     const value = Object.assign({
       checkoutToken: token,
@@ -1364,12 +1556,15 @@ Amount/time/group guessing is forbidden.
       updatedAt: new Date().toISOString()
     }, extra || {});
 
+
     try{
       localStorage.setItem(statusKey(token), JSON.stringify(value));
     }catch(_){}
 
+
     renderBindStatus(status, value);
   }
+
 
   function getRetryResultCode(retryState){
     const result = retryState && retryState.lastResult || {};
@@ -1381,14 +1576,17 @@ Amount/time/group guessing is forbidden.
     ).toUpperCase();
   }
 
+
   function saveRetry(token, orderNo, request, resultOrError, retryable){
     const previous = readRetry(token, orderNo) || {};
     const attempts = Number(previous.attempts || 0) + 1;
+
 
     // WRITE_BUSY 優先遵守後端回傳的 retryAfterMs；
     // 其他錯誤才使用較長退避。
     const delays = [3000, 8000, 20000, 45000, 90000, 180000, 300000];
     const fallbackDelay = delays[Math.min(attempts - 1, delays.length - 1)];
+
 
     const resultCode = clean(
       resultOrError &&
@@ -1397,6 +1595,7 @@ Amount/time/group guessing is forbidden.
       ""
     ).toUpperCase();
 
+
     const serverRetryAfter = Number(
       resultOrError &&
       typeof resultOrError === "object" &&
@@ -1404,9 +1603,11 @@ Amount/time/group guessing is forbidden.
       0
     );
 
+
     const delay = serverRetryAfter > 0
       ? Math.max(1500, Math.min(300000, serverRetryAfter))
       : fallbackDelay;
+
 
     const value = {
       v: 4,
@@ -1426,40 +1627,52 @@ Amount/time/group guessing is forbidden.
       updatedAt: new Date().toISOString()
     };
 
+
     try{
       localStorage.setItem(retryKey(token, orderNo), JSON.stringify(value));
     }catch(_){}
 
+
     return value;
   }
+
 
   function scheduleRetry(token, orderNo, retryState){
     clearTimeout(retryTimer);
 
+
     if (!retryState || retryState.retryable === false) return;
     if (Number(retryState.attempts || 0) >= CFG.maxAutomaticAttempts) return;
+
 
     const wait = Math.max(
       1000,
       Number(retryState.nextAttemptAt || 0) - Date.now()
     );
 
+
     retryTimer = setTimeout(function(){
       attemptBind("persistent_retry");
     }, wait + 80);
   }
 
+
   function deferToPersistedRetry(token, orderNo, trigger){
     const state = readRetry(token, orderNo);
 
+
     if (!state || state.retryable === false) return false;
+
 
     const nextAttemptAt = Number(state.nextAttemptAt || 0);
     const remaining = nextAttemptAt - Date.now();
 
+
     if (remaining <= 150) return false;
 
+
     scheduleRetry(token, orderNo, state);
+
 
     saveStatus(token, "partial", {
       orderNo,
@@ -1472,12 +1685,15 @@ Amount/time/group guessing is forbidden.
       message: "系統已保留本筆資料，將依排程自動重試，不會重複進表。"
     });
 
+
     return true;
   }
+
 
   async function fetchJsonWithTimeout(url, options, timeoutMs){
     const controller = new AbortController();
     const timer = setTimeout(function(){ controller.abort(); }, timeoutMs);
+
 
     try{
       const response = await fetch(url, Object.assign({}, options || {}, {
@@ -1485,15 +1701,18 @@ Amount/time/group guessing is forbidden.
       }));
       const text = await response.text();
 
+
       let json;
       try { json = JSON.parse(text); }
       catch(_){ throw new Error("伺服器回傳不是 JSON：" + text.slice(0, 500)); }
+
 
       return json;
     }finally{
       clearTimeout(timer);
     }
   }
+
 
   function buildBindRequest(token, payload, orderNo, pageText, receiverText, receiverIdentity){
     const items = Array.isArray(payload.items) ? payload.items : [];
@@ -1503,6 +1722,7 @@ Amount/time/group guessing is forbidden.
         .filter(Boolean)
         .map(String)
     ));
+
 
     const orderTotal = extractMoney(pageText);
     const logistics = extractLogistics(receiverText || pageText);
@@ -1515,6 +1735,7 @@ Amount/time/group guessing is forbidden.
       resolvedReceiver.source || "not_found"
     );
 
+
     const checkoutPayload = Object.assign({}, payload, {
       receiverName,
       recipientName: receiverName,
@@ -1523,6 +1744,7 @@ Amount/time/group guessing is forbidden.
       logistics,
       shippingMethod: logistics
     });
+
 
     return sanitize({
       type: "bindOrderNo",
@@ -1573,6 +1795,7 @@ Amount/time/group guessing is forbidden.
     });
   }
 
+
   function hasAlreadyCompleted(token, orderNo){
     try{
       return localStorage.getItem(sentKey(token, orderNo)) === "1";
@@ -1581,14 +1804,17 @@ Amount/time/group guessing is forbidden.
     }
   }
 
+
   function markComplete(token, orderNo, result){
     completed = true;
+
 
     try{
       localStorage.setItem(sentKey(token, orderNo), "1");
       localStorage.setItem("LUNY_ORDER_SENT_" + orderNo, "1");
       localStorage.setItem("LUNY_LAST_ORDER_COMPLETED_AT", String(Date.now()));
     }catch(_){}
+
 
     // Only clear the reserved checkout context when it belongs to this token.
     [
@@ -1604,6 +1830,7 @@ Amount/time/group guessing is forbidden.
         }
       }catch(_){}
 
+
       try{
         const sessionValue = safeParse(sessionStorage.getItem(key), null);
         if (!sessionValue || clean(sessionValue.checkoutToken) === token){
@@ -1611,6 +1838,7 @@ Amount/time/group guessing is forbidden.
         }
       }catch(_){}
     });
+
 
     removeWindowNameCompletionHandoff(token);
     removeAllRetryKeysForToken(token);
@@ -1620,25 +1848,32 @@ Amount/time/group guessing is forbidden.
       result: sanitize(result || {})
     });
 
+
     if (observer){
       observer.disconnect();
       observer = null;
     }
 
+
     clearTimeout(retryTimer);
     clearTimeout(receiverCaptureTimer);
   }
 
+
   async function attemptBind(trigger){
     if (running || completed) return;
+
 
     const pageText = collectPageText();
     if (!isLikelyCompletionPage(pageText)) return;
 
+
     const orderNo = extractOrderNo(pageText);
     if (!orderNo) return;
 
+
     lastDetectedOrderNo = orderNo;
+
 
     const identity = getTrustedCheckoutIdentity(orderNo);
     const token = clean(identity && identity.token);
@@ -1647,11 +1882,13 @@ Amount/time/group guessing is forbidden.
       : (token ? loadTokenPayload(token) : null);
     const retryToken = token || "NO_TRUSTED_TOKEN";
 
+
     // 所有排程、MutationObserver 與視窗事件都必須遵守同一個退避時間。
     // 這可避免狀態框更新後又立即送出，造成 WRITE_BUSY 永久循環。
     if (deferToPersistedRetry(retryToken, orderNo, trigger)){
       return;
     }
+
 
     if (token && payload && hasAlreadyCompleted(token, orderNo)){
       markComplete(token, orderNo, { alreadyComplete: true });
@@ -1659,7 +1896,9 @@ Amount/time/group guessing is forbidden.
       return;
     }
 
+
     running = true;
+
 
     const effectivePayload = payload || {
       v: 6,
@@ -1674,11 +1913,13 @@ Amount/time/group guessing is forbidden.
       createdAt: new Date().toISOString()
     };
 
+
     const receiverSearchText = collectReceiverSearchText();
     const receiverIdentity = extractReceiverIdentity(
       effectivePayload,
       receiverSearchText
     );
+
 
     if (shouldWaitForReceiverName(receiverIdentity, trigger)){
       const elapsed = Date.now() - receiverCaptureStartedAt;
@@ -1688,6 +1929,7 @@ Amount/time/group guessing is forbidden.
           (CFG.receiverCaptureMaxWaitMs - elapsed) / 1000
         )
       );
+
 
       saveStatus(token || "", "binding", {
         orderNo,
@@ -1702,9 +1944,11 @@ Amount/time/group guessing is forbidden.
           "已取得訂單編號，正在等待 1shop 顯示收件人姓名後再送出。"
       });
 
+
       running = false;
       return;
     }
+
 
     const request = buildBindRequest(
       token || "",
@@ -1715,9 +1959,11 @@ Amount/time/group guessing is forbidden.
       receiverIdentity
     );
 
+
     request.identitySource = clean(
       identity && identity.source
     );
+
 
     if (!token){
       request.source = "v17_server_exact_note_token_recovery";
@@ -1728,6 +1974,7 @@ Amount/time/group guessing is forbidden.
       request.source = "phase1_missing_token_payload_diagnostic_v4";
       request.clientValidationCode = "TOKEN_PAYLOAD_NOT_FOUND";
     }
+
 
     saveStatus(token || "", "binding", {
       orderNo,
@@ -1746,8 +1993,10 @@ Amount/time/group guessing is forbidden.
           : "")
     });
 
+
     try{
       window.__LUNY_PHASE1_COMPLETION_BIND_ACTIVE__ = true;
+
 
       const result = await fetchJsonWithTimeout(GAS_URL, {
         method: "POST",
@@ -1755,14 +2004,17 @@ Amount/time/group guessing is forbidden.
         body: JSON.stringify(request)
       }, CFG.bindTimeoutMs);
 
+
       const bindStatus = clean(
         result && (result.bindStatus || result.status)
       ).toLowerCase();
+
 
       if (bindStatus === "complete"){
         const resolvedToken = clean(
           result && result.checkoutToken || token
         );
+
 
         if (!resolvedToken){
           saveStatus("", "abnormal", {
@@ -1775,10 +2027,12 @@ Amount/time/group guessing is forbidden.
           return;
         }
 
+
         markComplete(resolvedToken, orderNo, result);
         loadAndRenderSummary(orderNo, payload || effectivePayload);
         return;
       }
+
 
       if (bindStatus === "partial"){
         const state = saveRetry(
@@ -1788,6 +2042,7 @@ Amount/time/group guessing is forbidden.
           result,
           result.retryable !== false
         );
+
 
         saveStatus(token || "", "partial", {
           orderNo,
@@ -1806,11 +2061,14 @@ Amount/time/group guessing is forbidden.
             "訂單已寫入部分資料，系統將持續補送。"
         });
 
+
         scheduleRetry(token || "NO_TRUSTED_TOKEN", orderNo, state);
         return;
       }
 
+
       const retryable = !!(result && result.retryable);
+
 
       const state = saveRetry(
         token || "NO_TRUSTED_TOKEN",
@@ -1819,6 +2077,7 @@ Amount/time/group guessing is forbidden.
         result,
         retryable
       );
+
 
       saveStatus(token || "", "abnormal", {
         orderNo,
@@ -1837,6 +2096,7 @@ Amount/time/group guessing is forbidden.
           "訂單綁定狀態異常。"
       });
 
+
       scheduleRetry(token || "NO_TRUSTED_TOKEN", orderNo, state);
     }catch(err){
       const state = saveRetry(
@@ -1846,6 +2106,7 @@ Amount/time/group guessing is forbidden.
         err,
         true
       );
+
 
       saveStatus(token || "", "partial", {
         orderNo,
@@ -1869,6 +2130,7 @@ Amount/time/group guessing is forbidden.
         )
       });
 
+
       scheduleRetry(token || "NO_TRUSTED_TOKEN", orderNo, state);
     }finally{
       window.__LUNY_PHASE1_COMPLETION_BIND_ACTIVE__ = false;
@@ -1883,8 +2145,10 @@ Amount/time/group guessing is forbidden.
       .replace(/"/g, "&quot;");
   }
 
+
   function ensureStatusBox(){
     let box = document.getElementById("lunyPhase1BindStatus");
+
 
     if (!box && document.body){
       box = document.createElement("div");
@@ -1902,11 +2166,13 @@ Amount/time/group guessing is forbidden.
         "box-shadow:0 4px 18px rgba(0,0,0,.06)"
       ].join(";");
 
+
       const target = Array.from(document.querySelectorAll("body *")).find(el => {
         const text = clean(el.textContent || "");
         return /訂單號碼|訂單編號|已經收到您的訂單|已收到您的訂單/.test(text) &&
           text.length < 400;
       });
+
 
       if (target && target.parentNode){
         target.parentNode.insertBefore(box, target.nextSibling);
@@ -1915,12 +2181,15 @@ Amount/time/group guessing is forbidden.
       }
     }
 
+
     return box;
   }
+
 
   function renderBindStatus(status, data){
     const box = ensureStatusBox();
     if (!box) return;
+
 
     const titleMap = {
       binding: "正在確認訂單資料",
@@ -1929,12 +2198,14 @@ Amount/time/group guessing is forbidden.
       abnormal: "訂單資料需要檢查"
     };
 
+
     const messageMap = {
       binding: "系統正在核對本次訂單與後端待結帳資料。",
       complete: "本次訂單、設計編號與檔案關聯已完成。",
       partial: "已保留完整重試資料；重新整理或重新開啟此完成頁仍可繼續補送。",
       abnormal: "系統沒有改用其他訂單的 token，以避免混單。"
     };
+
 
     const details = [];
     if (data && data.orderNo) details.push("訂單編號：" + escapeHtml(data.orderNo));
@@ -1957,6 +2228,7 @@ Amount/time/group guessing is forbidden.
       details.push("尚缺：" + escapeHtml(data.missing.join("、")));
     }
 
+
     box.setAttribute("data-status", status);
     box.innerHTML =
       "<strong style='font-size:16px'>" +
@@ -1970,6 +2242,8 @@ Amount/time/group guessing is forbidden.
   }
 
 
+
+
   function summaryMoney(value){
     const number = Number(value || 0);
     return Number.isFinite(number)
@@ -1977,11 +2251,13 @@ Amount/time/group guessing is forbidden.
       : "0";
   }
 
+
   function summaryLink(value){
     const raw = String(value || "").trim();
     const match = raw.match(/^=HYPERLINK\("([^"]+)"/i);
     return match && match[1] ? match[1] : raw;
   }
+
 
   function summaryProductType(item, data){
     const raw = clean(
@@ -1989,6 +2265,7 @@ Amount/time/group guessing is forbidden.
       data && data.productType ||
       ""
     ).toUpperCase();
+
 
     const code = clean(
       item && (
@@ -1998,6 +2275,7 @@ Amount/time/group guessing is forbidden.
       ""
     );
 
+
     if (
       raw === "NAME_STICKER" ||
       raw === "NAMESTICKER" ||
@@ -2006,12 +2284,14 @@ Amount/time/group guessing is forbidden.
       return "NAME_STICKER";
     }
 
+
     if (
       raw === "CATALOG" ||
       code.indexOf("圖鑑") >= 0
     ){
       return "CATALOG";
     }
+
 
     if (
       raw === "FULLCUT" ||
@@ -2020,8 +2300,10 @@ Amount/time/group guessing is forbidden.
       return "FULLCUT";
     }
 
+
     return "LABEL";
   }
+
 
   function summaryProductName(item, data){
     const explicit = clean(
@@ -2032,15 +2314,19 @@ Amount/time/group guessing is forbidden.
       ""
     );
 
+
     if (explicit) return explicit;
 
+
     const type = summaryProductType(item, data);
+
 
     if (type === "NAME_STICKER") return "姓名貼";
     if (type === "CATALOG") return "圖鑑貼紙";
     if (type === "FULLCUT") return "全斷貼紙";
     return "標籤貼紙";
   }
+
 
   function summaryShapeText(value){
     const map = {
@@ -2052,8 +2338,10 @@ Amount/time/group guessing is forbidden.
       custom: "客製化形狀"
     };
 
+
     return map[clean(value).toLowerCase()] || clean(value);
   }
+
 
   function summaryMaterialText(value){
     const map = {
@@ -2067,8 +2355,10 @@ Amount/time/group guessing is forbidden.
       fullcutpearlescent: "珠光貼紙"
     };
 
+
     return map[clean(value).toLowerCase()] || clean(value);
   }
+
 
   function summaryLaminateText(value){
     const map = {
@@ -2078,8 +2368,10 @@ Amount/time/group guessing is forbidden.
       film: "上膜"
     };
 
+
     return map[clean(value).toLowerCase()] || clean(value);
   }
+
 
   function summaryUrgentText(value){
     const map = {
@@ -2088,11 +2380,14 @@ Amount/time/group guessing is forbidden.
       superrush: "特急件"
     };
 
+
     return map[clean(value).toLowerCase()] || clean(value);
   }
 
+
   function summaryPreviewUrl(item){
     const q = item && item.quote || {};
+
 
     return clean(
       item && (
@@ -2110,6 +2405,7 @@ Amount/time/group guessing is forbidden.
     );
   }
 
+
   function summaryFirstFileUrl(item){
     const candidates = [
       item && item.folderLink,
@@ -2119,16 +2415,20 @@ Amount/time/group guessing is forbidden.
       item && item.customerSourceFileUrl
     ];
 
+
     for (const value of candidates){
       const url = summaryLink(value);
       if (/^https?:\/\//i.test(url)) return url;
     }
 
+
     return "";
   }
 
+
   function summaryPreviewHtml(item){
     const preview = summaryPreviewUrl(item);
+
 
     if (
       preview &&
@@ -2145,7 +2445,9 @@ Amount/time/group guessing is forbidden.
       );
     }
 
+
     const fileUrl = summaryFirstFileUrl(item);
+
 
     if (fileUrl){
       return (
@@ -2156,8 +2458,10 @@ Amount/time/group guessing is forbidden.
       );
     }
 
+
     return "<span class='luny-summary-preview-empty'>無預覽圖</span>";
   }
+
 
   function summaryFileButtons(item){
     const links = [
@@ -2173,7 +2477,9 @@ Amount/time/group guessing is forbidden.
       return /^https?:\/\//i.test(entry[1]);
     });
 
+
     if (!links.length) return "";
+
 
     return (
       "<div class='luny-summary-file-buttons'>" +
@@ -2190,8 +2496,10 @@ Amount/time/group guessing is forbidden.
     );
   }
 
+
   function summarySizeText(item){
     const q = item && item.quote || {};
+
 
     const explicit = clean(
       q.sizeText ||
@@ -2200,7 +2508,9 @@ Amount/time/group guessing is forbidden.
       ""
     );
 
+
     if (explicit) return explicit;
+
 
     const width = clean(
       q.actualWidthCm ||
@@ -2210,6 +2520,7 @@ Amount/time/group guessing is forbidden.
       ""
     );
 
+
     const height = clean(
       q.actualHeightCm ||
       q.heightCm ||
@@ -2218,13 +2529,16 @@ Amount/time/group guessing is forbidden.
       ""
     );
 
+
     if (width && height){
       return width + " × " + height + " cm";
     }
 
+
     if (width) return width + " cm";
     return "";
   }
+
 
   function summaryCatalogSizeText(item){
     const q = item && item.quote || {};
@@ -2236,19 +2550,23 @@ Amount/time/group guessing is forbidden.
       ""
     );
 
+
     const map = {
       A5: "A5（14.8 × 21 cm）",
       A6: "A6（10.5 × 14.8 cm）",
       A7: "A7（7.4 × 10.5 cm）"
     };
 
+
     return map[raw] || raw;
   }
+
 
   function summaryInfoRows(item, data){
     const q = item && item.quote || {};
     const type = summaryProductType(item, data);
     const rows = [];
+
 
     function add(label, value){
       const text = clean(value);
@@ -2262,6 +2580,7 @@ Amount/time/group guessing is forbidden.
         );
       }
     }
+
 
     if (type === "CATALOG"){
       add("尺寸", summaryCatalogSizeText(item));
@@ -2314,8 +2633,10 @@ Amount/time/group guessing is forbidden.
         summaryLaminateText(q.laminate || item.laminate)
       );
 
+
       const quantity = clean(q.quantity || item.quantity);
       add("數量", quantity ? quantity + " 張" : "");
+
 
       add(
         "急件",
@@ -2325,6 +2646,7 @@ Amount/time/group guessing is forbidden.
       );
     }
 
+
     if (item && item.designId){
       rows.push(
         "<div class='luny-summary-design-id'><span>設計編號：</span>" +
@@ -2333,11 +2655,14 @@ Amount/time/group guessing is forbidden.
       );
     }
 
+
     return rows.join("");
   }
 
+
   function ensureSummaryStyle(){
     if (document.getElementById("lunyPhase1DetailedSummaryStyle")) return;
+
 
     const style = document.createElement("style");
     style.id = "lunyPhase1DetailedSummaryStyle";
@@ -2496,47 +2821,52 @@ Amount/time/group guessing is forbidden.
       }
     `;
 
+
     document.head.appendChild(style);
   }
 
+
   async function loadAndRenderSummary(orderNo, localPayload){
-    try{
-      const result = await fetchJsonWithTimeout(GAS_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=UTF-8" },
-        body: JSON.stringify({
-          type: "getOrderSummaryByOrderNo",
-          orderNo
-        })
-      }, CFG.summaryTimeoutMs);
+    // 完成頁的訂購明細只使用結帳送出前保存的不可變快照。
+    // 不再以 orderNo 回查 GAS / orders / 1SHOP，也不讀取目前購物車重算。
+    if (completionSummarySnapshot) return;
+    if (!localPayload || !Array.isArray(localPayload.items) || !localPayload.items.length) return;
 
-      if (result && result.ok && Array.isArray(result.items) && result.items.length){
-        renderSummary(Object.assign({}, result, { orderNo }));
-        return;
-      }
-    }catch(_){}
 
-    if (localPayload) renderSummary(Object.assign({}, localPayload, { orderNo }));
+    completionSummarySnapshot = sanitize(
+      JSON.parse(JSON.stringify(
+        Object.assign({}, localPayload, { orderNo })
+      ))
+    );
+    renderSummary(completionSummarySnapshot);
   }
+
 
   function renderSummary(data){
     if (!document.body) return;
+
 
     const items = Array.isArray(data && data.items)
       ? data.items.filter(Boolean)
       : [];
 
+
     if (!items.length) return;
+
 
     ensureSummaryStyle();
 
+
     let box = document.getElementById("lunyPhase1OrderSummary");
+
 
     if (!box){
       box = document.createElement("section");
       box.id = "lunyPhase1OrderSummary";
 
+
       const statusBox = ensureStatusBox();
+
 
       if (statusBox && statusBox.parentNode){
         statusBox.parentNode.insertBefore(
@@ -2548,13 +2878,16 @@ Amount/time/group guessing is forbidden.
       }
     }
 
+
     const groups = [];
+
 
     items.forEach(function(item){
       const productName = summaryProductName(item, data);
       let group = groups.find(function(entry){
         return entry.productName === productName;
       });
+
 
       if (!group){
         group = {
@@ -2564,8 +2897,10 @@ Amount/time/group guessing is forbidden.
         groups.push(group);
       }
 
+
       group.items.push(item);
     });
+
 
     const total = Number(
       data.total ||
@@ -2576,10 +2911,12 @@ Amount/time/group guessing is forbidden.
       }, 0)
     ) || 0;
 
+
     const groupHtml = groups.map(function(group){
       const rows = group.items.map(function(item, index){
         const q = item && item.quote || {};
         const price = Number(q.price || item.price || 0) || 0;
+
 
         return (
           "<article class='luny-summary-item'>" +
@@ -2599,6 +2936,7 @@ Amount/time/group guessing is forbidden.
         );
       }).join("");
 
+
       return (
         "<section class='luny-summary-group'>" +
           "<h3 class='luny-summary-group-title'>" +
@@ -2608,6 +2946,7 @@ Amount/time/group guessing is forbidden.
         "</section>"
       );
     }).join("");
+
 
     box.innerHTML =
       "<h2 class='luny-summary-title'>LUNY 訂購明細</h2>" +
@@ -2624,10 +2963,12 @@ Amount/time/group guessing is forbidden.
       "</div>";
   }
 
+
   function queueAttempt(trigger){
     clearTimeout(mutationDebounce);
     mutationDebounce = setTimeout(function(){ attemptBind(trigger); }, 180);
   }
+
 
   function boot(){
     // 1shop may remove checkoutToken from the final URL.
@@ -2644,6 +2985,7 @@ Amount/time/group guessing is forbidden.
         };
     const token = clean(bootIdentity && bootIdentity.token);
 
+
     // Resume a persisted retry only when a trusted token is already available.
     try{
       if (!token) throw new Error("trusted token not resolved yet");
@@ -2651,6 +2993,7 @@ Amount/time/group guessing is forbidden.
       for (let i = 0; i < localStorage.length; i++){
         const key = localStorage.key(i);
         if (!key || key.indexOf(prefix) !== 0) continue;
+
 
         let state = safeParse(localStorage.getItem(key), null);
         if (state && state.retryable !== false){
@@ -2668,10 +3011,12 @@ Amount/time/group guessing is forbidden.
               updatedAt: new Date().toISOString()
             });
 
+
             try{
               localStorage.setItem(key, JSON.stringify(state));
             }catch(_){}
           }
+
 
           scheduleRetry(token, state.orderNo || "", state);
           break;
@@ -2679,17 +3024,20 @@ Amount/time/group guessing is forbidden.
       }
     }catch(_){}
 
+
     // 只用少量初始偵測等待 1shop 把訂單編號渲染出來。
     // 一旦已有 retry state，attemptBind 會遵守 nextAttemptAt，不會提前送出。
     [500, 1500, 4000, 8000].forEach(function(ms){
       setTimeout(function(){ attemptBind("scheduled_" + ms); }, ms);
     });
 
+
     function isOwnCompletionUiMutation(mutation){
       const rawTarget = mutation && mutation.target;
       const target = rawTarget && rawTarget.nodeType === 3
         ? rawTarget.parentElement
         : rawTarget;
+
 
       if (
         target &&
@@ -2699,8 +3047,10 @@ Amount/time/group guessing is forbidden.
         return true;
       }
 
+
       const added = Array.from(mutation && mutation.addedNodes || []);
       if (!added.length) return false;
+
 
       return added.every(function(node){
         if (!node || node.nodeType !== 1) return true;
@@ -2713,16 +3063,19 @@ Amount/time/group guessing is forbidden.
       });
     }
 
+
     // 只監看 1shop 完成頁內容，不監看本程式自己的狀態框與訂購明細。
     observer = new MutationObserver(function(mutations){
       const hasExternalMutation = (mutations || []).some(function(mutation){
         return !isOwnCompletionUiMutation(mutation);
       });
 
+
       if (hasExternalMutation){
         queueAttempt("single_mutation_observer");
       }
     });
+
 
     if (document.body){
       observer.observe(document.body, {
@@ -2738,6 +3091,7 @@ Amount/time/group guessing is forbidden.
       }, 30000);
     }
   }
+
 
   if (document.readyState === "loading"){
     document.addEventListener("DOMContentLoaded", boot, { once: true });
