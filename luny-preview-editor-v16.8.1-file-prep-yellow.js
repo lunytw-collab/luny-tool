@@ -2819,6 +2819,8 @@ function lunyClassifyPreflight(){
       {
         resolution:resolutionSummary,
         flattenedRisk,
+        warningKind:'flattened-safety',
+        requiresClarityConfirmation:true,
         uiStatusLabel:'確認清晰度',
         filePrepEligible:true,
         filePrepScope:['CENTER_AND_SCALE','SOLID_COLOR_BLEED'],
@@ -2863,6 +2865,8 @@ function lunyClassifyPreflight(){
       {
         resolution:resolutionSummary,
         flattenedRisk,
+        warningKind:'flattened-safety',
+        requiresClarityConfirmation:true,
         uiStatusLabel:'確認清晰度',
         filePrepEligible:true,
         filePrepScope:['CENTER_AND_SCALE','SOLID_COLOR_BLEED'],
@@ -2881,6 +2885,8 @@ function lunyClassifyPreflight(){
       {
         resolution:resolutionSummary,
         flattenedRisk,
+        warningKind:'resolution',
+        requiresClarityConfirmation:true,
         uiStatusLabel:'確認清晰度',
         filePrepEligible:true,
         filePrepScope:['CENTER_AND_SCALE','SOLID_COLOR_BLEED'],
@@ -2922,6 +2928,21 @@ function lunyClassifyPreflight(){
 
 function lunyGetPreflightResult(){
   const result=lunyClassifyPreflight();
+  const clarityKind=String(result.warningKind||'');
+  const clarityAccepted=!!(
+    result.requiresClarityConfirmation&&
+    clarityKind&&
+    lunyWarningAcceptedFor(clarityKind)
+  );
+  result.clarityAccepted=clarityAccepted;
+  if(clarityAccepted){
+    result.status='READY_CONFIRMED';
+    result.level='green';
+    result.uiStatusLabel='可製作';
+    result.canProceed=true;
+    result.productionDisposition='CONFIRMED_RELEASE';
+    result.filePrepEligible=false;
+  }
   if(result.status!=='BLOCKED_FILE_PREP_ELIGIBLE')__lunyFilePrepSelected=false;
   const selected=result.filePrepEligible&&__lunyFilePrepSelected;
   const defaultScope=['TRIM_WHITE_MARGIN','CENTER_AND_SCALE','SOLID_COLOR_BLEED'];
@@ -3132,6 +3153,10 @@ function lunyRenderPreflight(result){
     actions.push(lunyPreflightButton('置中','fit',false));
   }
   actions.push(lunyPreflightButton('上傳新圖','upload',false));
+  actions.push(lunyPreflightButton('上一步','edge-reset',false));
+  const clarityConfirmationHtml=result.requiresClarityConfirmation
+    ?`<label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-weight:900;"><input id="lunyPreflightAcceptWarning" type="checkbox" ${result.clarityAccepted?'checked':''} style="margin-top:4px;"><span class="luny-preflight-manual-copy">已確認圖文皆清晰無誤，可印刷</span></label>`
+    :'';
   let decision='';
   if(result.filePrepEligible){
     const prepDescription=result.filePrepDescription||'含白邊裁除、置中、比例調整與單色出血；不含重繪、改字或重排。整理完成後提供預覽確認，製作天數從確認後起算。';
@@ -3140,7 +3165,7 @@ function lunyRenderPreflight(result){
   const statusLabel=String(result.uiStatusLabel||(result.level==='green'?'可製作':(result.level==='yellow'?'確認清晰度':'需修正')));
   const detailsToggle=hasDetails&&!forceDetailsOpen?`<button id="lunyPreflightDetailsToggle" type="button" aria-expanded="${detailsOpen?'true':'false'}" style="padding:5px 10px;border:1px solid ${colors.border};border-radius:999px;background:#fff;color:${colors.text};font-weight:900;">${detailsOpen?'收合':'展開'}</button>`:'';
   const actionsHtml=actions.length?`<div style="margin-top:12px;font-weight:900;color:#1f2937;">選擇調整方式：</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px;">${actions.join('')}</div>`:'';
-  panel.innerHTML=`<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;"><div style="font-size:17px;font-weight:900;color:${colors.text};">${statusLabel}</div>${detailsToggle}</div>${detailHtml}${choiceHtml}${actionsHtml}${decision}`;
+  panel.innerHTML=`<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;"><div style="font-size:17px;font-weight:900;color:${colors.text};">${statusLabel}</div>${detailsToggle}</div>${clarityConfirmationHtml}${detailHtml}${choiceHtml}${actionsHtml}${decision}`;
   const detailsButton=panel.querySelector('#lunyPreflightDetailsToggle');
   if(detailsButton)detailsButton.addEventListener('click',function(){
     __lunyPreflightDetailsOpenKey=detailsOpen?'':detailKey;
@@ -3157,6 +3182,17 @@ function lunyRenderPreflight(result){
       if(action==='edge-reset')lunyResetEdgeChoice();
       if(action==='upload')imgInput.click();
     });
+  });
+  const clarityConfirmation=panel.querySelector('#lunyPreflightAcceptWarning');
+  if(clarityConfirmation)clarityConfirmation.addEventListener('change',function(){
+    const kind=String(result.warningKind||'clarity');
+    __lunyPreflightWarningAccepted=!!clarityConfirmation.checked;
+    __lunyPreflightWarningAcceptanceKey=clarityConfirmation.checked
+      ?lunyWarningAcceptanceKey(kind,result.stateKey)
+      :'';
+    if(clarityConfirmation.checked)__lunyFilePrepSelected=false;
+    if(typeof window.lunyResetBleedRiskDecision==='function')window.lunyResetBleedRiskDecision();
+    lunyUpdatePreflight();
   });
   const prep=panel.querySelector('#lunyFilePrepBasic');
   if(prep)prep.addEventListener('change',function(){__lunyFilePrepSelected=!!prep.checked;lunyUpdatePreflight();});
