@@ -1845,6 +1845,13 @@ function drawGuides(ctx,shapeValue,cx,cy,dims,b,gap,cm2px){
   strokeShape(cutW,cutH,'#D3162D',4,[]);
   strokeShape(safeW,safeH,'#32CD32',4,[8,8]);
 }
+/* v16.8.3: 加邊框色預覽不顯示 X／Y 尺寸標線；其他模式維持原樣。 */
+var __lunyDrawDimensionsWithAxes=drawDimensions;
+drawDimensions=function(ctx,W,H,b,cm2px){
+  const edgeMode=String(getEdgeOption()||'off').toLowerCase();
+  if(['color','edgecolor','fullcolor'].includes(edgeMode))return;
+  return __lunyDrawDimensionsWithAxes(ctx,W,H,b,cm2px);
+};
 function applySelectedEdgeColor(ctx,canvas,cm2px){
   const mode=String(getEdgeOption()||'off').toLowerCase();
   if(!['color','edgecolor','fullcolor'].includes(mode))return;
@@ -3563,7 +3570,7 @@ window.getPrintAndCutBlobs=async function(){
       stroke(safeW,safeH,'#32CD32',4,[8,8]);
     }
 
-    if(withGuideLines){
+    if(withGuideLines&&!color){
       drawDimensionMarkers(ctx,W,H,cm2px);
     }
 
@@ -3628,7 +3635,7 @@ window.getPrintAndCutBlobs=async function(){
       overlay.setAttribute('aria-hidden','true');
       overlay.style.position = 'absolute';
       overlay.style.pointerEvents = 'none';
-      overlay.style.zIndex = '5';
+      overlay.style.zIndex = '20';
       overlay.style.margin = '0';
       overlay.style.padding = '0';
       // 重要：外部 CSS 可能會對所有 canvas 加白底/邊框，overlay 一定要強制透明，否則會蓋住主圖。
@@ -3697,6 +3704,7 @@ window.getPrintAndCutBlobs=async function(){
     const cm2px = overlay.width / (wcm + BLEED_CM * 2);
     // 前台畫布立即顯示邊緣色；drawEdgeRing 會填滿綠色安全線以外區域。
     drawEdgeRing(ctx,overlay.width,overlay.height,cm2px,getEdgeColor(),true,true);
+    try{drawImportantSafetyRiskMask(ctx,overlay,cm2px);}catch(e){}
   }
 
   function scheduleOverlay(){
