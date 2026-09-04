@@ -2060,6 +2060,7 @@ function addLunyRiskShapePath(ctx,shapeValue,cx,cy,w,h,cm2px){if(shapeValue==='c
     )
   );
   const hit=blocked||caution;
+  lunyUpdateSafetyDistanceBadge(forced||hit,caution);
   if(!forced && !hit) return;
   const W=canvas.width,H=canvas.height,b=BLEED_CM*cm2px,gap=GAP_CM*cm2px,cx=W/2,cy=H/2,cutW=W-2*b,cutH=H-2*b,safeW=Math.max(1,cutW-2*gap),safeH=Math.max(1,cutH-2*gap);
   ctx.save();
@@ -2079,24 +2080,29 @@ function addLunyRiskShapePath(ctx,shapeValue,cx,cy,w,h,cm2px){if(shapeValue==='c
   ctx.stroke();
   ctx.restore();
 
-  const label=caution?'⚠ 請確認安全距離':'⚠ 危險區域';
-  const fontPx=Math.max(12,Math.min(18,0.22*cm2px));
-  ctx.save();
-  ctx.font=`700 ${fontPx}px "Noto Sans TC", sans-serif`;
-  const padX=Math.max(8,0.12*cm2px), padY=Math.max(4,0.07*cm2px);
-  const tw=ctx.measureText(label).width;
-  const boxW=tw+padX*2, boxH=fontPx+padY*2;
-  const x=(W-boxW)/2, y=Math.max(6,b+6-boxH/2);
-  ctx.fillStyle=caution?'#b45309':'#e11d48';
-  ctx.beginPath();
-  roundedRectPath(ctx,x,y,boxW,boxH,Math.max(8,0.08*cm2px));
-  ctx.fill();
-  ctx.fillStyle='#ffffff';
-  ctx.textAlign='center';
-  ctx.textBaseline='middle';
-  ctx.fillText(label,W/2,y+boxH/2+0.5);
-  ctx.restore();
 }function shouldShowSafetyGuides(){return !!document.getElementById('safetyGuideToggle')?.checked;}
+let __lunySafetyDistanceBadge=null;
+function lunyUpdateSafetyDistanceBadge(show,caution){
+  const anchor=cG;
+  const parent=anchor&&anchor.parentElement;
+  if(!parent)return;
+  let badge=__lunySafetyDistanceBadge||document.getElementById('lunySafetyDistanceBadge');
+  if(!badge){
+    if(getComputedStyle(parent).position==='static')parent.style.position='relative';
+    badge=document.createElement('div');
+    badge.id='lunySafetyDistanceBadge';
+    badge.setAttribute('role','status');
+    badge.setAttribute('aria-live','polite');
+    badge.style.cssText='display:none;position:absolute;z-index:2147483647;transform:translateX(-50%);padding:7px 12px;border-radius:10px;color:#fff;font-size:14px;font-weight:900;line-height:1.25;white-space:nowrap;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.22);';
+    parent.appendChild(badge);
+    __lunySafetyDistanceBadge=badge;
+  }
+  badge.style.left=(anchor.offsetLeft+Math.max(1,anchor.clientWidth)/2)+'px';
+  badge.style.top=(anchor.offsetTop+10)+'px';
+  badge.textContent=caution?'⚠ 請確認安全距離':'⚠ 危險區域';
+  badge.style.background=caution?'#b45309':'#e11d48';
+  badge.style.display=show?'block':'none';
+}
 let __lunyPreviewRAF=0;
 let __lunyInteractiveDraw=false;
 let __lunyInteractiveTimer=0;
