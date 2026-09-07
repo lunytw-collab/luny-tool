@@ -1,0 +1,53 @@
+#lunySpecialProcessingCard{
+  display:block;
+  width:100%;
+  box-sizing:border-box;
+  margin:16px 0;
+  padding:16px;
+  border:1px solid #e8ddd4;
+  border-radius:14px;
+  background:#fffdfb;
+  color:#111827;
+}
+.lsp-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px;}
+.lsp-title{display:block;font-size:16px;font-weight:800;line-height:1.45;}
+.lsp-subtitle{margin-top:3px;color:#6b7280;font-size:13px;line-height:1.55;}
+.lsp-badge{flex:0 0 auto;padding:4px 8px;border-radius:999px;background:#fff1e8;color:#a3471f;font-size:12px;font-weight:800;}
+.lsp-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;}
+.lsp-option{position:relative;display:flex;align-items:flex-start;gap:8px;min-width:0;padding:11px 12px;border:1px solid #ddd6cf;border-radius:10px;background:#fff;cursor:pointer;box-sizing:border-box;}
+.lsp-option:has(input:checked){border-color:#f25936;background:#fff7f4;box-shadow:0 0 0 1px rgba(242,89,54,.08);}
+.lsp-option input{flex:0 0 auto;margin:3px 0 0;accent-color:#f25936;}
+.lsp-option-copy{display:block;min-width:0;}
+.lsp-option-name{display:block;font-size:14px;font-weight:800;line-height:1.4;}
+.lsp-option-note{display:block;margin-top:2px;color:#6b7280;font-size:12px;line-height:1.45;}
+.lsp-foil-color{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;padding:10px 12px;border-radius:9px;background:#f8fafc;font-size:13px;}
+.lsp-foil-color[hidden],#lunyProcessingPriceBreakdown[hidden],#lunyProductionArtworkBlock[hidden],#lunySerialRules[hidden]{display:none!important;}
+.lsp-foil-color label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;}
+.lsp-price-box{margin-top:12px;padding:11px 12px;border:1px solid #eadfd7;border-radius:10px;background:#fffaf5;font-size:13px;line-height:1.6;}
+.lsp-price-row{display:flex;justify-content:space-between;gap:12px;}
+.lsp-price-row strong{font-weight:800;}
+.lsp-price-total{margin-top:5px;padding-top:6px;border-top:1px solid #eadfd7;color:#8f2f17;font-weight:800;}
+.lsp-preview-note{margin-top:12px;padding:10px 12px;border-left:3px solid #64748b;border-radius:8px;background:#f8fafc;color:#475569;font-size:13px;line-height:1.6;}
+.lsp-upload-block{margin-top:12px;padding:13px;border:1px solid #d8cfc8;border-radius:10px;background:#fff;}
+.lsp-upload-title{font-size:14px;font-weight:800;}
+.lsp-upload-help{margin:4px 0 10px;color:#5f6368;font-size:12px;line-height:1.6;}
+.lsp-upload-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.lsp-url-label{flex:0 0 100%;color:#374151;font-size:12px;font-weight:800;}
+#lunyProductionArtworkUrl{flex:1 1 320px;min-width:0;min-height:42px;box-sizing:border-box;padding:9px 11px;border:1px solid #cfd4dc;border-radius:9px;background:#fff;color:#111827;font:inherit;font-size:13px;}
+#lunyProductionArtworkUrl:focus{border-color:#f25936;outline:2px solid rgba(242,89,54,.12);outline-offset:1px;}
+#lunyProductionArtworkStatus{min-width:0;color:#6b7280;font-size:12px;line-height:1.45;overflow-wrap:anywhere;}
+#lunyProductionArtworkStatus[data-state="uploading"]{color:#9a6700;font-weight:700;}
+#lunyProductionArtworkStatus[data-state="done"]{color:#177245;font-weight:700;}
+#lunyProductionArtworkStatus[data-state="error"]{color:#b42318;font-weight:700;}
+.lsp-file-rules{margin:10px 0 0;padding-left:20px;color:#4b5563;font-size:12px;line-height:1.65;}
+.lsp-critical-rule{color:#b42318;font-weight:850;}
+.lsp-risk{display:flex;align-items:flex-start;gap:8px;margin-top:11px;padding:11px;border:1px solid #f3c5b8;border-radius:9px;background:#fff7f4;color:#8f2f17;font-size:12px;font-weight:700;line-height:1.6;cursor:pointer;}
+.lsp-risk input{flex:0 0 auto;margin-top:3px;accent-color:#f25936;}
+.lsp-block-note{margin-top:8px;color:#b42318;font-size:12px;font-weight:800;line-height:1.5;}
+#saveDesignBtn.luny-special-processing-blocked{opacity:.55!important;cursor:not-allowed!important;}
+@media(max-width:720px){
+  #lunySpecialProcessingCard{padding:13px;margin:12px 0;}
+  .lsp-options{grid-template-columns:1fr;}
+  .lsp-head{display:block;}
+  .lsp-badge{display:inline-block;margin-top:7px;}
+}
