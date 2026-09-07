@@ -1,8 +1,8 @@
-/* LUNY：標籤貼紙 v38.3 前端規格同步（橢圓連動尺寸／拱門與客製交期） */
+/* LUNY：標籤貼紙 v38.3 前端規格同步（圓形單一直徑／橢圓連動尺寸／拱門與客製交期） */
 (function(){
 const SIZE_NOTES = {
 roundrect: '尺寸範圍｜矩形：短邊 1～16 cm，長邊最長 30 cm，以 0.5 cm 為單位調整；部分大尺寸組合不提供，輸入後會立即提示。',
-circle: '尺寸範圍｜圓形：直徑 1～16.5 cm；寬、高請輸入相同數字，以 0.5 cm 為單位調整。',
+circle: '尺寸範圍｜圓形：直徑 1～16.5 cm，以 0.5 cm 為單位調整。',
 ellipse: '尺寸範圍｜橢圓形：請先選擇短邊，長邊選單會自動顯示可搭配的實際尺寸。',
 arch: '尺寸範圍｜拱門形：短邊 1～26 cm、長邊最長 37 cm，以 0.5 cm 為單位調整；500 張起印，約 6～7 個工作天寄出。',
 custom: '尺寸範圍｜客製形狀：長邊 1～26 cm，以 0.5 cm 為單位調整；短邊依上傳圖稿比例計算，500 張起印，約 6～7 個工作天寄出。'
@@ -41,6 +41,7 @@ function getDeliveryOptionText(){
 return '一般件('+getDeliveryTimeText()+')';
 }
 let ellipseSyncing=false;
+let circleSyncing=false;
 function formatEllipseCm(value){
 const number=Number(value);
 return Number.isInteger(number)?String(number):number.toFixed(1);
@@ -105,7 +106,15 @@ longSelect.hidden=true;
 longSelect.style.display='none';
 height.after(longSelect);
 }
-const controls={width:width,height:height,shortSelect:shortSelect,longSelect:longSelect};
+const controls={
+width:width,
+height:height,
+widthField:document.getElementById('standardWidthField'),
+heightField:document.getElementById('standardHeightField'),
+sizeRow:document.getElementById('sizeInputRow'),
+shortSelect:shortSelect,
+longSelect:longSelect
+};
 if(shortSelect.dataset.lunyEllipseBound!=='1'){
 shortSelect.dataset.lunyEllipseBound='1';
 shortSelect.addEventListener('change',function(){
@@ -117,10 +126,25 @@ longSelect.addEventListener('change',function(){syncEllipseBaseInputs(controls);
 }
 return controls;
 }
+function syncCircleDiameter(controls){
+if(circleSyncing||!controls||getShape()!=='circle')return;
+const diameter=String(controls.width.value==null?'':controls.width.value).trim();
+if(controls.height.value===diameter)return;
+circleSyncing=true;
+try{
+controls.height.value=diameter;
+controls.height.dispatchEvent(new Event('change',{bubbles:true}));
+}finally{
+circleSyncing=false;
+}
+}
 function updateEllipseControls(){
 const controls=ensureEllipseControls();
 if(!controls)return;
-const isEllipse=getShape()==='ellipse';
+const shape=getShape();
+const isEllipse=shape==='ellipse';
+const isCircle=shape==='circle';
+const isCustom=shape==='custom';
 const widthLabel=document.querySelector('label[for="widthCm"]');
 const heightLabel=document.querySelector('label[for="heightCm"]');
 controls.width.hidden=isEllipse;
@@ -131,8 +155,18 @@ controls.shortSelect.hidden=!isEllipse;
 controls.longSelect.hidden=!isEllipse;
 controls.shortSelect.style.display=isEllipse?'':'none';
 controls.longSelect.style.display=isEllipse?'':'none';
-if(widthLabel)widthLabel.textContent=isEllipse?'短邊 (cm)：':'寬 (cm)：';
+if(controls.sizeRow)controls.sizeRow.classList.toggle('luny-circle-single-field',isCircle);
+if(controls.widthField&&!isCustom)controls.widthField.style.display='';
+if(controls.heightField){
+if(isCircle)controls.heightField.style.display='none';
+else if(!isCustom)controls.heightField.style.display='';
+}
+if(widthLabel)widthLabel.textContent=isEllipse?'短邊 (cm)：':(isCircle?'直徑 (cm)：':'寬 (cm)：');
 if(heightLabel)heightLabel.textContent=isEllipse?'長邊 (cm)：':'高 (cm)：';
+if(isCircle){
+syncCircleDiameter(controls);
+return;
+}
 if(!isEllipse)return;
 const shortValues=Object.keys(ELLIPSE_LONG_SIDE_MAP).map(Number).sort(function(a,b){return a-b;});
 const currentShort=Math.min(Number(controls.width.value)||5,Number(controls.height.value)||5);
@@ -268,7 +302,7 @@ function bind(){
 if(document.getElementById('lunyLabelV38FrontEndStyle')===null){
 const style=document.createElement('style');
 style.id='lunyLabelV38FrontEndStyle';
-style.textContent='#saveDesignBtn.luny-spec-blocked{opacity:.55;cursor:not-allowed}#sizeLimitNote{display:block;width:100%;box-sizing:border-box;margin-top:8px;padding:9px 12px;border-left:3px solid #64748b;border-radius:8px;background:#f8fafc;color:#475569;font-size:14px;font-weight:650;line-height:1.55;text-align:left}.luny-ellipse-size-select{display:block;width:100%;min-height:46px;padding:10px 12px;border:1px solid #d1d5db;border-radius:12px;background:#fff;color:#111827;font:inherit}';
+style.textContent='#saveDesignBtn.luny-spec-blocked{opacity:.55;cursor:not-allowed}#sizeLimitNote{display:block;width:100%;box-sizing:border-box;margin-top:8px;padding:9px 12px;border-left:3px solid #64748b;border-radius:8px;background:#f8fafc;color:#475569;font-size:14px;font-weight:650;line-height:1.55;text-align:left}.luny-ellipse-size-select{display:block;width:100%;min-height:46px;padding:10px 12px;border:1px solid #d1d5db;border-radius:12px;background:#fff;color:#111827;font:inherit}#sizeInputRow.luny-circle-single-field #standardWidthField{width:100%!important;max-width:100%!important;flex:1 1 100%!important;grid-column:1/-1!important}';
 document.head.appendChild(style);
 }
 ['shape','widthCm','heightCm','customLongSideCm','quantity'].forEach(function(id){
