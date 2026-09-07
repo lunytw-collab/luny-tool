@@ -1,0 +1,152 @@
+details.panel>summary::after,
+.lbg-faq-list details>summary::after{content:none!important;display:none!important}
+#lunyPreviewSupportPanel{
+width:100%;
+max-width:520px;
+margin:10px auto 4px;
+overflow:hidden;
+border:1px solid #dfe3e8;
+border-radius:8px;
+background:#fff;
+box-sizing:border-box;
+}
+#lunyPreviewSupportPanel [data-luny-preview-slot]:empty{display:none}
+#lunyPreviewSupportPanel #lunyPreflightPanel{
+width:100%!important;
+max-width:none!important;
+margin:0!important;
+padding:12px 14px!important;
+border:0!important;
+border-radius:0!important;
+box-sizing:border-box!important;
+}
+#lunyPreviewSupportPanel .luny-resolution-notice{
+width:100%!important;
+margin:0!important;
+padding:8px 12px!important;
+border:0!important;
+border-top:1px solid #e5e7eb!important;
+border-radius:0!important;
+background:#fff!important;
+box-sizing:border-box!important;
+}
+#lunyPreviewSupportPanel .luny-resolution-notice strong{
+margin:0!important;
+font-size:13px!important;
+line-height:1.4!important;
+}
+#lunyPreviewSupportPanel .luny-resolution-notice ul{display:none!important}
+#lunyPreviewSupportPanel #lunyPreviewQualityNotice{
+width:100%!important;
+max-width:none!important;
+margin:0!important;
+padding:8px 12px!important;
+border:0!important;
+border-top:1px solid #e5e7eb!important;
+border-radius:0!important;
+background:#fff!important;
+color:#5f6368!important;
+font-size:12px!important;
+line-height:1.45!important;
+text-align:left!important;
+box-sizing:border-box!important;
+}
+#lunyPreviewSupportPanel #lunyCanvasColorTool{
+width:100%!important;
+max-width:none!important;
+margin:0!important;
+padding:8px 10px!important;
+border:0!important;
+border-top:1px solid #e5e7eb!important;
+border-radius:0!important;
+background:#fffaf5!important;
+box-shadow:none!important;
+box-sizing:border-box!important;
+justify-content:flex-start!important;
+}
+#previewOrderArea{
+width:100%;
+max-width:520px;
+margin-left:auto!important;
+margin-right:auto!important;
+box-sizing:border-box;
+}
+#lunySaveDesignAction{
+width:100%;
+max-width:520px;
+margin:8px auto;
+padding:10px 12px;
+border:1px solid #efb5a6;
+border-radius:8px;
+background:#fff;
+box-shadow:0 6px 16px rgba(87,45,28,.10);
+text-align:center;
+box-sizing:border-box;
+}
+#lunySaveDesignAction #lunyCompletePreviewAction,
+#previewOrderArea>div>#lunyCompletePreviewAction{
+margin:0 0 8px!important;
+padding:0!important;
+border:0!important;
+border-radius:0!important;
+background:transparent!important;
+}
+#lunySaveDesignAction .luny-complete-preview-btn,
+#previewOrderArea>div>#lunyCompletePreviewAction .luny-complete-preview-btn{
+width:100%!important;
+min-height:42px!important;
+padding:9px 12px!important;
+border:1px solid #d8cfc8!important;
+border-radius:8px!important;
+background:#fff!important;
+color:#6b4b2f!important;
+box-shadow:none!important;
+font-size:14px!important;
+font-weight:800!important;
+}
+#lunySaveDesignAction .luny-complete-preview-btn:hover:not(:disabled),
+#previewOrderArea>div>#lunyCompletePreviewAction .luny-complete-preview-btn:hover:not(:disabled){
+border-color:#b99b86!important;
+background:#fffaf5!important;
+}
+#lunySaveDesignAction .luny-complete-preview-note,
+#previewOrderArea>div>#lunyCompletePreviewAction .luny-complete-preview-note{display:none!important}
+.luny-preflight-required-hint{
+margin:7px 0 0 24px;
+padding:7px 9px;
+border:1px solid #f1c5b9;
+border-radius:6px;
+background:#fff8f5;
+color:#8f2d1f;
+font-size:12px;
+font-weight:700;
+line-height:1.45;
+}
+#saveDesignStatus[data-luny-preflight-hint="1"]{
+display:block;
+max-width:420px;
+margin:8px auto 0!important;
+padding:8px 10px;
+border:1px solid #efb5a6;
+border-radius:6px;
+background:#fff8f5;
+color:#8f2d1f;
+font-size:12px;
+font-weight:700;
+line-height:1.45;
+text-align:left;
+box-sizing:border-box;
+}
+.editor-card.luny-package-mode #lunyPreviewSupportPanel{display:block!important}
+.editor-card.luny-package-mode #lunySaveDesignAction{display:block!important}
+.editor-card.luny-package-mode #lunyLabelApplicationPreview{margin:0 0 4px!important}
+@media (max-width:640px){
+html,body{overflow-x:hidden!important}
+.layout-main{width:100%!important;max-width:100%!important;margin-right:0!important}
+#previewOrderArea{margin-top:8px!important;margin-bottom:8px!important}
+#saveDesignBtn{width:100%!important;min-height:48px!important}
+#saveDesignStatus{display:block;margin:6px 0 0!important;font-size:12px}
+#lunyPreviewSupportPanel{margin-top:8px;border-radius:8px}
+#lunyPreviewSupportPanel #lunyPreflightPanel{padding:11px 12px!important}
+#lunyPreviewSupportPanel #lunyCanvasColorTool{gap:6px!important;padding:8px!important}
+}
