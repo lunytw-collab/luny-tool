@@ -1,0 +1,58 @@
+#lunyUXFileStorage,[hidden]#lunyUXReplace{display:none!important}
+#lunyUXStart,#lunyUXMaterialInfo,#lunyUXReplace{font:inherit;cursor:pointer;border:1px solid #d9d9d9;background:#fff;border-radius:10px;padding:10px 15px;color:#222}
+#lunyUXStart{margin-top:16px;background:#ffdc4d;border:0;font-weight:600;min-height:46px}
+#lunyUXEntry{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 18px;margin:0 0 18px;border:1px solid #e9e4d9;border-radius:14px;background:#fffdf5}
+#lunyUXEntry strong{display:block;font-size:17px;color:#222}#lunyUXEntry small{display:block;font-size:12px;color:#666;margin-top:4px}
+#lunyUXEntry #lunyUXStart{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;margin:0;min-width:112px;text-decoration:none;width:auto!important;white-space:nowrap}
+#lunyUXMaterialInfo{margin-top:10px;font-size:13px}
+.luny-ux-materials:not(.luny-ux-material-info-open) .material-card-desc{display:none!important}
+#lunyUXSpecial{margin:16px 0;border:1px solid #e5e5e5;border-radius:12px;background:white}
+#lunyUXSpecial>summary{padding:16px;cursor:pointer;font-weight:600}
+#lunyUXSpecial>summary span{display:block;font-size:12px;color:#777;font-weight:400;margin-top:4px}
+#lunyUXSpecial #lunySpecialProcessingCard{margin:0;border:0}
+#lunyUXPreviewTools{margin-bottom:12px}#lunyUXEmpty{padding:40px 20px;background:#faf8f3;border:1px dashed #d6c6ac;border-radius:14px;text-align:center;color:#665a48}
+.luny-ux-file-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:#28684b}#lunyUXFileDetails{font-size:12px;color:#666;margin-top:8px}#lunyUXFileDetails summary{cursor:pointer}
+.luny-ux-format{font-size:12px;color:#666;text-align:center;margin:10px 0}
+html:not(.luny-ux-no-image) #lunyUXEmpty{display:none}
+html.luny-ux-no-image body .page-shell #lunyPreviewSupportPanel,html.luny-ux-no-image body .page-shell #canvasGuides,html.luny-ux-no-image body .page-shell #lunyFinishedPreviewSwitch,html.luny-ux-no-image body .page-shell #lunyFinishedMaterialPreview,html.luny-ux-no-image body .page-shell #lunyUXFileDetails,html.luny-ux-no-image body .page-shell #saveDesignBtn,html.luny-ux-no-image body .page-shell #saveDesignStatus,html.luny-ux-no-image body .page-shell #lunyCompletePreviewAction{display:none!important}
+.luny-ux-saved #saveDesignBtn{background:#edf7f0!important;color:#25603b!important;border:1px solid #c6dfce!important;box-shadow:none!important}
+#continueShoppingBtn{background:#fff!important;color:#333!important;box-shadow:none!important;border:1px solid #ddd!important}
+html.luny-ux-no-image body .page-shell #lunyPreviewSupportPanel{visibility:hidden!important;height:0!important;min-height:0!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden!important}
+html.luny-ux-no-image:not(.luny-ux-has-items) body .page-shell #previews>.preview,html.luny-ux-no-image body .page-shell #lunySaveDesignAction{display:none!important}
+.lpf-copy,.luny-preflight-manual-copy{animation:none!important}
+#lunyUXDock{display:none}#previews,.shape-row{scroll-margin-top:72px}
+.page-shell .luny-ux-three-tabs{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+.page-shell .luny-ux-three-tabs [role=tab]{min-width:0;padding:10px 4px!important;white-space:normal;font-size:12px!important}
+.page-shell .luny-ux-three-tabs .luny-finished-preview-helper{grid-column:1/-1}
+.luny-ux-tabs-ready #lunyCompletePreviewAction{display:none!important}
+.page-shell .editor-card.luny-package-mode #previews>.preview>#lunyFinishedPreviewSwitch{display:block!important}
+.page-shell .editor-card.luny-package-mode #lunyFinishedPreviewSwitch>.luny-finished-preview-switch{display:grid!important}
+.luny-ux-tabs-ready .luny-apply-back{display:none!important}
+@media(max-width:720px){
+body{padding-bottom:140px!important}
+#lunyUXDock{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:1040;align-items:center;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #e3ded5;box-shadow:0 -3px 15px #0000000a}
+.luny-ux-dock-info{flex:1;min-width:0}.luny-ux-dock-info strong{display:block;font-size:21px;line-height:1.3;color:#202326}.luny-ux-dock-info small{display:block;font-size:10px;color:#666;line-height:1.5}.luny-ux-dock-info span{display:block;font-size:10px;line-height:1.5;color:#777;max-height:30px;overflow:hidden}
+#lunyUXDockAction{flex:0 0 45%;min-width:0}#lunyUXDockAction #quoteNextStepBtn{width:100%!important;min-height:48px!important;font-size:14px!important;margin:0!important;padding:10px!important;white-space:normal!important}
+html.luny-ux-no-image #lunyUXDockAction:after{content:'支援 JPG／PNG';display:block;text-align:center;font-size:10px;color:#666;margin-top:4px}
+html.luny-ux-no-image body .page-shell #lunyUXPreviewTools{min-height:130px}#lunyUXStart{width:100%}.checkout-action-row{grid-template-columns:1fr!important}
+}
+
+#quoteNextStepBtn{display:none!important}
+#lunyUXDraftNotice{font-size:13px;color:#705022;background:#fff7df;border-radius:10px;padding:10px 12px;margin:0 0 12px}
+#lunyUXPrimary{width:100%;min-height:48px;border:0;border-radius:12px;background:#ffda4d;color:#202020;font:inherit;font-weight:650;padding:10px 12px;cursor:pointer;line-height:1.35}
+#lunyUXPrimary:disabled,#lunyUXNext:disabled,#lunyUXListLink:disabled{opacity:.55;cursor:wait}
+#lunyUXNext{background:white;color:#333;border:1px solid #d7d4cc;border-radius:12px;min-height:48px;font:inherit;font-size:14px;cursor:pointer;padding:9px 12px}
+#lunyUXListLink{align-self:start;background:none;border:0;padding:0;color:#6c5b39;text-decoration:underline;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+#lunyUXNext[hidden],#lunyUXListLink[hidden],#lunyUXDraftNotice[hidden]{display:none!important}
+@media(max-width:720px){
+body{padding-bottom:190px!important}
+#lunyUXDock{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
+#lunyUXDock .luny-ux-dock-info{grid-column:1;min-width:0}
+#lunyUXDock .luny-ux-dock-info small{font-size:11px;color:#555}
+#lunyUXDock .luny-ux-dock-info strong{font-size:21px;line-height:1.2}
+#lunyUXDock .luny-ux-dock-info span{font-size:11px;max-height:none}
+#lunyUXDockAction{grid-column:1/-1;display:grid;grid-template-columns:1fr;width:100%}
+#lunyUXDock[data-phase=saved] #lunyUXDockAction,#lunyUXDock[data-phase=checkout] #lunyUXDockAction{grid-template-columns:1fr 1.5fr;gap:8px}
+#lunyUXDockAction:after{display:none!important}
+#lunyUXPrimary{min-width:0;font-size:14px!important;margin:0!important}
+}
