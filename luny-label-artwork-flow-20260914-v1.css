@@ -1,0 +1,50 @@
+
+/* Scoped full artwork decision flow. Original quote and checkout styles stay. */
+html.luny-artwork-flow #edgeChoiceUI,html.luny-artwork-flow #edgeColorWrap,
+html.luny-artwork-flow #lunyBleedRiskBox,html.luny-artwork-flow #lunyCanvasColorTool,
+html.luny-artwork-flow #lunyPreflightBackStep,html.luny-artwork-flow #lunyWhiteEdgeBadge,
+html.luny-artwork-flow #lunyWarningAcceptanceHint,html.luny-artwork-flow #lunyFilePrepChoiceHint{display:none!important}
+#lunyArtworkFlow{--af-ink:#22251e;--af-muted:#61685b;--af-line:#dfe4d9;color:var(--af-ink);font-family:'Noto Sans TC',sans-serif;text-align:left;margin:18px 0;line-height:1.65;font-size:14px;scroll-margin-top:24px}
+#lunyArtworkFlow *{box-sizing:border-box}
+#lunyArtworkFlow [hidden]{display:none!important}
+#lunyArtworkFlow h3,#lunyArtworkFlow h4,#lunyArtworkFlow p{margin:0}
+#lunyArtworkFlow p,#lunyArtworkFlow small{font-weight:400}
+#lunyArtworkFlow h3{font-size:22px;font-weight:700;text-align:left;color:var(--af-ink)}
+#lunyArtworkFlow h4{font-size:16px;font-weight:700;margin-bottom:8px}
+#lunyArtworkFlow .af-sub{color:var(--af-muted);margin:5px 0 14px}
+#lunyArtworkFlow .af-step{border:1px solid var(--af-line);border-radius:16px;background:#fff;padding:18px;margin-top:12px}
+#lunyArtworkFlow .af-kicker{display:block;color:#5d713e;font-size:11px;font-weight:700;letter-spacing:1.6px;margin-bottom:5px}
+#lunyArtworkFlow .af-options{display:grid;gap:8px;margin-top:12px}
+#lunyArtworkFlow .af-option{display:flex;align-items:flex-start;gap:11px;cursor:pointer;border:1px solid var(--af-line);border-radius:11px;padding:13px;background:#fff;color:var(--af-ink);font-size:14px}
+#lunyArtworkFlow .af-option:has(input:checked){border-color:#647f3c;background:#f3f7ed;box-shadow:inset 0 0 0 1px #647f3c}
+#lunyArtworkFlow input[type=radio],#lunyArtworkFlow input[type=checkbox]{width:18px;height:18px;margin:4px 0 0;flex:0 0 18px;accent-color:#587434}
+#lunyArtworkFlow .af-option strong{font-weight:700;display:block}
+#lunyArtworkFlow .af-option small{display:block;font-size:12px;color:var(--af-muted);margin-top:3px}
+#lunyArtworkFlow .af-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+#lunyArtworkFlow button,#lunyArtworkFlow .af-download{font:inherit;font-weight:600;min-height:44px;border:1px solid #cbd3c2;border-radius:9px;padding:9px 13px;background:#fff;color:var(--af-ink);cursor:pointer;text-decoration:none}
+#lunyArtworkFlow button.af-primary{background:#e3ebd6;border-color:#adbd94}
+#lunyArtworkFlow button:disabled{opacity:.45;cursor:not-allowed}
+#lunyArtworkFlow :focus-visible{outline:3px solid #42678e;outline-offset:3px}
+#lunyArtworkFlow .af-status{padding:13px;border-radius:10px;background:#fff6eb;border:1px solid #efd2a7;margin:12px 0}
+#lunyArtworkFlow .af-status[data-state=ready]{background:#eff7e9;border-color:#b5cba0}
+#lunyArtworkFlow .af-status[data-state=blocked]{background:#fff2ef;border-color:#ecc0b6}
+#lunyArtworkFlow .af-checks{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:6px;font-size:13px}
+#lunyArtworkFlow .af-checks li{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #edf0e9;padding:5px 0}
+#lunyArtworkFlow .af-checks strong{text-align:right;font-weight:600}
+#lunyArtworkFlow .af-note{font-size:12px;color:var(--af-muted);margin-top:8px}
+#lunyArtworkFlow .af-proof{background:#f7f8f5;border:1px solid var(--af-line);border-radius:12px;padding:10px;margin-top:12px}
+#lunyArtworkFlow canvas{display:block;width:100%;max-width:420px;height:auto;margin:auto;border:0;border-radius:0;touch-action:pan-y}
+#lunyArtworkFlow .af-toggle{display:flex;align-items:center;gap:8px;font-size:13px;margin:9px 0}
+#lunyArtworkFlow .af-shift{display:flex;gap:5px;flex-wrap:wrap}
+#lunyArtworkFlow .af-shift button{min-width:42px;padding:6px 10px;font-size:12px}
+#lunyArtworkFlow .af-shift button[aria-pressed=true]{background:#283723;color:#fff;border-color:#283723}
+#lunyArtworkFlow input[type=color]{width:54px;height:42px;padding:3px;border:1px solid #cbd3c2;border-radius:8px;background:#fff}
+#lunyArtworkFlow .af-color{display:flex;align-items:center;gap:9px;margin-top:10px;flex-wrap:wrap}
+#lunyArtworkFlow .af-confirm{display:flex;align-items:flex-start;gap:10px;border:1px solid #ccd8bc;border-radius:10px;background:#f6f9f1;padding:13px;margin-top:12px}
+#lunyArtworkFlow textarea{width:100%;min-height:90px;font:inherit;border:1px solid var(--af-line);border-radius:8px;padding:10px;resize:vertical;margin-top:8px}
+#lunyArtworkFlow details{margin-top:12px;font-size:12px;color:var(--af-muted)}
+#lunyArtworkFlow summary{cursor:pointer;min-height:34px}
+html.luny-artwork-flow #lunyPreflightPanel{padding:12px!important;border-radius:10px!important;font-size:13px!important}
+html.luny-artwork-flow #lunyPreflightPanel .af-engine-note{margin:0;color:#53604b;line-height:1.6}
+@media(max-width:720px){#lunyArtworkFlow .af-step{padding:14px}#lunyArtworkFlow h3{font-size:20px}#lunyArtworkFlow .af-actions>button{flex:1 1 42%}#lunyArtworkFlow .af-checks li{font-size:12px}}
+
