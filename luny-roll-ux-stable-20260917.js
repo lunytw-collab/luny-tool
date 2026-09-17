@@ -1,0 +1,333 @@
+!function() {
+    "use strict";
+    if (window.__LUNY_ROLL_UX_20260914__) return;
+    window.__LUNY_ROLL_UX_20260914__ = !0;
+    const e = e => document.getElementById(e), t = (e, t) => {
+        e && e.textContent !== t && (e.textContent = t);
+    };
+    function setDisabled(node,value){value=!!value;if(node&&node.disabled!==value)node.disabled=value;}
+    let n = !1, i = !1, o = !1, a = !1, l = !1, r = !1, s = !1, u = !1, c = !1, d = !1, y = !1, m = "", p = "", g = "", f = 0, h = new Set;
+    const b = "LUNY_ROLL_NEXT_V1:" + location.pathname, v = [ "shape", "widthCm", "heightCm", "customLongSideCm", "material", "laminate", "quantity", "urgent" ];
+    function L() {
+        try {
+            return "function" == typeof loadSavedDesignsForCheckout ? loadSavedDesignsForCheckout() : [];
+        } catch (e) {
+            return [];
+        }
+    }
+    function S() {
+        const e = window.__LUNY_PREFLIGHT_LAST_RESULT__;
+        return e && "CHECKING" === e.status || (o = !(!e || "請先上傳要製作的圖片" === e.title || "NO_IMAGE" === e.status || "ERROR" === e.status)), 
+        o;
+    }
+    function U() {
+        return !(!window.__LUNY_SAVE_DESIGN_GLOBAL_LOCK__ && !window.__LUNY_CHECKOUT_UI_LOCKED__);
+    }
+    function w(e) {
+        e && e.scrollIntoView({
+            behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+            block: "start"
+        });
+    }
+    function k(e, t) {
+        e && e.hidden !== t && (e.hidden = t);
+    }
+    function E(e) {
+        return "NT$ " + Number(e || 0).toLocaleString("zh-TW");
+    }
+    function _() {
+        const e = Array.from(document.querySelectorAll(".form-container input,.form-container select,#controls input,#controls select,#controls textarea,#lunyPreflightPanel input")).filter(e => ![ "file", "checkbox", "radio" ].includes(e.type) || e.checked || "file" === e.type).map(e => "file" === e.type ? [ e.id, ...Array.from(e.files || []).map(e => [ e.name, e.size, e.lastModified ].join(":")) ] : [ e.id || e.name, e.value ]);
+        return JSON.stringify([ e, (window.__LUNY_PREFLIGHT_LAST_RESULT__ || {}).stateKey || "", f ]);
+    }
+    function X() {
+        a = !0, c = !1, w(e("lunyUXQuoteStart") || document.querySelector(".shape-row")), 
+        I();
+    }
+    function C() {
+        L().length && !U() && (c = !0, w(e("checkoutSummaryBox")), I());
+    }
+    function D() {
+        if (U() || s) return;
+        if (S() && !n && !confirm("目前這款尚未加入清單，確定要捨棄並做下一款嗎？已加入的款式會保留。")) return;
+        const i = Object.fromEntries(v.map(t => [ t, e(t) ? e(t).value : "" ]));
+        try {
+            sessionStorage.setItem(b, JSON.stringify({
+                time: Date.now(),
+                spec: i
+            }));
+        } catch (e) {
+            return void alert("瀏覽器暫存目前無法使用，請先保留目前頁面再重試。");
+        }
+        t(e("lunyUXNext"), "正在準備…"), e("lunyUXNext").disabled = !0, location.reload();
+    }
+    function x() {
+        try {
+            return window.LUNY_getPreflightResult?.() || window.__LUNY_PREFLIGHT_LAST_RESULT__ || {};
+        } catch (e) {
+            return {};
+        }
+    }
+    function validCloudLink(value){
+ const raw=String(value||"").trim();if(!raw||raw.length>2048||/\s/.test(raw))return false;
+ try{const u=new URL(raw);return u.protocol==="https:"&&!!u.hostname&&!u.username&&!u.password;}catch(_){return false;}
+}
+    function N() {
+        const t = t => Number(e(t)?.value || 0), n = "custom" === e("shape")?.value, i = n ? t("customActualWidthCm") || t("customLongSideCm") : t("widthCm"), o = n ? t("customActualHeightCm") || t("customLongSideCm") : t("heightCm");
+        if (i < 3 || o < 3) return {
+            label: "確認貼紙尺寸",
+            target: n ? "customLongSideCm" : "widthCm",
+            message: "成捲貼紙寬、高均須達 3 cm；較小尺寸請洽客服詢價。"
+        };
+        if (t("quantity") < 2e3) return {
+            label: "選擇印製數量",
+            target: "lunyQuantityCards",
+            message: "捲貼紙／自動貼最低印製 2,000 張。"
+        };
+        if (e("lunyRollSplitSpecified")?.checked && (!Number.isInteger(t("lunyRollPerQuantity")) || t("lunyRollPerQuantity") < 1 || t("lunyRollPerQuantity") > t("quantity"))) return {
+            label: "確認分捲張數",
+            target: "lunyRollPerQuantity",
+            message: "每捲張數須為 1～總張數之間的整數。"
+        };
+        if (!document.querySelector('[name="lunyRollWinding"]:checked')) return {
+            label: "選擇出紙方向",
+            target: "lunyRollSettingsCard",
+            message: "請確認本款成品的正面方向：左出、右出、頭出或尾出。"
+        };
+        if (e("lunyRollMixedReading")?.checked && !validCloudLink(e("lunyRollDirectionDiagram")?.value)) return {
+            label: "補上出紙示意圖",
+            target: "lunyRollDiagramWrap",
+            message: "稿件有兩種以上閱讀方向，請將示意圖上傳至雲端，再貼上 HTTPS 分享連結。"
+        };
+        if ("blocked" === e("lunyRollRuleStatus")?.dataset.state) return {
+            label: "確認成捲規格",
+            target: "lunyRollSettingsCard",
+            message: e("lunyRollRuleStatus").textContent
+        };
+        const a = e("lunySpecialProcessingBlockNote")?.textContent.trim();
+        return a ? {
+            label: /流水號/.test(a) ? "確認流水號製程" : "提供加工完稿連結",
+            target: /流水號/.test(a) ? "lunySerialRules" : "lunyProductionArtworkBlock",
+            message: a
+        } : null;
+    }
+    function A(t) {
+        const n = e(t.target);
+        for (let e = n; e; e = e.parentElement) "DETAILS" === e.tagName && (e.open = !0);
+        w(n);
+        const i = n?.matches("input,select") ? n : n?.querySelector("input:not([type=file]),select");
+        i?.focus({
+            preventScroll: !0
+        });
+    }
+    function P() {
+        const t = L().length, i = x();
+        return U() ? "saving" : s ? "loading" : t && function() {
+            const t = e("checkoutSummaryBox");
+            if (!t || !c) return !1;
+            const n = t.getBoundingClientRect(), i = e("lunyUXDock"), o = innerHeight - (i && "none" !== getComputedStyle(i).display ? i.getBoundingClientRect().height : 0);
+            return n.height > 0 && n.top < o - 30 && n.bottom > 100;
+        }() ? "checkout" : n && t ? "saved" : a || S() ? N() ? "requirements" : u ? "upload-error" : S() ? "CHECKING" === i.status ? "checking" : !i.canProceed || e("saveDesignBtn")?.disabled ? "review" : "ready" : "upload" : "start";
+    }
+    function R() {
+        const t = P();
+        "start" !== t ? "requirements" !== t ? "upload" !== t && "upload-error" !== t ? "review" !== t ? "ready" !== t ? "saved" !== t ? "checkout" === t && L().length && window.goToCheckoutConfirm?.() : C() : e("saveDesignBtn")?.click() : w(e("lunyPreflightPanel") || e("previews")) : q() : A(N()) : X();
+    }
+    function q() {
+        U() || s || !e("imgFile") || e("imgFile").click();
+    }
+    function T() {
+        i = !1, function() {
+            const n = e("lunyFinishedPreviewSwitch"), i = e("lunyCompletePreviewBtn"), o = n?.querySelector("[role=tablist]");
+            if (!o || !i) return;
+            let a = e("lunyUXApplicationTab");
+            a || (a = document.createElement("button"), a.id = "lunyUXApplicationTab", a.type = "button", 
+            a.className = "luny-finished-preview-tab", a.setAttribute("role", "tab"), o.append(a), 
+            o.classList.add("luny-ux-three-tabs"), document.documentElement.classList.add("luny-ux-tabs-ready"), 
+            o.addEventListener("click", e => {
+                const t = e.target.closest("[role=tab]");
+                if (t) {
+                    if (i.disabled) return e.preventDefault(), void e.stopImmediatePropagation();
+                    t === a ? n.closest(".luny-package-mode") || i.click() : n.closest(".luny-package-mode") && document.querySelector(".luny-apply-back")?.click(), 
+                    I();
+                }
+            }, !0), o.addEventListener("keydown", e => {
+                if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(e.key)) return;
+                const t = [ ...o.querySelectorAll("[role=tab]") ].filter(e => !e.disabled), n = t.indexOf(e.target);
+                if (n < 0) return;
+                e.preventDefault();
+                const i = "Home" === e.key ? 0 : "End" === e.key ? t.length - 1 : (n + ("ArrowLeft" === e.key ? -1 : 1) + t.length) % t.length;
+                t[i].focus(), t[i].click();
+            }), window.LUNY_alignApplicationPreviewToCanvas = function() {});
+            const l = !!n.closest(".luny-package-mode");
+            l && n.style.setProperty("display", "block", "important");
+            a.disabled !== i.disabled && (a.disabled = i.disabled);
+            t(a, i.disabled ? "產生中…" : "實貼效果");
+            const r = (e, t, n) => {
+                n = String(n), e.getAttribute(t) !== n && e.setAttribute(t, n);
+            };
+            r(a, "aria-selected", l), o.querySelectorAll("[role=tab]").forEach(e => {
+                l && e !== a && r(e, "aria-selected", !1), r(e, "tabindex", "true" === e.getAttribute("aria-selected") ? 0 : -1);
+            });
+        }();
+        const o = L(), a = o.length, f = (window.__LUNY_PREFLIGHT_LAST_RESULT__, e("saveDesignStatus"));
+        if (s) {
+            const t = e("imgFileMeta") ? e("imgFileMeta").textContent : "";
+            /載入失敗/.test(t) ? (s = !1, u = !0) : /｜預覽/.test(t) && (s = !1, u = !1);
+        }
+        if (d && U() && (y = !0), d && (y || o.some(e => !h.has(String(e.designId)))) && !U() && f && /^(儲存完成 100%|已加入下方清單)/.test(f.textContent) && a) {
+            let e;
+            try {
+                e = "function" == typeof loadLastSavedDesign ? loadLastSavedDesign() : null;
+            } catch (e) {}
+            g = String((e || o[a - 1]).designId || ""), m = p, n = !0, r = !1, d = !1, c = !1;
+        }
+        !n || a && o.some(e => String(e.designId) === g) || (n = !1), n && _() !== m && (n = !1, 
+        r = !0);
+        const b = S(), v = P(), w = "saved" === v || "checkout" === v;
+        document.documentElement.classList.toggle("luny-ux-no-image", !b), document.documentElement.classList.toggle("luny-ux-has-items", a > 0), 
+        document.documentElement.classList.toggle("luny-ux-saved", n), e("lunyUXDock").dataset.phase = v, 
+        t(e("lunyUXEmpty"), s ? "圖片處理中，請稍候…" : "上傳圖片後，即可查看成品效果"), k(e("lunyUXReplace"), !b), 
+        setDisabled(e("lunyUXReplace"),s || U()), t(e("lunyUXFileStatus"), b ? "✓ 圖片已載入" : ""), 
+        t(e("lunyUXProcessingNote"), document.querySelector("#lunySpecialProcessingCard input[type=checkbox]:checked") ? "特殊加工以 AI 雲端連結中的正式完稿檔為準；此圖片用於預覽。" : "");
+        const X = Number((e("checkoutTotalAmount") ? e("checkoutTotalAmount").textContent : "0").replace(/[^\d.]/g, ""));
+        t(e("lunyUXDockLabel"), w ? "清單合計・共 " + a + " 款" : "本款金額"), t(e("lunyUXDockPrice"), E(w ? X : (e("price") ? e("price").textContent : "0").replace(/[^\d.]/g, "")));
+        const C = "requirements" === v ? N()?.message : "checkout" === v && b && !n ? "目前這款尚未加入，結帳僅包含清單內的 " + a + " 款" : r ? "目前修改尚未加入清單" : w ? "商品金額・運費依配送方式計算" : l ? "沿用上一款規格，可修改" : e("quoteSpecText") ? e("quoteSpecText").textContent.replace(/^規格：/, "") : "";
+        t(e("lunyUXDockSpec"), C), t(e("lunyUXDraftNotice"), r ? "目前修改尚未加入清單" : l ? "沿用上一款規格，可修改" : ""), 
+        k(e("lunyUXDraftNotice"), !r && !l);
+        const D = {
+            requirements: N()?.label,
+            start: "開始試算",
+            upload: "上傳圖片看預覽",
+            "upload-error": "重新上傳圖片",
+            loading: "圖片處理中…",
+            checking: "圖片檢查中…",
+            review: "查看圖片檢查提示",
+            ready: "加入結帳清單",
+            saving: "加入中…",
+            saved: "查看結帳清單（" + a + " 款）",
+            checkout: "前往結帳"
+        }, x = e("lunyUXPrimary");
+        t(x, D[v]), setDisabled(x,[ "saving", "loading", "checking" ].includes(v)), k(e("lunyUXNext"), !w), 
+        setDisabled(e("lunyUXNext"),U()), t(e("lunyUXNext"), "做下一款"), k(e("lunyUXListLink"), !a || w), 
+        setDisabled(e("lunyUXListLink"),U() || s), t(e("lunyUXListLink"), "查看清單（" + a + " 款）"), 
+        t(e("continueShoppingBtn"), "做下一款"), t(e("orderLink"), "前往結帳・確認商品"), n && !U() ? t(e("saveDesignBtn"), "✓ 已加入，共 " + a + " 款") : !U() && e("saveDesignBtn") && /^✓ 已加入/.test(e("saveDesignBtn").textContent) && t(e("saveDesignBtn"), "加入結帳清單");
+        const A = matchMedia("(max-width:720px)").matches, R = e(A ? "lunyUXDock" : "lunyUXUploadAnchor"), q = e("lunyUXActions"), T = e("lunyUXListLink");
+        q.parentElement !== R && R.append(T, q);
+        const F = document.querySelector("#lunyLabelApplicationPreview .luny-apply-kicker");
+        t(F, "選看・包裝實貼");
+    }
+    function I() {
+        i || (i = !0, requestAnimationFrame(T));
+    }
+    function F(e) {
+        const t = e.target;
+        t && t.closest && ("input" !== e.type && "change" !== e.type || !e.isTrusted && !a || !t.closest(".form-container,#controls,#lunyPreflightPanel") || t.closest("#lunyQuoteCard") || (a = !0, 
+        c = !1), I());
+    }
+    function B() {
+        const i = e("card-photo"), o = e("imgFile"), m = e("previews");
+        if (!i || !o || !m || e("lunyUXDock")) return;
+        const g = i.closest("details"), k = document.createElement("div");
+        k.id = "lunyUXFileStorage", k.hidden = !0, k.append(o), document.body.append(k);
+        const E = i.querySelector("#imgFileMeta"), P = document.createElement("div");
+        P.id = "lunyUXPreviewTools", P.innerHTML = '<p id="lunyUXEmpty" role="status">上傳圖片後，即可查看成品效果</p><div class="luny-ux-file-row"><span id="lunyUXFileStatus" role="status"></span><button type="button" id="lunyUXReplace" hidden>更換圖片</button></div><p id="lunyUXProcessingNote"></p><details id="lunyUXFileDetails"><summary>圖片詳細資料</summary></details>', 
+        m.prepend(P), E && e("lunyUXFileDetails").append(E), g && (g.hidden = !0), e("lunyUXReplace").addEventListener("click", q);
+        const T = document.createElement("div");
+        T.id = "lunyUXUploadAnchor";
+        const B = e("quoteNextStepBtn");
+        if (!B) return;
+        B.before(T), B.hidden = !0, B.setAttribute("aria-hidden", "true"), B.tabIndex = -1;
+        const M = document.createElement("button");
+        M.type = "button", M.id = "lunyUXPrimary", M.className = "luny-primary-yellow-cta luny-quote-preview-btn", 
+        T.append(M), M.addEventListener("click", R);
+        const O = e("lunyUXStart");
+        O && O.addEventListener("click", function(e) {
+            e.preventDefault(), X();
+        });
+        const Y = document.createElement("p");
+        Y.id = "lunyUXDraftNotice", Y.hidden = !0, (e("lunyUXQuoteStart") || document.querySelector(".shape-row")).before(Y);
+        const H = document.createElement("button");
+        H.type = "button", H.id = "lunyUXMaterialInfo", H.dataset.lunyUxInfo = "1", H.textContent = "查看材質用途與注意事項", 
+        H.setAttribute("aria-expanded", "false");
+        const G = document.querySelector(".material-card-wrap");
+        G && (G.classList.add("luny-ux-materials"), G.append(H)), H.addEventListener("click", () => {
+            const e = "true" !== H.getAttribute("aria-expanded");
+            H.setAttribute("aria-expanded", String(e)), G.classList.toggle("luny-ux-material-info-open", e), 
+            t(H, e ? "收合材質說明" : "查看材質用途與注意事項");
+        });
+        const Q = e("lunySpecialProcessingCard");
+        if (Q) {
+            const e = document.createElement("details");
+            e.id = "lunyUXSpecial", e.innerHTML = "<summary>特殊加工（選填）<span>白墨／燙金銀／流水號</span></summary>", 
+            Q.before(e), e.append(Q), Q.querySelector('input[type="checkbox"]:checked') && (e.open = !0);
+        }
+        const K = document.createElement("aside");
+        K.id = "lunyUXDock", K.setAttribute("aria-label", "目前報價與下一步"), K.innerHTML = '<div class="luny-ux-dock-info"><small id="lunyUXDockLabel"></small><strong id="lunyUXDockPrice"></strong><span id="lunyUXDockSpec"></span></div><button id="lunyUXListLink" type="button" hidden></button><div id="lunyUXActions"><button id="lunyUXNext" type="button" hidden>做下一款</button></div>', 
+        document.body.append(K), e("lunyUXActions").append(M), e("lunyUXNext").addEventListener("click", D), 
+        e("lunyUXListLink").addEventListener("click", C), o.addEventListener("change", function() {
+            this.files && this.files.length && (s = !0, u = !1, a = !0, n && (r = !0), n = !1, 
+            c = !1, I());
+        }), document.addEventListener("luny:preflightChanged", I), document.addEventListener("input", F), 
+        document.addEventListener("change", F), document.addEventListener("pointerdown", e => {
+            e.target.closest && e.target.closest(".form-container") && !e.target.closest("#lunyQuoteCard") && (a = !0, 
+            c = !1, I());
+        }), document.addEventListener("pointermove", e => {
+            "canvasGuides" === e.target.id && e.buttons && (f++, c = !1, I());
+        }, {
+            passive: !0
+        }), document.addEventListener("wheel", t => {
+            "canvasGuides" === t.target.id && "custom" !== e("shape").value && (f++, c = !1, 
+            I());
+        }, {
+            passive: !0
+        }), window.addEventListener("scroll", I, {
+            passive: !0
+        }), window.addEventListener("resize", I), window.addEventListener("click", function(i) {
+            const o = i.target.closest && i.target.closest("#saveDesignBtn,#continueShoppingBtn,#orderLink");
+            if (!o) return;
+            if ("orderLink" === o.id) return i.preventDefault(), i.stopImmediatePropagation(), 
+            void (!U() && L().length && window.goToCheckoutConfirm?.());
+            if ("continueShoppingBtn" === o.id) return i.preventDefault(), i.stopImmediatePropagation(), 
+            void D();
+            if (n || U() || s || u) return i.preventDefault(), i.stopImmediatePropagation(), 
+            void (n && C());
+            const l = N();
+            if (l || !S() || !x().canProceed) return i.preventDefault(), i.stopImmediatePropagation(), 
+            a = !0, l ? A(l) : w(e("lunyPreflightPanel")), void I();
+            h = new Set(L().map(e => String(e.designId))), d = !0, y = !1, p = _(), e("lunyUXPrimary").disabled = !0, 
+            t(e("lunyUXPrimary"), "加入中…"), e("lunyUXDock").dataset.phase = "saving", I();
+        }, !0), new MutationObserver(I).observe(document.querySelector(".page-shell"), {
+            childList: !0,
+            subtree: !0,
+            characterData: !0,
+            attributes: !0,
+            attributeFilter: [ "disabled" ]
+        }), function() {
+            let t;
+            try {
+                t = JSON.parse(sessionStorage.getItem(b) || "null"), sessionStorage.removeItem(b);
+            } catch (e) {}
+            !t || Date.now() - t.time > 3e5 || !t.spec || (l = !0, requestAnimationFrame(() => requestAnimationFrame(() => {
+                v.forEach(n => {
+                    const i = e(n), o = t.spec[n];
+                    i && null != o && (i.options && !Array.from(i.options).some(e => e.value === o) || (i.value = o, 
+                    i.dispatchEvent(new Event("change", {
+                        bubbles: !0
+                    }))));
+                }), "function" == typeof window.resetEditorForNextDesign && window.resetEditorForNextDesign(), 
+                "function" == typeof window.LUNY_resetArtworkDecisionState && window.LUNY_resetArtworkDecisionState(), 
+                document.querySelectorAll('[name="lunyRollWinding"],#lunyRollMixedReading,#lunyRollSplitSpecified').forEach(e => {
+                    e.checked = !1, e.dispatchEvent(new Event("change", {
+                        bubbles: !0
+                    }));
+                });
+                const n = document.querySelector('[name="lunyRollFeed"][value="reading"]');
+                n && (n.checked = !0, n.dispatchEvent(new Event("change", {
+                    bubbles: !0
+                }))), a = !1, r = !1, I(), w(e("lunyUXQuoteStart") || document.querySelector(".shape-row"));
+            })));
+        }(), I();
+    }
+    window.LUNY_labelUXMainAction = R, window.LUNY_labelUXHasSaved = () => n && L().length > 0, 
+    window.LUNY_labelUXImageReady = S, "loading" === document.readyState ? document.addEventListener("DOMContentLoaded", B) : B();
+}();
