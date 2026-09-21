@@ -698,12 +698,12 @@
     else q.textContent = "請選擇寬 × 高（公分）";
     body.appendChild(q);
 
-    if (!$("widthCm") && shape !== "custom") {
+    if (!$ ("widthCm") && shape !== "custom") {
       setError("找不到尺寸欄位（#widthCm）。");
       renderFoot();
       return;
     }
-    if (shape === "custom" && !$("customLongSideCm")) {
+    if (shape === "custom" && !$ ("customLongSideCm")) {
       setError("找不到客製長邊欄位（#customLongSideCm）。");
       renderFoot();
       return;
@@ -779,15 +779,15 @@
     renderFoot([
       elBtn("下一步", "is-primary", function () {
         if (shape === "circle" || shape === "custom") {
-          var v = Number(($ ("loaSizeMain") && $("loaSizeMain").value) || 0);
+          var v = Number($("loaSizeMain") && $("loaSizeMain").value || 0);
           if (!(v > 0)) {
             setError("請輸入有效尺寸。");
             return;
           }
           applySizeAndNext(v, v, v);
         } else {
-          var w = Number(($ ("loaSizeW") && $("loaSizeW").value) || 0);
-          var h = Number(($ ("loaSizeH") && $("loaSizeH").value) || 0);
+          var w = Number($("loaSizeW") && $("loaSizeW").value || 0);
+          var h = Number($("loaSizeH") && $("loaSizeH").value || 0);
           if (!(w > 0) || !(h > 0)) {
             setError("請輸入有效的寬與高。");
             return;
