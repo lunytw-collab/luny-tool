@@ -91,17 +91,17 @@
   }
 
   function sizeReady() {
-    var shape = (($ ("shape") && $("shape").value) || "").toLowerCase();
+    var shape = ((\u0024("shape") && \u0024("shape").value) || "").toLowerCase();
     if (shape === "custom") {
-      var side = Number(($ ("customLongSideCm") && $("customLongSideCm").value) || 0);
+      var side = Number((\u0024("customLongSideCm") && \u0024("customLongSideCm").value) || 0);
       return side >= 1;
     }
     if (shape === "circle") {
-      var d = Number(($ ("widthCm") && $("widthCm").value) || 0);
+      var d = Number((\u0024("widthCm") && \u0024("widthCm").value) || 0);
       return d >= 1;
     }
-    var w = Number(($ ("widthCm") && $("widthCm").value) || 0);
-    var h = Number(($ ("heightCm") && $("heightCm").value) || 0);
+    var w = Number((\u0024("widthCm") && \u0024("widthCm").value) || 0);
+    var h = Number((\u0024("heightCm") && \u0024("heightCm").value) || 0);
     return w >= 1 && h >= 1;
   }
 
