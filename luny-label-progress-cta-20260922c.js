@@ -129,7 +129,7 @@
 
   function sizeReady() {
     if (!touch.size) return false;
-    var shape = (($ ("shape") && $("shape").value) || "").toLowerCase();
+    var shape = (($("shape") && $("shape").value) || "").toLowerCase();
     if (shape === "custom") {
       var side = Number(($ ("customLongSideCm") && $("customLongSideCm").value) || 0);
       return side >= 1;
