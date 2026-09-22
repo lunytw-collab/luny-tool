@@ -252,7 +252,7 @@
         ensureBar();
         syncModeButtons();
         applyModeClasses();
-        if (!guideSyncedForMode || !("safetyGuideToggle")) syncGuideOnceForMode();
+        if (!guideSyncedForMode || !$("safetyGuideToggle")) syncGuideOnceForMode();
         else if (mode === MODE_PRODUCT) {
           var guide = $("safetyGuideToggle");
           if (guide && guide.checked) {
