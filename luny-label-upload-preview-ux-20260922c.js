@@ -257,7 +257,7 @@
         syncModeButtons();
         applyModeClasses();
         // 若安全線勾選列晚掛上來，只補一次；不要每幀 dispatch
-        if (!guideSyncedForMode || $("safetyGuideToggle")) {
+        if (!guideSyncedForMode || !$("safetyGuideToggle")) {
           syncGuideOnceForMode();
         } else if (mode === MODE_PRODUCT) {
           var guide = $("safetyGuideToggle");
