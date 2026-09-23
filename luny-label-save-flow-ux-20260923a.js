@@ -255,8 +255,7 @@
     var primary = el.closest("#lunyUXPrimary");
     if (primary) {
       var t = primary.textContent || "";
-      if (/加入結帳清單/.test(t) || /查看圖片檢查提示/.test(t) || /ready|review/i.test(($(
-        "lunyUXDock") || {}).dataset && $("lunyUXDock").dataset.phase || "")) {
+      if (/加入結帳清單/.test(t) || /查看圖片檢查提示/.test(t) || /ready|review/i.test(($ ("lunyUXDock") || {}).dataset && $("lunyUXDock").dataset.phase || "")) {
         return true;
       }
       // If dock phase is review/ready, primary is the save path
