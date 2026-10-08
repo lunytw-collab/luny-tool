@@ -3081,6 +3081,7 @@ Amount/time/group guessing is forbidden.
   let progressOrder = "";
   let progressSnapshot = null;
   let progressBusy = false;
+  let lastProgressRequestAt = 0;
   let progressCacheKey = "";
   let progressIdentity = "";
   let progressTimer = null;
@@ -3245,11 +3246,14 @@ Amount/time/group guessing is forbidden.
       progressOrder = orderNo;
       progressSnapshot = null;
       progressCacheKey = "";
+      lastProgressRequestAt = 0;
     }
     if (!token){
       renderProgressCard("請從原本的訂單查詢連結查看進度。");
       return;
     }
+    if (lastProgressRequestAt && Date.now() - lastProgressRequestAt < 15000) return;
+    lastProgressRequestAt = Date.now();
     progressBusy = true;
     let serverRecorded = false;
     try{
@@ -3264,8 +3268,8 @@ Amount/time/group guessing is forbidden.
           }
         }catch(_){}
       }
-      try{ if(progressCacheKey && sessionStorage.getItem(progressCacheKey+"::pendingReport")) await reportProgressFailure(orderNo,token,progressCacheKey); }catch(_){}
-      renderProgressCard(progressSnapshot ? "正在更新進度…" : "");
+      // Query first. A recovered read supersedes an unsent transient error.
+      renderProgressCard(progressSnapshot ? "顯示上次查詢進度，正在更新…" : "");
       const dedicatedUrl = clean(window.LUNY_ORDER_PROGRESS_URL || "");
       const endpoint = dedicatedUrl || GAS_URL;
       const result = await fetchJsonWithTimeout(endpoint, {
@@ -3298,7 +3302,8 @@ Amount/time/group guessing is forbidden.
         readAt:data.updatedAt || new Date().toISOString()
       };
       try{ if(progressCacheKey) sessionStorage.setItem(progressCacheKey,JSON.stringify(progressSnapshot)); }catch(_){}
-      renderProgressCard(result.stale ? "進度暫時無法更新，顯示上次取得的進度。" : "");
+      if (!result.stale){try{if(progressCacheKey)sessionStorage.removeItem(progressCacheKey+"::pendingReport");}catch(_){}}
+      renderProgressCard(result.stale ? "進度暫時無法更新，顯示上次取得的進度。" : result.cacheHit ? "顯示最近 20 秒內查詢的進度。" : "");
     }catch(_){
       if (identity === progressIdentity){
         renderProgressCard(progressSnapshot ? "進度暫時無法更新，顯示上次取得的進度。" : "進度暫時無法取得，請稍後再試。");
