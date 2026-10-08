@@ -3111,8 +3111,9 @@ Amount/time/group guessing is forbidden.
 
 
   function nativeProgressTracking(){
-    const urls = [];
+    const entries = [];
     let section = null;
+    let ambiguous = false;
     document.querySelectorAll(".card-block > h3").forEach(function(heading){
       if (clean(heading.textContent) !== "物流追蹤") return;
       const block = heading.parentElement;
@@ -3120,13 +3121,40 @@ Amount/time/group guessing is forbidden.
       block.querySelectorAll(".row").forEach(function(row){
         const label = row.querySelector(".th");
         if (!label || clean(label.textContent) !== "物流商") return;
+        // Each native parcel has its own .has-bottom group. Never borrow another parcel's number.
+        const parcel = row.closest(".has-bottom") || block;
+        const numbers = [];
+        parcel.querySelectorAll(".row").forEach(function(detail){
+          const name = detail.querySelector(".th");
+          const value = detail.querySelector(".td");
+          if (!name || !value || clean(name.textContent) !== "追蹤號碼") return;
+          const number = clean(value.textContent);
+          if (number && numbers.indexOf(number) < 0) numbers.push(number);
+        });
+        if (numbers.length > 1) ambiguous = true;
+        const number = numbers.length === 1 ? numbers[0] : "";
         row.querySelectorAll(".td a[href]").forEach(function(link){
-          const url = progressTrackingUrl(link.href);
-          if (url && urls.indexOf(url) < 0) urls.push(url);
+          let url = progressTrackingUrl(link.href);
+          if (!url) return;
+          const parsed = new URL(url);
+          const seven = parsed.hostname === "eservice.7-11.com.tw" &&
+            parsed.pathname.toLowerCase() === "/e-tracking/search.aspx";
+          if (seven && number){
+            // Verified on the carrier page: this query parameter prefills the field.
+            // Preserve the original identifier; the customer completes the carrier CAPTCHA.
+            parsed.searchParams.set("txtProductNum", number);
+            parsed.searchParams.set("__EVENTTARGET", "");
+            url = parsed.href;
+          }
+          if (!entries.some(function(item){ return item.url === url && item.number === number; })){
+            entries.push({url:url,number:number,seven:seven});
+          }
         });
       });
     });
-    return {url:urls.length === 1 ? urls[0] : "", multiple:urls.length > 1, section:section};
+    const single = !ambiguous && entries.length === 1 ? entries[0] : null;
+    return {url:single ? single.url : "", number:single ? single.number : "",
+      seven:!!(single && single.seven), multiple:ambiguous || entries.length > 1, section:section};
   }
 
   function watchNativeProgressTracking(){
@@ -3205,6 +3233,10 @@ Amount/time/group guessing is forbidden.
     }).join("") + "</ol><p class='luny-progress-message'>" +
       escapeHtml(stage >= 0 ? progressMessages[stage] : (note || "正在讀取訂單進度…")) + "</p>" +
       (stage >= 0 && note ? "<p class='luny-progress-note'>" + escapeHtml(note) + "</p>" : "") +
+      (stage === 2 && nativeTracking.number ?
+        "<p class='luny-progress-note'>追蹤號碼：<strong>" + escapeHtml(nativeTracking.number) + "</strong></p>" : "") +
+      (stage === 2 && nativeTracking.seven && nativeTracking.number ?
+        "<p class='luny-progress-note'>開啟查詢頁後，請輸入驗證碼再查詢。</p>" : "") +
       (stage === 2 && nativeTracking.multiple ?
         "<button type='button' class='luny-progress-tracking' data-luny-native-tracking='1'>查看配送進度</button>" :
         stage === 2 && trackingUrl ?
