@@ -3084,6 +3084,9 @@ Amount/time/group guessing is forbidden.
   let progressCacheKey = "";
   let progressIdentity = "";
   let progressTimer = null;
+  let progressDisplayNote = "";
+  let nativeTrackingObserver = null;
+  let nativeTrackingTimer = null;
 
   function customerProgressStage(status){
     const map = {
@@ -3105,6 +3108,42 @@ Amount/time/group guessing is forbidden.
     }catch(_){ return ""; }
   }
 
+
+  function nativeProgressTracking(){
+    const urls = [];
+    let section = null;
+    document.querySelectorAll(".card-block > h3").forEach(function(heading){
+      if (clean(heading.textContent) !== "物流追蹤") return;
+      const block = heading.parentElement;
+      if (!section) section = block;
+      block.querySelectorAll(".row").forEach(function(row){
+        const label = row.querySelector(".th");
+        if (!label || clean(label.textContent) !== "物流商") return;
+        row.querySelectorAll(".td a[href]").forEach(function(link){
+          const url = progressTrackingUrl(link.href);
+          if (url && urls.indexOf(url) < 0) urls.push(url);
+        });
+      });
+    });
+    return {url:urls.length === 1 ? urls[0] : "", multiple:urls.length > 1, section:section};
+  }
+
+  function watchNativeProgressTracking(){
+    if (!document.body || nativeTrackingObserver) return;
+    nativeTrackingObserver = new MutationObserver(function(mutations){
+      const external = mutations.some(function(mutation){
+        const node = mutation.target.nodeType === 3 ? mutation.target.parentElement : mutation.target;
+        return !(node && node.closest && node.closest("#lunyOrderProgress,#lunyPhase1BindStatus,#lunyPhase1OrderSummary"));
+      });
+      if (!external) return;
+      window.clearTimeout(nativeTrackingTimer);
+      nativeTrackingTimer = window.setTimeout(function(){
+        if (progressSnapshot && progressSnapshot.stage === 2) renderProgressCard(progressDisplayNote);
+      }, 120);
+    });
+    nativeTrackingObserver.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:["href"]});
+  }
+
   function ensureProgressCard(){
     if (!document.body) return null;
     let card = document.getElementById("lunyOrderProgress");
@@ -3114,7 +3153,7 @@ Amount/time/group guessing is forbidden.
       style.textContent = `
         #lunyOrderProgress{box-sizing:border-box;width:calc(100% - 32px);max-width:820px;margin:20px auto;padding:28px 24px;border:1px solid #eddfd2;border-radius:22px;background:#fff;color:#35281f;text-align:center;font-family:"Noto Sans TC",Arial,sans-serif;box-shadow:0 4px 18px rgba(91,61,35,.035)}
         #lunyOrderProgress *{box-sizing:border-box}
-        #lunyOrderProgress h2{margin:0 0 26px;font-family:"Noto Serif TC","PMingLiU",serif;font-size:26px;line-height:1.5}
+        #lunyOrderProgress h2{margin:0 0 26px;font-family:inherit;font-size:20px;line-height:1.4;font-weight:900}
         #lunyOrderProgress ol{display:flex;list-style:none;padding:0;margin:0}
         #lunyOrderProgress li{position:relative;flex:1;min-width:0;margin:0;padding:0}
         #lunyOrderProgress li:not(:last-child):after{content:"";position:absolute;z-index:0;top:25px;left:calc(50% + 29px);width:calc(100% - 58px);height:2px;background:#eddfd2}
@@ -3122,13 +3161,13 @@ Amount/time/group guessing is forbidden.
         #lunyOrderProgress .luny-progress-node{position:relative;z-index:1;display:grid;place-items:center;width:52px;height:52px;margin:0 auto 14px;border:2px solid #e7d7c7;border-radius:50%;background:#fff;color:#967452;font-size:20px;font-weight:700}
         #lunyOrderProgress .done .luny-progress-node,#lunyOrderProgress .current .luny-progress-node{border-color:#caa075;background:#caa075;color:#fff}
         #lunyOrderProgress .current .luny-progress-node{box-shadow:0 0 0 8px #f8f3ed}
-        #lunyOrderProgress .luny-progress-label{display:block;font-family:"Noto Serif TC","PMingLiU",serif;font-size:18px;line-height:1.6}
+        #lunyOrderProgress .luny-progress-label{display:block;font-family:inherit;font-size:16px;line-height:1.6;font-weight:700}
         #lunyOrderProgress .luny-progress-message{margin:24px 0 0;font-size:16px;line-height:1.8}
         #lunyOrderProgress .luny-progress-note{margin:8px 0 0;font-size:13px;line-height:1.7;color:#796c61}
-        #lunyOrderProgress .luny-progress-tracking{display:inline-flex;align-items:center;justify-content:center;min-height:44px;max-width:100%;margin-top:18px;padding:10px 28px;border:1px solid #b78250;border-radius:999px;color:#875a32;background:#fff;font-size:16px;font-weight:700;text-decoration:none}
+        #lunyOrderProgress .luny-progress-tracking{display:inline-flex;align-items:center;justify-content:center;min-height:44px;max-width:100%;margin-top:18px;padding:10px 28px;border:1px solid #b78250;border-radius:999px;color:#875a32;background:#fff;font-size:16px;font-weight:700;text-decoration:none;font-family:inherit;cursor:pointer}
         #lunyOrderProgress .luny-progress-tracking:hover{background:#faf5ef}
         #lunyOrderProgress .luny-progress-tracking:focus-visible{outline:3px solid #875a32;outline-offset:4px}
-        @media(max-width:480px){#lunyOrderProgress{width:calc(100% - 20px);padding:24px 12px}#lunyOrderProgress h2{font-size:24px}#lunyOrderProgress .luny-progress-label{font-size:16px}#lunyOrderProgress .luny-progress-node{width:44px;height:44px;font-size:18px}#lunyOrderProgress li:not(:last-child):after{top:21px;left:calc(50% + 25px);width:calc(100% - 50px)}}
+        @media(max-width:480px){#lunyOrderProgress{width:calc(100% - 20px);padding:24px 12px}#lunyOrderProgress h2{font-size:20px}#lunyOrderProgress .luny-progress-label{font-size:16px}#lunyOrderProgress .luny-progress-node{width:44px;height:44px;font-size:18px}#lunyOrderProgress li:not(:last-child):after{top:21px;left:calc(50% + 25px);width:calc(100% - 50px)}}
       `;
       document.head.appendChild(style);
     }
@@ -3148,10 +3187,13 @@ Amount/time/group guessing is forbidden.
   }
 
   function renderProgressCard(note){
+    progressDisplayNote = note || "";
     const card = ensureProgressCard();
     if (!card) return;
     const snapshot = progressSnapshot;
     const stage = snapshot ? snapshot.stage : -1;
+    const nativeTracking = stage === 2 ? nativeProgressTracking() : {url:"",multiple:false,section:null};
+    const trackingUrl = nativeTracking.url || (snapshot ? progressTrackingUrl(snapshot.trackingUrl) : "");
     const html = "<h2>訂單進度</h2><ol>" + progressLabels.map(function(label, index){
       const isCurrent = index === stage;
       const done = stage >= 0 && (index < stage || stage === 2);
@@ -3162,10 +3204,18 @@ Amount/time/group guessing is forbidden.
     }).join("") + "</ol><p class='luny-progress-message'>" +
       escapeHtml(stage >= 0 ? progressMessages[stage] : (note || "正在讀取訂單進度…")) + "</p>" +
       (stage >= 0 && note ? "<p class='luny-progress-note'>" + escapeHtml(note) + "</p>" : "") +
-      (stage === 2 && progressTrackingUrl(snapshot.trackingUrl) ?
+      (stage === 2 && nativeTracking.multiple ?
+        "<button type='button' class='luny-progress-tracking' data-luny-native-tracking='1'>查看配送進度</button>" :
+        stage === 2 && trackingUrl ?
         "<a class='luny-progress-tracking' target='_blank' rel='noopener noreferrer' href='" +
-        escapeHtml(progressTrackingUrl(snapshot.trackingUrl)) + "'>查看配送進度</a>" : "");
+        escapeHtml(trackingUrl) + "'>查看配送進度</a>" : "");
     if (card.innerHTML !== html) card.innerHTML = html;
+    card.onclick = function(event){
+      const button = event.target.closest && event.target.closest("[data-luny-native-tracking]");
+      if (!button) return;
+      const target = nativeProgressTracking().section;
+      if (target) target.scrollIntoView({behavior:"smooth",block:"start"});
+    };
   }
 
 
@@ -3263,13 +3313,15 @@ Amount/time/group guessing is forbidden.
   }
 
   function bootProgress(){
+    watchNativeProgressTracking();
     void readProgress();
     [1500, 5000].forEach(function(ms){ window.setTimeout(function(){void readProgress();}, ms); });
     progressTimer = window.setInterval(function(){void readProgress();}, 60000);
     document.addEventListener("visibilitychange", function(){ if (!document.hidden) void readProgress(); });
-    window.addEventListener("pagehide", function(){window.clearInterval(progressTimer);});
+    window.addEventListener("pagehide", function(){window.clearInterval(progressTimer);window.clearTimeout(nativeTrackingTimer);if(nativeTrackingObserver)nativeTrackingObserver.disconnect();nativeTrackingObserver=null;});
     window.addEventListener("pageshow", function(event){
       if(event.persisted){
+        watchNativeProgressTracking();
         window.clearInterval(progressTimer);
         progressTimer=window.setInterval(function(){void readProgress();},60000);
         void readProgress();
