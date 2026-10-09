@@ -2186,45 +2186,41 @@ Amount/time/group guessing is forbidden.
   }
 
 
-  function ensureStatusBox(){
-    let box = document.getElementById("lunyPhase1BindStatus");
-
-
-    if (!box && document.body){
-      box = document.createElement("div");
-      box.id = "lunyPhase1BindStatus";
-      box.style.cssText = [
-        "max-width:760px",
-        "margin:18px auto",
-        "padding:14px 16px",
-        "border:1px solid rgba(0,0,0,.12)",
-        "border-radius:14px",
-        "background:#fff",
-        "font-family:'Noto Sans TC',sans-serif",
-        "font-size:14px",
-        "line-height:1.6",
-        "box-shadow:0 4px 18px rgba(0,0,0,.06)"
-      ].join(";");
-
-
-      const target = Array.from(document.querySelectorAll("body *")).find(el => {
-        const text = clean(el.textContent || "");
-        return /訂單號碼|訂單編號|已經收到您的訂單|已收到您的訂單/.test(text) &&
-          text.length < 400;
-      });
-
-
-      if (target && target.parentNode){
-        target.parentNode.insertBefore(box, target.nextSibling);
-      }else{
-        document.body.prepend(box);
-      }
+  let customerOrderPanels = null;
+  function ensureOrderPanels(){
+    if (!document.body) return null;
+    if (!customerOrderPanels){
+      customerOrderPanels = document.createElement("div");
+      customerOrderPanels.id = "lunyOrderPanels";
     }
-
-
-    return box;
+    // Keep cards detached until the native order header exists. Never prepend to body.
+    const title = Array.from(document.querySelectorAll(".section-order .order-header h1")).find(function(el){
+      return /^訂單號碼\s*[：:]/.test(clean(el.textContent));
+    });
+    const header = title && title.closest(".order-header");
+    if (header && header.parentNode && header.nextSibling !== customerOrderPanels){
+      header.parentNode.insertBefore(customerOrderPanels, header.nextSibling);
+    }
+    return customerOrderPanels;
   }
 
+  function ensureStatusBox(){
+    const host = ensureOrderPanels();
+    if (!host) return null;
+    let box = document.getElementById("lunyPhase1BindStatus") || host.querySelector("#lunyPhase1BindStatus");
+    if (!box){
+      box = document.createElement("div");
+      box.id = "lunyPhase1BindStatus";
+    }
+    // Internal diagnostics remain available to the binding flow, but are not customer content.
+    box.hidden = true;
+    box.setAttribute("aria-hidden", "true");
+    box.style.setProperty("display", "none", "important");
+    if (box.parentNode !== host) host.appendChild(box);
+    const summary = document.getElementById("lunyPhase1OrderSummary") || host.querySelector("#lunyPhase1OrderSummary");
+    if (summary && box.nextSibling !== summary) host.insertBefore(summary, box.nextSibling);
+    return box;
+  }
 
   function renderBindStatus(status, data){
     const box = ensureStatusBox();
@@ -2951,7 +2947,9 @@ Amount/time/group guessing is forbidden.
     ensureSummaryStyle();
 
 
-    let box = document.getElementById("lunyPhase1OrderSummary");
+    const host = ensureOrderPanels();
+    if (!host) return;
+    let box = document.getElementById("lunyPhase1OrderSummary") || host.querySelector("#lunyPhase1OrderSummary");
 
 
     if (!box){
@@ -2968,7 +2966,7 @@ Amount/time/group guessing is forbidden.
           statusBox.nextSibling
         );
       }else{
-        document.body.appendChild(box);
+        host.appendChild(box);
       }
     }
 
@@ -3074,7 +3072,7 @@ Amount/time/group guessing is forbidden.
   // Notifications are persisted by GAS after verification; offline reports retry in this tab.
   const progressLabels = ["訂單確認", "製作中", "已出貨"];
   const progressMessages = [
-    "正在確認你的訂單內容。",
+    "已確認您的訂單，正在依序安排製作程序。",
     "訂單已進入製作流程。",
     "商品已寄出，請留意配送通知。"
   ];
@@ -3119,7 +3117,7 @@ Amount/time/group guessing is forbidden.
       const value = row.querySelector(".td");
       if (!label || !value || clean(label.textContent) !== "訂單狀態") return;
       const status = clean(value.textContent).replace(/\s+/g, "");
-      stages.push(status === "已完成" ? 2 : status === "已確認" ? 0 : -1);
+      stages.push(status === "已完成" ? 2 : status === "已確認" ? 0 : status === "確認中" ? -2 : status === "等待確認" ? -3 : -1);
     });
     return stages.length && stages.every(function(stage){return stage === stages[0];}) ? stages[0] : -1;
   }
@@ -3189,7 +3187,9 @@ Amount/time/group guessing is forbidden.
 
   function ensureProgressCard(){
     if (!document.body) return null;
-    let card = document.getElementById("lunyOrderProgress");
+    const host = ensureOrderPanels();
+    if (!host) return null;
+    let card = document.getElementById("lunyOrderProgress") || host.querySelector("#lunyOrderProgress");
     if (!document.getElementById("lunyOrderProgressStyle")){
       const style = document.createElement("style");
       style.id = "lunyOrderProgressStyle";
@@ -3224,22 +3224,26 @@ Amount/time/group guessing is forbidden.
     if (statusBox && statusBox.parentNode && card.nextSibling !== statusBox){
       statusBox.parentNode.insertBefore(card, statusBox);
     }else if (!card.parentNode){
-      document.body.prepend(card);
+      host.prepend(card);
     }
     return card;
   }
 
   function renderProgressCard(note){
-    progressDisplayNote = note || "";
+    // Network/auth/cache diagnostics are internal, not customer-facing copy.
+    note = "";
+    progressDisplayNote = "";
     const card = ensureProgressCard();
     if (!card) return;
     const currentOrder = extractOrderNo(collectPageText());
     const snapshot = progressSnapshot && progressSnapshot.orderNo === currentOrder ? progressSnapshot : null;
     const nativeStage = currentOrder ? nativeOrderProgressStage() : -1;
     // 1SHOP completion is authoritative for shipment. A confirmed order can still be in production.
-    const stage = nativeStage === 2 ? 2 : nativeStage === 0 ?
+    const stage = (nativeStage === -2 || nativeStage === -3) ? -1 : nativeStage === 2 ? 2 : nativeStage === 0 ?
       (snapshot && snapshot.stage >= 1 ? 1 : 0) : snapshot ? snapshot.stage : -1;
-    if (nativeStage === 2) note = "";
+    if (nativeStage === -3) note = "訂單正在等待確認中，請稍候。";
+    else if (nativeStage === -2) note = "訂單正在確認中，請聯繫客服協助處理。";
+    else if (nativeStage === 2) note = "";
     else if (nativeStage === 0 && stage === 0) note = "訂單已確認，製作進度將自動更新。";
     const nativeTracking = stage === 2 ? nativeProgressTracking() : {url:"",multiple:false,section:null};
     const trackingUrl = nativeTracking.url || (snapshot ? progressTrackingUrl(snapshot.trackingUrl) : "");
@@ -3287,6 +3291,36 @@ Amount/time/group guessing is forbidden.
     return false;
   }
 
+  async function fetchProgressWithRetry(endpoint, options, orderNo, identity){
+    let fallback = null;
+    for (let attempt = 0; attempt < 2; attempt++){
+      try{
+        const result = await fetchJsonWithTimeout(endpoint, options, CFG.summaryTimeoutMs);
+        // A definitive rejection must not be retried or replaced with cached data.
+        if (result && result.retryable === false && result.ok !== true) return result;
+        const valid = result && result.ok === true &&
+          clean(result.orderNo).toUpperCase() === orderNo.toUpperCase() &&
+          result.productionProgress && customerProgressStage(clean(result.productionProgress.status)) >= 0;
+        if (valid){
+          fallback = result;
+          if (!result.stale || attempt === 1) return result;
+        }else if (attempt === 1){
+          return result;
+        }
+      }catch(error){
+        if (attempt === 1){
+          if (fallback) return fallback;
+          throw error;
+        }
+      }
+      await new Promise(function(resolve){window.setTimeout(resolve, 2000);});
+      const current = extractOrderNo(collectPageText()) + "::" + getPublicOrderAccessToken();
+      if (document.hidden || identity !== progressIdentity || current !== identity){
+        throw new Error("PROGRESS_RETRY_CANCELLED");
+      }
+    }
+  }
+
   async function readProgress(){
     // Paint from 1SHOP immediately, even while an earlier GAS request is pending.
     renderProgressCard(progressDisplayNote);
@@ -3326,15 +3360,15 @@ Amount/time/group guessing is forbidden.
       renderProgressCard(progressSnapshot ? "顯示上次查詢進度，正在更新…" : "");
       const dedicatedUrl = clean(window.LUNY_ORDER_PROGRESS_URL || "");
       const endpoint = dedicatedUrl || GAS_URL;
-      const result = await fetchJsonWithTimeout(endpoint, {
+      const result = await fetchProgressWithRetry(endpoint, {
         method:"POST", mode:"cors", cache:"no-store", credentials:"omit",
         headers:{"Content-Type":"text/plain;charset=utf-8"},
         body:JSON.stringify({
           type:"getPublicOrderProgress",
           orderNo:orderNo, accessToken:token
         })
-      }, CFG.summaryTimeoutMs);
-      if (identity !== progressIdentity) return;
+      }, orderNo, identity);
+      if (identity !== progressIdentity || identity !== extractOrderNo(collectPageText()) + "::" + getPublicOrderAccessToken()) return;
       serverRecorded = !!(result && result.notificationRecorded);
       if (result && result.ok !== true && result.retryable === false && /TOKEN|AUTH|ACCESS|FORBIDDEN|ORDER_NOT_FOUND/.test(String(result.code || ""))){
         progressSnapshot = null;
@@ -3358,7 +3392,8 @@ Amount/time/group guessing is forbidden.
       try{ if(progressCacheKey) sessionStorage.setItem(progressCacheKey,JSON.stringify(progressSnapshot)); }catch(_){}
       if (!result.stale){try{if(progressCacheKey)sessionStorage.removeItem(progressCacheKey+"::pendingReport");}catch(_){}}
       renderProgressCard(result.stale ? "進度暫時無法更新，顯示上次取得的進度。" : result.cacheHit ? "顯示最近 20 秒內查詢的進度。" : "");
-    }catch(_){
+    }catch(error){
+      if (error && error.message === "PROGRESS_RETRY_CANCELLED") return;
       if (identity === progressIdentity){
         renderProgressCard(progressSnapshot ? "進度暫時無法更新，顯示上次取得的進度。" : "進度暫時無法取得，請稍後再試。");
         if(!serverRecorded){
