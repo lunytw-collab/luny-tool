@@ -3110,6 +3110,20 @@ Amount/time/group guessing is forbidden.
   }
 
 
+  function nativeOrderProgressStage(){
+    // Read only the native order-status field, never history messages or payment status.
+    const stages = [];
+    document.querySelectorAll(".card-block .row").forEach(function(row){
+      if (row.closest("#lunyOrderProgress,#lunyPhase1BindStatus,#lunyPhase1OrderSummary")) return;
+      const label = row.querySelector(".th");
+      const value = row.querySelector(".td");
+      if (!label || !value || clean(label.textContent) !== "訂單狀態") return;
+      const status = clean(value.textContent).replace(/\s+/g, "");
+      stages.push(status === "已完成" ? 2 : status === "已確認" ? 0 : -1);
+    });
+    return stages.length && stages.every(function(stage){return stage === stages[0];}) ? stages[0] : -1;
+  }
+
   function nativeProgressTracking(){
     const entries = [];
     let section = null;
@@ -3167,7 +3181,7 @@ Amount/time/group guessing is forbidden.
       if (!external) return;
       window.clearTimeout(nativeTrackingTimer);
       nativeTrackingTimer = window.setTimeout(function(){
-        if (progressSnapshot && progressSnapshot.stage === 2) renderProgressCard(progressDisplayNote);
+        renderProgressCard(progressDisplayNote);
       }, 120);
     });
     nativeTrackingObserver.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:["href"]});
@@ -3219,8 +3233,14 @@ Amount/time/group guessing is forbidden.
     progressDisplayNote = note || "";
     const card = ensureProgressCard();
     if (!card) return;
-    const snapshot = progressSnapshot;
-    const stage = snapshot ? snapshot.stage : -1;
+    const currentOrder = extractOrderNo(collectPageText());
+    const snapshot = progressSnapshot && progressSnapshot.orderNo === currentOrder ? progressSnapshot : null;
+    const nativeStage = currentOrder ? nativeOrderProgressStage() : -1;
+    // 1SHOP completion is authoritative for shipment. A confirmed order can still be in production.
+    const stage = nativeStage === 2 ? 2 : nativeStage === 0 ?
+      (snapshot && snapshot.stage >= 1 ? 1 : 0) : snapshot ? snapshot.stage : -1;
+    if (nativeStage === 2) note = "";
+    else if (nativeStage === 0 && stage === 0) note = "訂單已確認，製作進度將自動更新。";
     const nativeTracking = stage === 2 ? nativeProgressTracking() : {url:"",multiple:false,section:null};
     const trackingUrl = nativeTracking.url || (snapshot ? progressTrackingUrl(snapshot.trackingUrl) : "");
     const html = "<h2>訂單進度</h2><ol>" + progressLabels.map(function(label, index){
@@ -3268,6 +3288,8 @@ Amount/time/group guessing is forbidden.
   }
 
   async function readProgress(){
+    // Paint from 1SHOP immediately, even while an earlier GAS request is pending.
+    renderProgressCard(progressDisplayNote);
     if (progressBusy || document.hidden) return;
     const orderNo = extractOrderNo(collectPageText());
     if (!orderNo) return;
@@ -3352,7 +3374,10 @@ Amount/time/group guessing is forbidden.
   function bootProgress(){
     watchNativeProgressTracking();
     void readProgress();
-    [1500, 5000].forEach(function(ms){ window.setTimeout(function(){void readProgress();}, ms); });
+    // Fast native checks do not wait for network requests and are coalesced by readProgress.
+    [250, 500, 1000, 1500, 2500, 4000, 5000].forEach(function(ms){
+      window.setTimeout(function(){void readProgress();}, ms);
+    });
     progressTimer = window.setInterval(function(){void readProgress();}, 60000);
     document.addEventListener("visibilitychange", function(){ if (!document.hidden) void readProgress(); });
     window.addEventListener("pagehide", function(){window.clearInterval(progressTimer);window.clearTimeout(nativeTrackingTimer);if(nativeTrackingObserver)nativeTrackingObserver.disconnect();nativeTrackingObserver=null;});
