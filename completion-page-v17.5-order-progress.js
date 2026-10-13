@@ -3063,42 +3063,16 @@ Amount/time/group guessing is forbidden.
 
 
 
-  // v17.5 customer progress. Backend integration contract:
-  // getPublicOrderProgress must return a verified orderNo and productionProgress:
-  // { status: "待確認"|...|"完成訂單", trackingUrl?: "https://..." }.
-  // A dedicated public, order-authenticated endpoint may be supplied through
-  // window.LUNY_ORDER_PROGRESS_URL; it receives type=getPublicOrderProgress.
-  // Never point this at the private shipping site's internal items API.
-  // Notifications are persisted by GAS after verification; offline reports retry in this tab.
+  // Customer progress uses only the native 1SHOP order status and logistics DOM.
   const progressLabels = ["訂單確認", "製作中", "已出貨"];
   const progressMessages = [
     "已確認您的訂單，正在依序安排製作程序。",
     "訂單已進入製作流程。",
     "商品已寄出，請留意配送通知。"
   ];
-  let progressOrder = "";
-  let progressSnapshot = null;
-  let progressBusy = false;
-  let lastProgressRequestAt = 0;
-  let progressCacheKey = "";
-  let progressIdentity = "";
   let progressTimer = null;
-  let progressDisplayNote = "";
   let nativeTrackingObserver = null;
   let nativeTrackingTimer = null;
-
-  function customerProgressStage(status){
-    const map = {
-      "待確認":0, "已確認":0, "待生產分流":0,
-      "製作中":1, "檔案確認":1, "檔案製作":1, "校稿估價":1, "校稿/估價":1,
-      "校稿中":1, "印刷":1, "印刷中":1, "發包中":1,
-      "出貨":1, "包貨":1, "待出貨":1, "水晶貼紙":1,
-      "待建立支援檔":1, "待建立發包檔":1, "待印刷":1,
-      "待製檔檢查":1, "待排版":1, "印刷完成":1,
-      "完成訂單":2
-    };
-    return Object.prototype.hasOwnProperty.call(map, status) ? map[status] : -1;
-  }
 
   function progressTrackingUrl(value){
     try{
@@ -3117,7 +3091,7 @@ Amount/time/group guessing is forbidden.
       const value = row.querySelector(".td");
       if (!label || !value || clean(label.textContent) !== "訂單狀態") return;
       const status = clean(value.textContent).replace(/\s+/g, "");
-      stages.push(status === "已完成" ? 2 : status === "已確認" ? 0 : status === "確認中" ? -2 : status === "等待確認" ? -3 : -1);
+      stages.push(status === "已完成" ? 2 : status === "已確認" ? 1 : status === "確認中" ? -2 : status === "等待確認" ? -3 : -1);
     });
     return stages.length && stages.every(function(stage){return stage === stages[0];}) ? stages[0] : -1;
   }
@@ -3179,7 +3153,7 @@ Amount/time/group guessing is forbidden.
       if (!external) return;
       window.clearTimeout(nativeTrackingTimer);
       nativeTrackingTimer = window.setTimeout(function(){
-        renderProgressCard(progressDisplayNote);
+        renderProgressCard();
       }, 120);
     });
     nativeTrackingObserver.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:["href"]});
@@ -3229,24 +3203,17 @@ Amount/time/group guessing is forbidden.
     return card;
   }
 
-  function renderProgressCard(note){
-    // Network/auth/cache diagnostics are internal, not customer-facing copy.
-    note = "";
-    progressDisplayNote = "";
+  function renderProgressCard(){
+    let note = "";
     const card = ensureProgressCard();
     if (!card) return;
     const currentOrder = extractOrderNo(collectPageText());
-    const snapshot = progressSnapshot && progressSnapshot.orderNo === currentOrder ? progressSnapshot : null;
     const nativeStage = currentOrder ? nativeOrderProgressStage() : -1;
-    // 1SHOP completion is authoritative for shipment. A confirmed order can still be in production.
-    const stage = (nativeStage === -2 || nativeStage === -3) ? -1 : nativeStage === 2 ? 2 : nativeStage === 0 ?
-      (snapshot && snapshot.stage >= 1 ? 1 : 0) : snapshot ? snapshot.stage : -1;
+    const stage = nativeStage >= 0 ? nativeStage : -1;
     if (nativeStage === -3) note = "訂單正在等待確認中，請稍候。";
-    else if (nativeStage === -2) note = "訂單正在確認中，請聯繫客服協助處理。";
-    else if (nativeStage === 2) note = "";
-    else if (nativeStage === 0 && stage === 0) note = "訂單已確認，製作進度將自動更新。";
+    else if (nativeStage === -2) note = "您的訂單未確認，請盡快聯繫LINE客服協助處理。";
     const nativeTracking = stage === 2 ? nativeProgressTracking() : {url:"",multiple:false,section:null};
-    const trackingUrl = nativeTracking.url || (snapshot ? progressTrackingUrl(snapshot.trackingUrl) : "");
+    const trackingUrl = nativeTracking.url;
     const html = "<h2>訂單進度</h2><ol>" + progressLabels.map(function(label, index){
       const isCurrent = index === stage;
       const done = stage >= 0 && (index < stage || stage === 2);
@@ -3276,140 +3243,15 @@ Amount/time/group guessing is forbidden.
   }
 
 
-  async function reportProgressFailure(orderNo,token,cacheKey){
-    try{
-      const result=await fetchJsonWithTimeout(GAS_URL,{
-        method:"POST",mode:"cors",cache:"no-store",credentials:"omit",
-        headers:{"Content-Type":"text/plain;charset=utf-8"},
-        body:JSON.stringify({type:"reportPublicOrderProgressFailure",orderNo:orderNo,accessToken:token})
-      },10000);
-      if(result && result.ok===true && result.orderNo===orderNo && result.notificationRecorded===true){
-        try{if(cacheKey)sessionStorage.removeItem(cacheKey+"::pendingReport");}catch(_){}
-        return true;
-      }
-    }catch(_){}
-    return false;
-  }
-
-  async function fetchProgressWithRetry(endpoint, options, orderNo, identity){
-    let fallback = null;
-    for (let attempt = 0; attempt < 2; attempt++){
-      try{
-        const result = await fetchJsonWithTimeout(endpoint, options, CFG.summaryTimeoutMs);
-        // A definitive rejection must not be retried or replaced with cached data.
-        if (result && result.retryable === false && result.ok !== true) return result;
-        const valid = result && result.ok === true &&
-          clean(result.orderNo).toUpperCase() === orderNo.toUpperCase() &&
-          result.productionProgress && customerProgressStage(clean(result.productionProgress.status)) >= 0;
-        if (valid){
-          fallback = result;
-          if (!result.stale || attempt === 1) return result;
-        }else if (attempt === 1){
-          return result;
-        }
-      }catch(error){
-        if (attempt === 1){
-          if (fallback) return fallback;
-          throw error;
-        }
-      }
-      await new Promise(function(resolve){window.setTimeout(resolve, 2000);});
-      const current = extractOrderNo(collectPageText()) + "::" + getPublicOrderAccessToken();
-      if (document.hidden || identity !== progressIdentity || current !== identity){
-        throw new Error("PROGRESS_RETRY_CANCELLED");
-      }
-    }
-  }
-
-  async function readProgress(){
-    // Paint from 1SHOP immediately, even while an earlier GAS request is pending.
-    renderProgressCard(progressDisplayNote);
-    if (progressBusy || document.hidden) return;
-    const orderNo = extractOrderNo(collectPageText());
-    if (!orderNo) return;
-    const token = getPublicOrderAccessToken();
-    const identity = orderNo + "::" + token;
-    if (progressIdentity !== identity){
-      progressIdentity = identity;
-      progressOrder = orderNo;
-      progressSnapshot = null;
-      progressCacheKey = "";
-      lastProgressRequestAt = 0;
-    }
-    if (!token){
-      renderProgressCard("請從原本的訂單查詢連結查看進度。");
-      return;
-    }
-    if (lastProgressRequestAt && Date.now() - lastProgressRequestAt < 15000) return;
-    lastProgressRequestAt = Date.now();
-    progressBusy = true;
-    let serverRecorded = false;
-    try{
-      if (!progressCacheKey && window.crypto && window.crypto.subtle){
-        const digest = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity));
-        progressCacheKey = "LUNY_ORDER_PROGRESS_V1::" +
-          Array.from(new Uint8Array(digest)).map(function(byte){return byte.toString(16).padStart(2,"0");}).join("");
-        try{
-          const saved = safeParse(sessionStorage.getItem(progressCacheKey), null);
-          if (saved && saved.orderNo === orderNo && Number.isInteger(saved.stage) && saved.stage >= 0 && saved.stage <= 2){
-            progressSnapshot = saved;
-          }
-        }catch(_){}
-      }
-      // Query first. A recovered read supersedes an unsent transient error.
-      renderProgressCard(progressSnapshot ? "顯示上次查詢進度，正在更新…" : "");
-      const dedicatedUrl = clean(window.LUNY_ORDER_PROGRESS_URL || "");
-      const endpoint = dedicatedUrl || GAS_URL;
-      const result = await fetchProgressWithRetry(endpoint, {
-        method:"POST", mode:"cors", cache:"no-store", credentials:"omit",
-        headers:{"Content-Type":"text/plain;charset=utf-8"},
-        body:JSON.stringify({
-          type:"getPublicOrderProgress",
-          orderNo:orderNo, accessToken:token
-        })
-      }, orderNo, identity);
-      if (identity !== progressIdentity || identity !== extractOrderNo(collectPageText()) + "::" + getPublicOrderAccessToken()) return;
-      serverRecorded = !!(result && result.notificationRecorded);
-      if (result && result.ok !== true && result.retryable === false && /TOKEN|AUTH|ACCESS|FORBIDDEN|ORDER_NOT_FOUND/.test(String(result.code || ""))){
-        progressSnapshot = null;
-        try{ if(progressCacheKey) sessionStorage.removeItem(progressCacheKey); }catch(_){}
-        renderProgressCard("訂單資料需要確認，請使用原本的訂單查詢連結。");
-        return;
-      }
-      if (!result || result.ok !== true || clean(result.orderNo).toUpperCase() !== orderNo.toUpperCase()){
-        throw new Error("PROGRESS_READ_FAILED");
-      }
-      const data = result.productionProgress;
-      const stage = data && customerProgressStage(clean(data.status));
-      if (!data || stage < 0 || !Number.isInteger(stage)){
-        throw new Error("PROGRESS_NOT_AVAILABLE");
-      }
-      progressSnapshot = {
-        orderNo:orderNo, stage:stage,
-        trackingUrl:stage === 2 ? progressTrackingUrl(data.trackingUrl) : "",
-        readAt:data.updatedAt || new Date().toISOString()
-      };
-      try{ if(progressCacheKey) sessionStorage.setItem(progressCacheKey,JSON.stringify(progressSnapshot)); }catch(_){}
-      if (!result.stale){try{if(progressCacheKey)sessionStorage.removeItem(progressCacheKey+"::pendingReport");}catch(_){}}
-      renderProgressCard(result.stale ? "進度暫時無法更新，顯示上次取得的進度。" : result.cacheHit ? "顯示最近 20 秒內查詢的進度。" : "");
-    }catch(error){
-      if (error && error.message === "PROGRESS_RETRY_CANCELLED") return;
-      if (identity === progressIdentity){
-        renderProgressCard(progressSnapshot ? "進度暫時無法更新，顯示上次取得的進度。" : "進度暫時無法取得，請稍後再試。");
-        if(!serverRecorded){
-          try{if(progressCacheKey)sessionStorage.setItem(progressCacheKey+"::pendingReport","1");}catch(_){}
-          await reportProgressFailure(orderNo,token,progressCacheKey);
-        }
-      }
-    }finally{
-      progressBusy = false;
-    }
+  function readProgress(){
+    // No production API, progress cache, credentials, retries or error reports.
+    renderProgressCard();
   }
 
   function bootProgress(){
     watchNativeProgressTracking();
     void readProgress();
-    // Fast native checks do not wait for network requests and are coalesced by readProgress.
+    // Observe native rendering and check again during initial page loading.
     [250, 500, 1000, 1500, 2500, 4000, 5000].forEach(function(ms){
       window.setTimeout(function(){void readProgress();}, ms);
     });
