@@ -1,0 +1,26 @@
+
+.speed-quantity-row{display:block!important}
+#lunyShipDateAtSelection{margin:10px 0 24px}
+#lunyShipDateAtSelection .luny-ship-date-box{margin:0!important;padding:16px!important;background:#f0eff3!important;border:1px solid #dedde3!important;border-radius:16px!important}
+#lunyShipDateAtSelection .ship-date-main{font-size:21px!important;font-weight:800!important;line-height:1.5!important}
+#lunyShipDateAtSelection .ship-date-sub{font-size:14px!important;line-height:1.7!important;color:#666!important}
+.luny-ship-rules{margin-top:8px;font-size:13px;color:#555}.luny-ship-rules summary{cursor:pointer;width:fit-content;text-decoration:underline}.luny-ship-rules p{margin:8px 0 0;line-height:1.8}
+#lunyUrgentCards{display:none!important}
+.quantity-card-wrap>label{font-size:23px!important;font-weight:800!important}
+.luny-quantity-intro{margin:6px 0 14px;color:#666;font-size:14px}
+#lunyQuantityCards{border:1px solid #dedee4!important;border-radius:16px!important;overflow:hidden!important;background:#fff!important}
+#lunyQuantityCards .luny-quantity-row{position:relative!important;display:grid!important;grid-template-columns:22px minmax(70px,.8fr) minmax(120px,1.4fr)!important;gap:4px 12px!important;align-items:center!important;width:100%!important;min-height:88px!important;padding:16px!important;border:0!important;border-bottom:1px solid #e8e8ed!important;border-radius:0!important;background:#fff!important;color:#171717!important;text-align:left!important;box-sizing:border-box!important}
+#lunyQuantityCards .luny-quantity-row:before{content:'';display:block;width:19px;height:19px;border:2px solid #aaa;border-radius:50%;box-sizing:border-box;grid-column:1;grid-row:1}
+#lunyQuantityCards .luny-quantity-row.is-active{background:#fff9e8!important;box-shadow:inset 0 0 0 2px #e9b900!important;border-radius:12px!important}
+#lunyQuantityCards .luny-quantity-row.is-active:before{border-color:#dca900;background:radial-gradient(circle,#dca900 0 43%,transparent 49%)}
+#lunyQuantityCards .luny-quantity-row:focus-visible{outline:3px solid #a57800!important;outline-offset:-4px}
+#lunyQuantityCards .luny-quantity-main{grid-column:2;grid-row:1;font-size:18px!important;font-weight:700!important;white-space:nowrap}
+#lunyQuantityCards .luny-quantity-price-wrap{grid-column:3;grid-row:1;display:flex!important;flex-direction:column!important;align-items:flex-start!important;gap:4px!important;min-width:0}
+#lunyQuantityCards .luny-quantity-price{font-size:21px!important;line-height:1.3!important;font-weight:800!important;white-space:normal!important}
+#lunyQuantityCards .luny-quantity-unit{font-size:13px!important;font-weight:400!important;color:#666!important;line-height:1.4}
+#lunyQuantityCards .luny-quantity-discount{grid-column:2 / 4;grid-row:2;justify-self:start!important;background:#ffeb9c!important;color:#514000!important;border-radius:8px!important;font-size:12px!important;font-weight:700!important;padding:4px 8px!important;margin-top:5px!important;white-space:normal!important}
+#lunyQuantityCards .luny-quantity-discount:empty{display:none!important}
+#lunyQuantityCards .luny-quantity-row.is-disabled{opacity:.5!important}
+#lunyQuantityCards .luny-quantity-more{display:block!important;width:100%!important;min-height:54px!important;border:0!important;border-radius:0!important;background:#fafafa!important;color:#333!important;font-size:15px!important;font-weight:700!important;padding:14px!important}
+.luny-quantity-freight-note{font-size:12px;color:#777;margin:10px 0}
+@media(max-width:360px){#lunyQuantityCards .luny-quantity-row{gap:4px 8px!important;padding:13px 10px!important;grid-template-columns:20px minmax(65px,.8fr) minmax(110px,1.4fr)!important}#lunyQuantityCards .luny-quantity-price{font-size:19px!important}}
