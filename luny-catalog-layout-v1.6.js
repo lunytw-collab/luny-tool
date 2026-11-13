@@ -978,14 +978,17 @@ async function pngResolution(blob,ppi){
 async function exportAsset(kind){
   if(!state.generated||!validation().ok)throw Error('請先完成排版並確認成品預覽。');
   const s=E.SIZES[state.size],bleed=kind==='preview'?0:E.RULES.bleed;
-  if(!['preview','print','cut'].includes(kind))throw Error('不支援此輸出類型。');
+  if(!['preview','print','cut','stickers'].includes(kind))throw Error('不支援此輸出類型。');
   const density=kind==='preview'?Math.min(2,480/s[1]):E.RULES.ppi/25.4,c=document.createElement('canvas');
   c.width=Math.round((s[0]+2*bleed)*density);c.height=Math.round((s[1]+2*bleed)*density);
   try{
     const x=c.getContext('2d');if(!x)throw Error('瀏覽器無法建立輸出畫布。');x.scale(density,density);x.translate(bleed,bleed);
     if(kind==='cut'){
-      x.fillStyle='#fff';x.fillRect(-bleed,-bleed,s[0]+2*bleed,s[1]+2*bleed);x.strokeStyle='#000';x.lineWidth=.1;
-      for(const item of state.items){E.path(x,E.worldPoints(item));x.stroke();}
+      x.fillStyle='#fff';x.fillRect(-bleed,-bleed,s[0]+2*bleed,s[1]+2*bleed);
+      x.fillStyle='#000';
+      for(const item of state.items){E.path(x,E.worldPoints(item));x.fill();}
+    }else if(kind==='stickers'){
+      for(const item of state.items)E.drawArtwork(x,item,true);
     }else E.drawSheet(x,state.items,s,state.background,state.color,bleed);
     const blob=await blobFromCanvas(c,kind==='preview'?'image/jpeg':'image/png');return kind==='preview'?blob:await pngResolution(blob,E.RULES.ppi);
   }finally{c.width=c.height=1;}
@@ -1021,12 +1024,12 @@ async function onlineSave(){
     state.busy=true;root.inert=true;window.__LUNY_SAVE_DESIGN_GLOBAL_LOCK__=true;
     isSavingDesign=true;isDesignReadyForCheckout=false;setCheckoutUILocked(true);updateOrderButtonState();
     // A retry reuses the design ID and completed uploads; never creates a second design.
-    for(const kind of ['preview','print','cut'])if(!cache.uploads[kind]){
-      const label={preview:'預覽圖',print:'500ppi 印刷圖',cut:'刀線檔'}[kind];setSaveStatus('正在產生與上傳'+label+'…');
+    for(const [kind,label] of Object.entries({preview:'預覽圖',print:'500ppi 印刷圖',cut:'刀線檔',stickers:'透明底貼紙圖'}))if(!cache.uploads[kind]){
+      setSaveStatus('正在產生與上傳'+label+'…');
       cache.uploads[kind]=await uploadAsset(cache.id,kind,await exportAsset(kind));
     }
     const assets=assetMeta(cache.uploads),metadata=layoutMetadata();
-    q.catalogLayout={...metadata,items:metadata.items.map(({cutPoints,...item})=>item)};
+    q.catalogLayout={...metadata,items:metadata.items.map(({cutPoints,...item})=>item),stickersFileUrl:assets.stickersFileUrl};
     if(JSON.stringify(q).length>45000)throw Error('排版資料過大，請減少物件數量或縮短檔名。');
     const body={type:'design',v:5,designId:cache.id,savedAt:new Date().toISOString(),productType:'CATALOG',productCode:'圖鑑貼紙',productName:'圖鑑貼紙',quote:q,widthCm:q.widthCm,heightCm:q.heightCm,fileMode:'catalog_online',catalog:{mode:'online',status:'待人工檢查'},catalogLayout:q.catalogLayout,assets,assetStatus:'done',status:'待人工檢查',page:{href:location.href,path:location.pathname,title:document.title}};
     setSaveStatus('圖檔已上傳，正在確認設計資料…');
@@ -1209,7 +1212,7 @@ function install(){
   bindCanvas();setMode('online');
   const copyObserver=new MutationObserver(syncCopy);
   [document.querySelector('.layout-right .editor-main-title'),document.querySelector('.layout-right .editor-step-pill'),$('controls'),$('catalogPriceHint'),$('unitPriceHint'),$('quoteNextStepBtn'),$('orderNote')].filter(Boolean).forEach(el=>copyObserver.observe(el,{childList:true,characterData:true,subtree:true}));
-  window.LUNY_CATALOG_LAYOUT={version:'1.6.0',getState:()=>({...layoutMetadata(),generated:state.generated,mode:state.mode,cloudService:state.cloudService}),validate:validation,generate,exportAsset};
+  window.LUNY_CATALOG_LAYOUT={version:'1.6.1',getState:()=>({...layoutMetadata(),generated:state.generated,mode:state.mode,cloudService:state.cloudService}),validate:validation,generate,exportAsset};
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
 })();
