@@ -1089,13 +1089,15 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
       group.hidden=!open;
       group.style.setProperty('display',open?'grid':'none','important');
     }
-    setOpen(isSpecial());
+    setOpen(true);
     // Only the special group gets independent toggle behaviour; material selection is unchanged.
     button.addEventListener('click',function(event){
       event.preventDefault();event.stopImmediatePropagation();
       setOpen(button.getAttribute('aria-expanded')!=='true');
     },true);
-    select.addEventListener('change',function(){setOpen(isSpecial());});
+    select.addEventListener('change',function(){
+      setOpen(isSpecial() || button.getAttribute('aria-expanded') === 'true');
+    });
     group.addEventListener('click',function(event){
       if(event.target.closest('.material-card'))setOpen(true);
     });
@@ -1125,3 +1127,68 @@ function boot(){
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
+
+
+/* Label page: clear, neutral special-processing disclosure. */
+(function(){
+  'use strict';
+  if(location.pathname.replace(/\/+$/, '') !== '/label-stickers') return;
+  if(document.getElementById('lunySpecialDisclosure20261119')) return;
+  var style=document.createElement('style');
+  style.id='lunySpecialDisclosure20261119';
+  style.textContent=`
+#lunyUXSpecial{
+  border:1px solid #cdd1d6!important;border-radius:14px!important;
+  background:#fff!important;box-shadow:0 2px 7px rgba(20,30,45,.035);
+  overflow:hidden;
+}
+#lunyUXSpecial>summary{
+  position:relative;display:block!important;box-sizing:border-box;
+  min-height:88px;padding:18px 122px 18px 20px!important;
+  list-style:none!important;cursor:pointer;background:#fff!important;
+  color:#20242a;transition:background-color .15s ease;
+}
+#lunyUXSpecial>summary::-webkit-details-marker{display:none}
+#lunyUXSpecial>summary::marker{content:""}
+#lunyUXSpecial>summary:hover{background:#f8f9fa!important}
+#lunyUXSpecial>summary:focus-visible{
+  outline:2px solid #59636f;outline-offset:-4px;border-radius:13px;
+}
+#lunyUXSpecial>summary .luny-special-main{
+  display:block!important;margin:0!important;font-size:18px!important;
+  line-height:1.5!important;font-weight:700!important;color:#20242a!important;
+}
+#lunyUXSpecial>summary .luny-special-hint{
+  display:block!important;margin:4px 0 0!important;font-size:13px!important;
+  line-height:1.6!important;font-weight:400!important;color:#6b7280!important;
+}
+#lunyUXSpecial>summary::before{
+  content:"展開"!important;position:absolute!important;inset:auto!important;
+  right:72px!important;top:50%!important;transform:translateY(-50%)!important;
+  margin:0!important;padding:0!important;border:0!important;background:none!important;
+  width:auto!important;height:auto!important;float:none!important;
+  color:#252a31!important;font-size:14px!important;font-weight:600!important;
+  line-height:1.5!important;white-space:nowrap;
+}
+#lunyUXSpecial>summary::after{
+  content:""!important;position:absolute!important;inset:auto!important;
+  right:18px!important;top:50%!important;transform:translateY(-50%)!important;
+  display:block!important;width:42px!important;height:42px!important;
+  margin:0!important;padding:0!important;border:0!important;border-radius:10px!important;
+  background:#eef0f3 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='m5 7.5 5 5 5-5' fill='none' stroke='%23252a31' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/20px 20px no-repeat!important;
+  float:none!important;box-shadow:none!important;
+}
+#lunyUXSpecial[open]>summary::before{content:"收合"!important}
+#lunyUXSpecial[open]>summary::after{transform:translateY(-50%) rotate(180deg)!important}
+#lunyUXSpecial[open]>summary{border-bottom:1px solid #e5e7eb}
+@media(max-width:480px){
+  #lunyUXSpecial>summary{padding:16px 105px 16px 16px!important;min-height:88px}
+  #lunyUXSpecial>summary::before{right:62px!important}
+  #lunyUXSpecial>summary::after{right:12px!important;width:38px!important;height:38px!important}
+  #lunyUXSpecial>summary .luny-special-main{font-size:16px!important}
+  #lunyUXSpecial>summary .luny-special-hint{font-size:12px!important}
+}
+`;
+  document.head.appendChild(style);
+})();
+
