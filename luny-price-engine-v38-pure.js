@@ -4,7 +4,7 @@
   /* LUNY price engine v38
      更新：新增純試算函式 getPriceForSpec / getAllQuantityPricesForSpec，不操作 DOM，供數量卡片直接顯示全價格、降低切換材質/上膜/急件卡頓。
      原 v37：修正方形 value 為 square 時，被誤判成特殊形狀的問題。
-     現在 square / rect / rectangle / roundrect / rounded 都會歸類為建豪方形 / 圓角方形規格。
+     現在 square / rect / rectangle / roundrect / rounded 都會歸類為標準方形 / 圓角方形規格。
      修正 5.5 × 17cm、17 × 5.5cm 方形被限制最多只能下單 1000 張的問題。
 
      原 v36：

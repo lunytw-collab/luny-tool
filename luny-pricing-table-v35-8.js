@@ -1,9 +1,9 @@
 
 (function () {
-  // 材質倍率統一回貼紙先生邏輯：
-  // 銅板上膜基準價先對齊貼紙先生，再由這裡產生各材質價格。
-  // 冷凍珠光：依貼紙先生約 1.77 倍。
-  // 一般防水珠光：依你提供的 3x3 貼紙先生價格，500 張以上約為 1.20 倍。
+  // 材質倍率統一回市場基準邏輯：
+  // 銅板上膜基準價先對齊市場基準，再由這裡產生各材質價格。
+  // 冷凍珠光：依市場基準約 1.77 倍。
+  // 一般防水珠光：依你提供的 3x3 市場基準價格，500 張以上約為 1.20 倍。
   var MATERIAL_MULTIPLIER = {
     artpaper_laminated: 1,
     artpaper_none: 0.9,
@@ -20,7 +20,7 @@
     shtte: 0.9
   };
 
-  // 不再針對 35 / 56 / 88 模壓低冷凍珠光倍率，避免小尺寸珠光比貼紙先生便宜太多。
+  // 不再針對 35 / 56 / 88 模壓低冷凍珠光倍率，避免小尺寸珠光比市場基準便宜太多。
   var PEARLESCENT_MODULE_MULTIPLIER = {};
 
   // 一般防水珠光也取消 35 / 56 / 88 模的特殊倍率，統一吃 MATERIAL_MULTIPLIER.normal_pearlescent_laminated。
@@ -59,9 +59,9 @@
     10000: 28
   };
 
-  // 指定尺寸對齊貼紙先生價格：
+  // 指定尺寸對齊市場基準價格：
   // 3x3cm = 88模、4x4cm = 56模、5x5cm = 35模。
-  // 1000張起含1000張，價格對齊貼紙先生，個位數無條件捨去。
+  // 1000張起含1000張，價格對齊市場基準，個位數無條件捨去。
   var STICKER_MR_MATCH_FROM_1000 = {
     56: {
       1000: 773,
@@ -315,7 +315,7 @@
   }
 
   // 一般防水珠光需直接依照更新後的銅板基準價 × 對應倍率計算。
-  // 不再套用貼紙先生保底價，避免基準價已調降後仍被保底邏輯拉高。
+  // 不再套用市場基準保底價，避免基準價已調降後仍被保底邏輯拉高。
   var normalPearlescentLaminated = buildPricingTableByQtyModule(
     MATERIAL_MULTIPLIER.normal_pearlescent_laminated,
     NORMAL_PEARLESCENT_MODULE_MULTIPLIER,

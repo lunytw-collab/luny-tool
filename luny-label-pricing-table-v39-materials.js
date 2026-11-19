@@ -550,8 +550,8 @@
     MARKET_REFERENCE_MULTIPLIER.transparent_laminated
   );
 
-  // 貼紙先生同規格薄型亮銀龍相對銅板上膜約為 1.51 倍。
-  // 健豪未標示番數，因此番數只作內部市場比價依據，不寫入前台或訂單規格。
+  // 薄型亮銀龍相對銅板上膜的材質倍率約為 1.51 倍。
+  // 報價依目前材質規格計算，前台及訂單規格不另外顯示番數。
   var silverLaminated = buildPricingTableFromMarketReference(
     MATERIAL_MULTIPLIER.silver_laminated
   );
