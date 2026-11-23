@@ -455,6 +455,8 @@
 
   var analysisToken=0;
   var previewUrl="";
+  var analyzedFile=null;
+  var analysisPending=false;
   function $(id){ return document.getElementById(id); }
   function format(value,digits){
     return Number(value||0).toFixed(digits==null?2:digits).replace(/0+$/,'').replace(/\.$/,'');
@@ -548,6 +550,12 @@
   }
   async function analyze(file){
     var token=++analysisToken;
+    analyzedFile=null;
+    analysisPending=!!file;
+    window.LUNY_CRYSTAL_ART_RATIO=null;
+    window.LUNY_CUSTOM_ACTUAL_SIZE=null;
+    if($("customActualWidthCm"))$("customActualWidthCm").value="";
+    if($("customActualHeightCm"))$("customActualHeightCm").value="";
     var note=$("customActualSizeNote");
     if(note)note.textContent="正在讀取圖案比例與透明範圍…";
     if(!file){
@@ -568,6 +576,8 @@
         whitePixelsCountAsArtwork:true
       };
       window.LUNY_CRYSTAL_ART_RATIO=ratio;
+      analyzedFile=file;
+      analysisPending=false;
       setLimit(ratio.ratioWidth,ratio.ratioHeight);
       var trimmedPreview=makeTrimmedPreview(decoded.image,bounds);
       previewUrl=trimmedPreview;
@@ -575,20 +585,75 @@
       try{window.dispatchEvent(new CustomEvent("luny:crystal-art-ratio-updated",{detail:ratio}));}catch(e){}
       window.setTimeout(function(){applyPreview(trimmedPreview);},120);
     }catch(error){
+      if(token!==analysisToken)return;
       window.LUNY_CRYSTAL_ART_RATIO=null;
       window.LUNY_CUSTOM_ACTUAL_SIZE=null;
       if(note)note.textContent="無法讀取圖片比例，請重新選擇 PNG。";
     }finally{
+      if(token===analysisToken)analysisPending=false;
       if(decoded&&decoded.url)try{URL.revokeObjectURL(decoded.url);}catch(e){}
     }
+  }
+  /* A preview-density change invalidates the legacy cutline cache and clears
+     actual dimensions. Artwork ratio belongs to the selected PNG, not that
+     cache: derive dimensions again before pricing and every save/retry. */
+  function syncActualSize(required){
+    if(!isCrystalPage()||!$("shape")||$("shape").value!=="custom")return null;
+    var input=$("imgFile");
+    var file=input&&input.files&&input.files[0];
+    var ratio=window.LUNY_CRYSTAL_ART_RATIO;
+    var side=Number($("customLongSideCm")&&$("customLongSideCm").value);
+    var rw=Number(ratio&&ratio.ratioWidth),rh=Number(ratio&&ratio.ratioHeight);
+    if(!file||file!==analyzedFile||analysisPending||!(rw>0)||!(rh>0)||!Number.isFinite(side)||side<=0){
+      if(required)throw new Error("圖案比例尚未確認，請等候 PNG 讀取完成；若仍無法確認，請重新選擇 PNG 後再加入結帳清單。");
+      return null;
+    }
+    var width=Number((side*rw/Math.max(rw,rh)).toFixed(4));
+    var height=Number((side*rh/Math.max(rw,rh)).toFixed(4));
+    if(width<=0||height<=0||Math.min(width,height)>30||Math.max(width,height)>56){
+      if(required)throw new Error("實際尺寸超出水晶貼製作範圍，請調整長邊尺寸後再加入結帳清單。");
+      return null;
+    }
+    var size={sizeSource:"crystal_transparent_trim_bounds_v1",longSideCm:side,
+      widthCm:width,heightCm:height,pricingWidthCm:width,pricingHeightCm:height,
+      sourceRatio:Number((rw/rh).toFixed(6)),transparentTrimBounds:ratio.bounds||null};
+    window.LUNY_CUSTOM_ACTUAL_SIZE=size;
+    [[$("widthCm"),width],[$("heightCm"),height],
+      [$("customActualWidthCm"),width],[$("customActualHeightCm"),height]].forEach(function(pair){
+      if(pair[0])pair[0].value=String(pair[1]);
+    });
+    return size;
+  }
+  function isCrystalPage(){
+    return String(window.LUNY_PRODUCT_TYPE||window.currentProductType||"").toUpperCase()==="CRYSTAL_TRANSFER";
+  }
+  function patchDrawPreview(){
+    var original=window.drawPreview;
+    if(typeof original!=="function"||original.__lunyCrystalRatioRetryV1)return;
+    function patched(){
+      syncActualSize(false);
+      try{return original.apply(this,arguments);}
+      finally{
+        if(syncActualSize(false)&&window.LUNY_CRYSTAL_PRICING){
+          window.LUNY_CRYSTAL_PRICING.calculatePrice();
+        }
+      }
+    }
+    patched.__lunyCrystalRatioRetryV1=true;
+    patched.__lunyOriginal=original;
+    window.drawPreview=patched;
   }
   function patchPayload(){
     var original=window.buildOrderPayload;
     if(typeof original!=="function")return false;
     if(original.__lunyCrystalLongSideActualRatioV1)return true;
     function patched(){
+      var verifiedSize=syncActualSize(true);
+      if(verifiedSize&&window.LUNY_CRYSTAL_PRICING){
+        window.LUNY_CRYSTAL_PRICING.calculatePrice();
+      }
       var payload=original.apply(this,arguments)||{};
-      var size=window.LUNY_CUSTOM_ACTUAL_SIZE;
+      var size=verifiedSize||window.LUNY_CUSTOM_ACTUAL_SIZE;
       var ratio=window.LUNY_CRYSTAL_ART_RATIO;
       if(size){
         payload.quote=payload.quote||{};
@@ -620,8 +685,9 @@
       input.addEventListener("change",function(){ analyze(input.files&&input.files[0]||null); });
       if(input.files&&input.files[0])analyze(input.files[0]);
     }
+    patchDrawPreview();
     patchPayload();
-    var timer=window.setInterval(patchPayload,250);
+    var timer=window.setInterval(function(){patchDrawPreview();patchPayload();},250);
     window.setTimeout(function(){window.clearInterval(timer);},8000);
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
