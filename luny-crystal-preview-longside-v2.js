@@ -597,7 +597,7 @@
   /* A preview-density change invalidates the legacy cutline cache and clears
      actual dimensions. Artwork ratio belongs to the selected PNG, not that
      cache: derive dimensions again before pricing and every save/retry. */
-  function syncActualSize(required){
+  function deriveActualSize(required){
     if(!isCrystalPage()||!$("shape")||$("shape").value!=="custom")return null;
     var input=$("imgFile");
     var file=input&&input.files&&input.files[0];
@@ -617,12 +617,55 @@
     var size={sizeSource:"crystal_transparent_trim_bounds_v1",longSideCm:side,
       widthCm:width,heightCm:height,pricingWidthCm:width,pricingHeightCm:height,
       sourceRatio:Number((rw/rh).toFixed(6)),transparentTrimBounds:ratio.bounds||null};
+    return size;
+  }
+  function syncActualSize(required){
+    var size=deriveActualSize(required);
+    if(!size)return null;
+    var width=size.widthCm,height=size.heightCm;
     window.LUNY_CUSTOM_ACTUAL_SIZE=size;
     [[$("widthCm"),width],[$("heightCm"),height],
       [$("customActualWidthCm"),width],[$("customActualHeightCm"),height]].forEach(function(pair){
       if(pair[0])pair[0].value=String(pair[1]);
     });
+    var note=$("customActualSizeNote");
+    if(note)note.textContent="實際製作尺寸 "+format(width,2)+" × "+format(height,2)+" cm｜依此實際比例尺寸計價。";
     return size;
+  }
+  /* Legacy cutline resets run inside a closed editor scope, including delayed
+     draws that bypass window.drawPreview. Never use that cache as the source
+     of truth for crystal pricing: every read derives from the selected PNG.
+     This getter has no rendering or event side effects. */
+  function installActualSizeState(){
+    var descriptor=Object.getOwnPropertyDescriptor(window,"LUNY_CUSTOM_ACTUAL_SIZE");
+    if(descriptor&&descriptor.get&&descriptor.get.__lunyCrystalRatioStateV2)return;
+    if(descriptor&&!descriptor.configurable)return;
+    var legacyValue=window.LUNY_CUSTOM_ACTUAL_SIZE;
+    function getActualSize(){
+      if(isCrystalPage()&&$("shape")&&$("shape").value==="custom")return deriveActualSize(false);
+      return legacyValue;
+    }
+    getActualSize.__lunyCrystalRatioStateV2=true;
+    Object.defineProperty(window,"LUNY_CUSTOM_ACTUAL_SIZE",{
+      configurable:true,enumerable:true,get:getActualSize,
+      set:function(value){legacyValue=value;}
+    });
+  }
+  function refreshActualQuote(){
+    if(syncActualSize(false)&&window.LUNY_CRYSTAL_PRICING){
+      window.LUNY_CRYSTAL_PRICING.calculatePrice();
+    }
+  }
+  function bindQuoteControls(){
+    ["quantity","deliveryForm"].forEach(function(id){
+      var control=$(id);
+      if(!control||control.__lunyCrystalRatioStateV2)return;
+      control.__lunyCrystalRatioStateV2=true;
+      // Capture runs before existing quote listeners, including the change
+      // event emitted by quantity cards; it never changes the chosen quantity.
+      control.addEventListener("input",refreshActualQuote,true);
+      control.addEventListener("change",refreshActualQuote,true);
+    });
   }
   function isCrystalPage(){
     return String(window.LUNY_PRODUCT_TYPE||window.currentProductType||"").toUpperCase()==="CRYSTAL_TRANSFER";
@@ -679,6 +722,8 @@
     return true;
   }
   function init(){
+    installActualSizeState();
+    bindQuoteControls();
     var input=$("imgFile");
     if(input&&!input.__lunyCrystalRatioBound){
       input.__lunyCrystalRatioBound=true;
