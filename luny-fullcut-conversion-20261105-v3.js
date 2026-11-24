@@ -779,3 +779,133 @@
   else bind();
 })();
 
+
+
+
+/* Fullcut quantity-dependent delivery policy. */
+(function(){
+  'use strict';
+  if(location.pathname.replace(/\/+$/,'').toLowerCase() !== '/die-cut-stickers') return;
+  if(window.LUNY_FULLCUT_DELIVERY_20261124) return;
+  const VERSION='20261124-v1';
+  const THRESHOLD=500, LARGE_MIN=7, LARGE_MAX=8;
+  const byId=id=>document.getElementById(id);
+  const qty=()=>Number(byId('quantity')?.value||0);
+  const weekday=['日','一','二','三','四','五','六'];
+  let originalRender,originalCalculate,observer,busy=false,queued=false,installed=false;
+  let originalOptionText='一般件(5～6 工作天寄出)',originalTimeText='5～6 個工作天寄出';
+  function pad(v){return String(v).padStart(2,'0');}
+  function key(date){return date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate());}
+  function label(date){return(date.getMonth()+1)+'/'+date.getDate()+'（'+weekday[date.getDay()]+'）';}
+  function closedDates(){
+    const out=new Set();
+    Array.from(document.scripts||[]).forEach(script=>{
+      if(script.src)return;
+      const match=String(script.textContent||'').match(/(?:const|let|var)\s+LUNY_CLOSED_DATES\s*=\s*(\[[\s\S]*?\])/);
+      if(match)Array.from(match[1].matchAll(/["'](\d{4}-\d{2}-\d{2})["']/g)).forEach(m=>out.add(m[1]));
+    });
+    return out;
+  }
+  function largeDate(now){
+    const parts={};
+    new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(now||new Date()).forEach(p=>{if(p.type!=='literal')parts[p.type]=Number(p.value);});
+    const date=new Date(Date.UTC(parts.year,parts.month-1,parts.day));
+    const closed=closedDates();
+    function next(){date.setUTCDate(date.getUTCDate()+1);}
+    function business(){const dateKey=date.getUTCFullYear()+'-'+pad(date.getUTCMonth()+1)+'-'+pad(date.getUTCDate());return date.getUTCDay()!==0&&date.getUTCDay()!==6&&!closed.has(dateKey);}
+    if(parts.hour>=12)next();
+    while(!business())next();
+    for(let count=1;count<LARGE_MAX;){next();if(business())count++;}
+    return new Date(date.getUTCFullYear(),date.getUTCMonth(),date.getUTCDate());
+  }
+  function existingDate(now){
+    if(typeof originalCalculate==='function'){
+      const args=originalCalculate.length>=3?['FULLCUT','normal',now||new Date()]:['normal',now||new Date()];
+      const date=originalCalculate.apply(window,args);
+      if(date instanceof Date&&!isNaN(date.getTime()))return date;
+    }
+    const stored=String(window.LUNY_ESTIMATED_SHIP_DATE?.estimatedShipDate||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return stored?new Date(Number(stored[1]),Number(stored[2])-1,Number(stored[3])):null;
+  }
+  function snapshot(quantity,now){
+    const large=Number(quantity)>=THRESHOLD;
+    const date=large?largeDate(now):existingDate(now);
+    return {large:large,quantity:Number(quantity),optionText:large?'一般件(7～8 個工作天寄出)':originalOptionText,timeText:large?'7～8 個工作天寄出':originalTimeText,estimatedShipDate:date?key(date):'',dateLabel:date?label(date):'',minBusinessDays:large?LARGE_MIN:null,maxBusinessDays:large?LARGE_MAX:null};
+  }
+  function setText(el,text){if(el&&el.textContent!==text)el.textContent=text;}
+  function observe(){
+    if(!observer)return;
+    ['shipDateBox','urgent','lunyUrgentCards','price'].map(byId).filter(Boolean).forEach(el=>observer.observe(el,{childList:true,characterData:true,subtree:true}));
+  }
+  function schedule(){if(busy||queued)return;queued=true;setTimeout(function(){queued=false;refresh();},0);}
+  function refresh(){
+    if(busy||!byId('quantity'))return;
+    busy=true;
+    if(observer)observer.disconnect();
+    try{
+      // Let the original renderer restore its calendar notices and baseline
+      // dates before applying only the new quantity rule.
+      if(typeof originalRender==='function')originalRender.call(window);
+      const current=snapshot(qty());
+      const urgent=byId('urgent');
+      setText(urgent?.querySelector('option[value="normal"]'),current.optionText);
+      const card=document.querySelector('[data-urgent-value="normal"] .luny-urgent-card-time');
+      setText(card,current.timeText);
+      if(card)card.dataset.defaultText=current.timeText;
+      const box=byId('shipDateBox');
+      if(current.large&&box){
+        setText(box.querySelector('.ship-date-main'),'一般件｜'+current.dateLabel+' 出貨');
+        setText(box.querySelector('.ship-date-sub'),'本款 500 張（含）以上，交期約 7～8 個工作天；12:00 後下單順延 1 個工作天；非工作日不出貨；不含配送時間。');
+      }
+      const state=window.LUNY_ESTIMATED_SHIP_DATE||{};
+      if(current.estimatedShipDate){
+        window.LUNY_ESTIMATED_SHIP_DATE=Object.assign({},state,{productType:'FULLCUT',estimatedShipDate:current.estimatedShipDate,normalDateLabel:current.dateLabel,normalText:'一般件預計出貨日：'+current.dateLabel,selectedText:current.large?'一般件｜'+current.dateLabel+' 出貨':state.selectedText,deliveryRangeText:current.large?'7～8 個工作天':state.deliveryRangeText,deliveryRuleVersion:VERSION,deliveryQuantity:current.quantity});
+      }
+      if(box)box.dataset.fullcutDeliveryVersion=VERSION;
+      if(typeof window.currentSummary==='string')window.currentSummary=window.currentSummary.replace(/^(件別|急件|製作時間)：.*$/gm,'$1：'+current.optionText);
+      patchPayload();
+      return current;
+    }finally{busy=false;observe();}
+  }
+  function applyToQuote(quote,now){
+    if(!quote||typeof quote!=='object')return quote;
+    const current=snapshot(quote.quantity??qty(),now);
+    quote.urgent='normal';quote.urgentText=current.optionText;
+    if(current.estimatedShipDate)quote.estimatedShipDate=current.estimatedShipDate;
+    quote.deliveryRuleVersion=VERSION;
+    if(current.large){quote.leadTimeMinBusinessDays=LARGE_MIN;quote.leadTimeMaxBusinessDays=LARGE_MAX;}
+    if(typeof quote.summary==='string')quote.summary=quote.summary.replace(/^(件別|急件|製作時間)：.*$/gm,'$1：'+current.optionText);
+    return quote;
+  }
+  function patchPayload(){
+    const old=window.buildOrderPayload;
+    if(typeof old!=='function'||old.__lunyFullcut500Delivery)return;
+    function wrapped(){refresh();const payload=old.apply(this,arguments);if(payload?.quote)applyToQuote(payload.quote);return payload;}
+    Object.assign(wrapped,old);wrapped.__lunyFullcut500Delivery=true;wrapped.__lunyDeliveryOriginal=old;
+    window.buildOrderPayload=wrapped;
+  }
+  function install(){
+    if(installed||!byId('quantity'))return;
+    installed=true;
+    originalRender=window.LUNY_renderShipDate;
+    originalCalculate=window.LUNY_calculateShipDate;
+    const option=byId('urgent')?.querySelector('option[value="normal"]');
+    if(option?.textContent)originalOptionText=option.textContent;
+    const card=document.querySelector('[data-urgent-value="normal"] .luny-urgent-card-time');
+    if(card?.textContent)originalTimeText=card.textContent;
+    if(window.MutationObserver)observer=new MutationObserver(schedule);
+    ['change','input'].forEach(name=>document.addEventListener(name,function(event){if(['quantity','shape','material','laminate','widthCm','heightCm'].includes(event.target?.id))schedule();},true));
+    document.addEventListener('click',function(event){if(event.target?.closest?.('#saveDesignBtn')){refresh();patchPayload();}},true);
+    window.addEventListener('luny:ship-date-updated',function(){if(!busy)refresh();},true);
+    window.LUNY_renderShipDate=refresh;
+    window.LUNY_calculateShipDate=function(){if(qty()>=THRESHOLD){const args=Array.from(arguments);const now=args.find(value=>value instanceof Date);return largeDate(now);}return originalCalculate?.apply(this,arguments);};
+    const oldUrgent=window.getUrgentTextValue;
+    if(typeof oldUrgent==='function')window.getUrgentTextValue=function(value){return value==='normal'||!value?snapshot(qty()).optionText:oldUrgent.apply(this,arguments);};
+    refresh();
+    let attempts=0;const timer=setInterval(function(){patchPayload();if(++attempts>=50)clearInterval(timer);},200);
+  }
+  window.LUNY_FULLCUT_DELIVERY_20261124={version:VERSION,snapshot:snapshot,applyToQuote:applyToQuote,refresh:refresh};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);
+  else install();
+})();
+

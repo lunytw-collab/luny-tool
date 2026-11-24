@@ -208,6 +208,9 @@
   }
 
   function getUrgentLabel(urgent) {
+    if(urgent === "normal" && window.LUNY_FULLCUT_DELIVERY_20261124){
+      return window.LUNY_FULLCUT_DELIVERY_20261124.snapshot(Number(getEl("quantity")?.value||0)).optionText;
+    }
     const map = {
       normal: "一般件(4~6工作天寄出)",
       rush: "急件(2~3工作天寄出)",
@@ -557,3 +560,4 @@
 
   document.addEventListener("DOMContentLoaded", initPriceEngine);
 })();
+
