@@ -35,6 +35,7 @@ function isExtendedShape(shape){
 return shape==='arch'||shape==='custom'||shape==='special';
 }
 function getDeliveryTimeText(){
+if(window.LUNY_LABEL_DELIVERY)return window.LUNY_LABEL_DELIVERY.getPolicy().timeText;
 return isExtendedShape(getShape())?'6～7 個工作天寄出':'4～5 個工作天寄出';
 }
 function getDeliveryOptionText(){
@@ -223,6 +224,7 @@ const payload=originalBuildOrderPayload.apply(this,arguments);
 if(payload&&payload.quote){
 payload.quote.urgent='normal';
 payload.quote.urgentText=getDeliveryOptionText();
+if(window.LUNY_LABEL_DELIVERY)window.LUNY_LABEL_DELIVERY.applyToQuote(payload.quote);
 }
 return payload;
 }
@@ -305,7 +307,7 @@ style.id='lunyLabelV38FrontEndStyle';
 style.textContent='#saveDesignBtn.luny-spec-blocked{opacity:.55;cursor:not-allowed}#sizeLimitNote{display:block;width:100%;box-sizing:border-box;margin-top:8px;padding:9px 12px;border-left:3px solid #64748b;border-radius:8px;background:#f8fafc;color:#475569;font-size:14px;font-weight:650;line-height:1.55;text-align:left}.luny-ellipse-size-select{display:block;width:100%;min-height:46px;padding:10px 12px;border:1px solid #d1d5db;border-radius:12px;background:#fff;color:#111827;font:inherit}#sizeInputRow.luny-circle-single-field #standardWidthField{width:100%!important;max-width:100%!important;flex:1 1 100%!important;grid-column:1/-1!important}';
 document.head.appendChild(style);
 }
-['shape','widthCm','heightCm','customLongSideCm','quantity'].forEach(function(id){
+['shape','material','widthCm','heightCm','customLongSideCm','quantity'].forEach(function(id){
 const el=document.getElementById(id);
 if(!el)return;
 el.addEventListener('change',function(){setTimeout(sync,0);});
@@ -336,3 +338,4 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 else bind();
 window.LUNY_syncLabelV38FrontEnd=sync;
 })();
+

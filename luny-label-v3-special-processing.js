@@ -1,3 +1,166 @@
+/* LUNY shared label delivery policy. Kept in the shared special-processing bundle. */
+(function(window, document){
+  'use strict';
+  if(window.LUNY_LABEL_DELIVERY && window.LUNY_LABEL_DELIVERY.version === '20261124-v1') return;
+  const VERSION = '20261124-v1';
+  // Edit delivery rules here. A material and an extended shape use the longer
+  // base range once; special processing adds four days once per item.
+  const RULES = Object.freeze({normalMin:4, normalMax:5, extendedMin:6, extendedMax:7, processingExtra:4, cutoffHour:12});
+  const REMOVABLE = new Set(['lowResidueArtpaper','lowResiduePearlescent','低殘膠銅板','低殘膠銅板貼紙','低殘膠珠光','低殘膠珠光貼紙']);
+  const EXTENDED = new Set(['arch','custom','special']);
+  const WEEKDAY = ['日','一','二','三','四','五','六'];
+  const byId = id => document.getElementById(id);
+  const value = id => byId(id) ? byId(id).value : '';
+  function currentSpec(){
+    return {shape:value('shape'), material:value('material'), specialProcessing:['lunyProcessWhiteInk','lunyProcessFoil','lunyProcessSerial'].some(id => !!(byId(id) && byId(id).checked))};
+  }
+  function getPolicy(spec){
+    const s = spec || currentSpec();
+    const removable = REMOVABLE.has(String(s.material || '').trim());
+    const extended = removable || EXTENDED.has(String(s.shape || '').trim());
+    const processing = s.specialProcessing === true || !!(s.specialProcessing && s.specialProcessing.selected);
+    const extra = processing ? RULES.processingExtra : 0;
+    const min = (extended ? RULES.extendedMin : RULES.normalMin) + extra;
+    const max = (extended ? RULES.extendedMax : RULES.normalMax) + extra;
+    const range = min + '～' + max + ' 個工作天';
+    return {version:VERSION, minBusinessDays:min, maxBusinessDays:max, extraBusinessDays:extra, lowResidue:removable, rangeText:range, timeText:range+'寄出', optionText:'一般件('+range+'寄出)'};
+  }
+  function pad(n){return String(n).padStart(2,'0');}
+  function dateKey(date){return date.getUTCFullYear()+'-'+pad(date.getUTCMonth()+1)+'-'+pad(date.getUTCDate());}
+  function taipeiParts(now){
+    const fields = new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(now);
+    const out = {}; fields.forEach(p => {if(p.type !== 'literal') out[p.type] = Number(p.value);});
+    return out;
+  }
+  function pageClosedDates(){
+    const dates = new Set();
+    // Preserve the calendar already configured in each 1SHOP page. Read only
+    // its date literals; never evaluate inline script or serialized page data.
+    Array.from(document.scripts || []).forEach(script => {
+      if(script.src) return;
+      const match = String(script.textContent || '').match(/(?:const|let|var)\s+LUNY_CLOSED_DATES\s*=\s*(\[[\s\S]*?\])/);
+      if(match) Array.from(match[1].matchAll(/["'](\d{4}-\d{2}-\d{2})["']/g)).forEach(m => dates.add(m[1]));
+    });
+    return dates;
+  }
+  function calculate(spec, now, closedDates){
+    const policy = getPolicy(spec);
+    const current = now || new Date();
+    const parts = taipeiParts(current);
+    const date = new Date(Date.UTC(parts.year,parts.month-1,parts.day));
+    const closed = closedDates instanceof Set ? closedDates : new Set(closedDates || pageClosedDates());
+    const businessDay = () => date.getUTCDay() !== 0 && date.getUTCDay() !== 6 && !closed.has(dateKey(date));
+    const nextDay = () => date.setUTCDate(date.getUTCDate()+1);
+    if(parts.hour >= RULES.cutoffHour) nextDay();
+    while(!businessDay()) nextDay();
+    let counted = 1;
+    while(counted < policy.maxBusinessDays){nextDay();if(businessDay()) counted++;}
+    return Object.assign({},policy,{estimatedShipDate:dateKey(date),dateLabel:(date.getUTCMonth()+1)+'/'+date.getUTCDate()+'（'+WEEKDAY[date.getUTCDay()]+'）'});
+  }
+  function applyToQuote(quote, now){
+    if(!quote || typeof quote !== 'object') return quote;
+    const snapshot = calculate({shape:quote.shape || value('shape'),material:quote.material || value('material'),specialProcessing:quote.specialProcessing || currentSpec().specialProcessing},now);
+    quote.urgent = 'normal';
+    quote.urgentText = snapshot.optionText;
+    quote.estimatedShipDate = snapshot.estimatedShipDate;
+    quote.deliveryRuleVersion = VERSION;
+    quote.leadTimeMinBusinessDays = snapshot.minBusinessDays;
+    quote.leadTimeMaxBusinessDays = snapshot.maxBusinessDays;
+    quote.specialProcessingExtraBusinessDays = snapshot.extraBusinessDays;
+    if(typeof quote.summary === 'string') quote.summary = quote.summary.replace(/^件別：.*$/gm,'件別：'+snapshot.optionText);
+    return quote;
+  }
+  let syncing = false;
+  let pending = false;
+  let bound = false;
+  let lastEventState = '';
+  function setText(el,text){if(el && el.textContent !== text) el.textContent = text;}
+  function sync(){
+    if(syncing || !byId('shape') || !byId('material')) return;
+    syncing = true;
+    try{
+      const snapshot = calculate();
+      const urgent = byId('urgent');
+      if(urgent){
+        const option = urgent.querySelector('option[value="normal"]');
+        setText(option,snapshot.optionText);
+      }
+      const cardTime = document.querySelector('[data-urgent-value="normal"] .luny-urgent-card-time');
+      setText(cardTime,snapshot.timeText);
+      if(cardTime && cardTime.dataset.defaultText !== snapshot.timeText) cardTime.dataset.defaultText = snapshot.timeText;
+      const box = byId('shipDateBox');
+      const mainText = '一般件｜'+snapshot.dateLabel+' 出貨';
+      if(box){
+        setText(box.querySelector('.ship-date-main'),mainText);
+        setText(box.querySelector('.ship-date-sub'),'交期約 '+snapshot.rangeText+(snapshot.extraBusinessDays?'（含特殊加工 +4）':'')+'；12:00 後下單順延 1 個工作天；非工作日不出貨；不含配送時間。');
+      }
+      const old = window.LUNY_ESTIMATED_SHIP_DATE || {};
+      window.LUNY_ESTIMATED_SHIP_DATE = Object.assign({},old,{productType:'LABEL',selectedUrgent:'normal',estimatedShipDate:snapshot.estimatedShipDate,normalText:'一般件預計出貨日：'+snapshot.dateLabel,selectedText:mainText,deliveryRangeText:snapshot.rangeText,normalDateLabel:snapshot.dateLabel,rushText:'',superrushText:'',rushDateLabel:'',daysSavedByRush:0,specialProcessingExtraBusinessDays:snapshot.extraBusinessDays,deliveryRuleVersion:VERSION});
+      if(typeof window.currentSummary === 'string') window.currentSummary = window.currentSummary.replace(/^件別：.*$/gm,'件別：'+snapshot.optionText);
+      if(window.LUNY_CURRENT_PRICE_DATA){
+        window.LUNY_CURRENT_PRICE_DATA.urgentLabel = snapshot.optionText;
+        if(typeof window.LUNY_CURRENT_PRICE_DATA.summaryText === 'string') window.LUNY_CURRENT_PRICE_DATA.summaryText = window.LUNY_CURRENT_PRICE_DATA.summaryText.replace(/^件別：.*$/gm,'件別：'+snapshot.optionText);
+      }
+      const summary = byId('summaryText');
+      if(summary && typeof window.currentSummary === 'string') setText(summary,window.currentSummary);
+      patchPayload();
+      const state = [snapshot.estimatedShipDate,snapshot.rangeText,value('shape'),value('material')].join('|');
+      if(lastEventState !== state){
+        lastEventState = state;
+        window.dispatchEvent(new CustomEvent('luny:ship-date-updated'));
+      }
+      return snapshot;
+    }finally{syncing = false;}
+  }
+  function schedule(){
+    if(pending || syncing) return;
+    pending = true;
+    setTimeout(function(){pending=false;sync();},0);
+  }
+  function patchPayload(){
+    const original = window.buildOrderPayload;
+    if(typeof original !== 'function' || original.__lunySharedDeliveryV1) return;
+    function buildWithDelivery(){
+      sync();
+      const payload = original.apply(this,arguments);
+      if(payload && payload.quote) applyToQuote(payload.quote);
+      return payload;
+    }
+    // Preserve other wrappers' installation markers so existing compatibility
+    // timers do not continually re-wrap this function.
+    Object.assign(buildWithDelivery,original);
+    buildWithDelivery.__lunySharedDeliveryV1 = true;
+    buildWithDelivery.__lunyDeliveryOriginal = original;
+    window.buildOrderPayload = buildWithDelivery;
+  }
+  function bind(){
+    if(bound || !byId('shape') || !byId('material')) return;
+    bound = true;
+    const relevant = new Set(['shape','material','quantity','laminate','lunyProcessWhiteInk','lunyProcessFoil','lunyProcessSerial']);
+    ['change','input'].forEach(name => document.addEventListener(name,function(event){if(event.target && relevant.has(event.target.id)) schedule();},true));
+    document.addEventListener('click',function(event){
+      if(event.target && event.target.closest && event.target.closest('#saveDesignBtn')){sync();patchPayload();}
+    },true);
+    // Older pages still call their own closed-over renderer. Repair its state
+    // synchronously on its existing event, then reconcile later card writes.
+    window.addEventListener('luny:ship-date-updated',sync,true);
+    if(window.MutationObserver){
+      const observer = new MutationObserver(schedule);
+      [byId('shipDateBox'),byId('urgent'),byId('lunyUrgentCards')].filter(Boolean).forEach(el => observer.observe(el,{childList:true,characterData:true,subtree:true}));
+    }
+    const originalRender = window.LUNY_renderShipDate;
+    if(typeof originalRender === 'function') window.LUNY_renderShipDate = function(){originalRender.apply(this,arguments);return sync();};
+    window.LUNY_calculateShipDate = function(_speed,now){const parts=calculate(undefined,now).estimatedShipDate.split('-').map(Number);return new Date(parts[0],parts[1]-1,parts[2]);};
+    sync();
+    let attempts = 0;
+    const timer = setInterval(function(){patchPayload();sync();if(++attempts >= 50) clearInterval(timer);},200);
+  }
+  window.LUNY_LABEL_DELIVERY = {version:VERSION,rules:RULES,getPolicy:getPolicy,calculate:calculate,applyToQuote:applyToQuote,sync:sync};
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded',bind);
+  else bind();
+})(window,document);
+
+
 (function installLunySpecialProcessingV3(){
   "use strict";
   if(window.__LUNY_SPECIAL_PROCESSING_V3__) return;
@@ -43,6 +206,7 @@
   function hasProcessing(selection){var s=selection||getSelection();return !!(s.whiteInk||s.foil||s.serial);}
   function isExtendedShape(){var shape=byId("shape")?.value||"";return shape==="arch"||shape==="custom"||shape==="special";}
   function getDeliveryTimeText(){
+    if(window.LUNY_LABEL_DELIVERY) return window.LUNY_LABEL_DELIVERY.getPolicy().timeText;
     if(hasProcessing()) return isExtendedShape()?"10～11 個工作天寄出":"8～9 個工作天寄出";
     return isExtendedShape()?"6～7 個工作天寄出":"4～5 個工作天寄出";
   }
@@ -424,7 +588,7 @@
     if(typeof window.getUrgentTextValue!=="function"||window.getUrgentTextValue.__lunySpecialProcessingV3) return false;
     var original=window.getUrgentTextValue;
     function patchedGetUrgentTextValue(){
-      if(hasProcessing()) return getDeliveryOptionText();
+      if(window.LUNY_LABEL_DELIVERY || hasProcessing()) return getDeliveryOptionText();
       return original.apply(this,arguments);
     }
     patchedGetUrgentTextValue.__lunySpecialProcessingV3=true;
@@ -442,6 +606,7 @@
       var special=getSpecialProcessingPayload();
       if(special.selected){payload.quote.urgent="normal";payload.quote.urgentText=getDeliveryOptionText();payload.quote.specialProcessingExtraBusinessDays=4;}
       payload.quote.specialProcessing=special;
+      if(window.LUNY_LABEL_DELIVERY) window.LUNY_LABEL_DELIVERY.applyToQuote(payload.quote);
       payload.quote.baseProductPrice=state.basePrice;
       payload.quote.processingFee=state.processingFee;
       payload.quote.processingItems=special.items;
@@ -459,6 +624,8 @@
         summary+="\n製作狀態：待檔案確認";
       }
       payload.quote.summary=summary;
+      if(window.LUNY_LABEL_DELIVERY) window.LUNY_LABEL_DELIVERY.applyToQuote(payload.quote);
+      summary=payload.quote.summary;
       window.currentSummary=summary;
       return payload;
     }
@@ -584,8 +751,10 @@
   }
   function bind(){
     state.selectionSignature=selectionSignature();
-    var shapeInput=byId("shape");
-    if(shapeInput){shapeInput.addEventListener("change",function(){setTimeout(syncDeliveryDisplay,80);});shapeInput.addEventListener("input",function(){setTimeout(syncDeliveryDisplay,80);});}
+    ["shape","material"].forEach(function(id){
+      var input=byId(id);
+      if(input){input.addEventListener("change",function(){setTimeout(syncDeliveryDisplay,80);});input.addEventListener("input",function(){setTimeout(syncDeliveryDisplay,80);});}
+    });
     ["lunyProcessWhiteInk","lunyProcessFoil","lunyProcessSerial"].forEach(function(id){
       var el=byId(id);
       if(el) el.addEventListener("change",handleProcessingChange);
@@ -648,3 +817,4 @@
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",bind);
   else bind();
 })();
+

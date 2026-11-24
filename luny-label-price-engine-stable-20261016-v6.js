@@ -242,6 +242,9 @@
   }
 
   function getNormalDeliveryTextByShape(shape) {
+    if(window.LUNY_LABEL_DELIVERY){
+      return window.LUNY_LABEL_DELIVERY.getPolicy({shape:shape,material:getEl("material")?.value||"",specialProcessing:["lunyProcessWhiteInk","lunyProcessFoil","lunyProcessSerial"].some(id=>!!getEl(id)?.checked)}).optionText;
+    }
     return isExtendedDeliveryShapeValue(shape)
       ? "一般件(6～7 工作天寄出)"
       : "一般件(4～5 工作天寄出)";
@@ -1247,3 +1250,4 @@
 
   document.addEventListener("DOMContentLoaded", initPriceEngine);
 })();
+

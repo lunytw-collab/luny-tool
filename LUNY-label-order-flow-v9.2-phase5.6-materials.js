@@ -2488,7 +2488,7 @@ async function saveDesignToGAS(){
       (typeof getUrgentTextValue === "function" ? getUrgentTextValue(urgentValue) : "") ||
       urgentValue;
 
-    return {
+    const quote = {
       productCode: "LABEL",
       productType: "LABEL",
       productName: "標籤貼紙",
@@ -2510,6 +2510,7 @@ async function saveDesignToGAS(){
       price: normalizePrice_(priceValue),
       summary: (typeof currentSummary === "string") ? currentSummary : ""
     };
+    return window.LUNY_LABEL_DELIVERY ? window.LUNY_LABEL_DELIVERY.applyToQuote(quote) : quote;
   }
 
   function getRobustCheckoutItems(){
@@ -2885,3 +2886,4 @@ window.LUNY_FILE_PREP_BASIC={sku:"FILE_PREP_BASIC",label:"印刷檔案基礎整�
   window.getMaterialTextValue=getMaterialTextValue;
 })();
  
+
