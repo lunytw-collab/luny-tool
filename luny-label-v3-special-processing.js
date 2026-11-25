@@ -1,8 +1,8 @@
 /* LUNY shared label delivery policy. Kept in the shared special-processing bundle. */
 (function(window, document){
   'use strict';
-  if(window.LUNY_LABEL_DELIVERY && window.LUNY_LABEL_DELIVERY.version === '20261124-v1') return;
-  const VERSION = '20261124-v1';
+  if(window.LUNY_LABEL_DELIVERY && window.LUNY_LABEL_DELIVERY.version === '20261125-v2') return;
+  const VERSION = '20261125-v2';
   // Edit delivery rules here. A material and an extended shape use the longer
   // base range once; special processing adds four days once per item.
   const RULES = Object.freeze({normalMin:4, normalMax:5, extendedMin:6, extendedMax:7, processingExtra:4, cutoffHour:12});
@@ -59,7 +59,7 @@
   }
   function applyToQuote(quote, now){
     if(!quote || typeof quote !== 'object') return quote;
-    const snapshot = calculate({shape:quote.shape || value('shape'),material:quote.material || value('material'),specialProcessing:quote.specialProcessing || currentSpec().specialProcessing},now);
+    const snapshot = calculate({shape:quote.shape || value('shape'),material:quote.material || value('material'),specialProcessing:quote.specialProcessing ?? currentSpec().specialProcessing},now);
     quote.urgent = 'normal';
     quote.urgentText = snapshot.optionText;
     quote.estimatedShipDate = snapshot.estimatedShipDate;
@@ -117,7 +117,93 @@
     pending = true;
     setTimeout(function(){pending=false;sync();},0);
   }
+
+
+  function copyWrapperMarkers(target,source){
+    Object.assign(target,source);
+    const seen=new Set();
+    let current=source;
+    while(typeof current==='function'&&!seen.has(current)&&seen.size<32){
+      seen.add(current);
+      Object.keys(current).forEach(function(name){
+        if(name.indexOf('__luny')===0&&current[name]===true)target[name]=true;
+      });
+      current=current.__lunyOriginal||current.__lunyDeliveryOriginal;
+    }
+  }
+
+  function patchDeliveryText(){
+    const original=window.getUrgentTextValue;
+    if(typeof original!=='function'||original.__lunyLabelCheckoutDeliveryV2)return;
+    function wrapped(speed){
+      return !speed||speed==='normal'?getPolicy().optionText:original.apply(this,arguments);
+    }
+    copyWrapperMarkers(wrapped,original);
+    wrapped.__lunyLabelCheckoutDeliveryV2=true;
+    window.getUrgentTextValue=wrapped;
+  }
+  function patchSaveBoundary(){
+    const original=window.buildFreshSafeOrderPayloadForSave;
+    if(typeof original!=='function'||original.__lunyLabelCheckoutDeliveryV2)return;
+    async function wrapped(){
+      const result=await original.apply(this,arguments);
+      // Legacy wrappers finish before this quote goes to the design writer.
+      if(result&&result.payload&&result.payload.quote)applyToQuote(result.payload.quote);
+      return result;
+    }
+    copyWrapperMarkers(wrapped,original);
+    wrapped.__lunyLabelCheckoutDeliveryV2=true;
+    window.buildFreshSafeOrderPayloadForSave=wrapped;
+  }
+  function normalizeSavedItem(item){
+    if(!item||typeof item!=='object')return item;
+    const type=String(item.productType||'').toUpperCase();
+    const code=String(item.productCode||'');
+    if(type?type!=='LABEL':!(code==='LABEL'||code.indexOf('標籤')!==-1))return item;
+    const source=item.quote;
+    if(!source||typeof source!=='object'||(source.urgent&&source.urgent!=='normal'))return item;
+    const spec={
+      shape:source.shape||'',
+      material:source.material||source.materialText||'',
+      specialProcessing:source.specialProcessing||false
+    };
+    const policy=getPolicy(spec);
+    const quote=Object.assign({},source,{
+      urgent:'normal',urgentText:policy.optionText,
+      leadTimeMinBusinessDays:policy.minBusinessDays,
+      leadTimeMaxBusinessDays:policy.maxBusinessDays,
+      specialProcessingExtraBusinessDays:policy.extraBusinessDays,
+      deliveryRuleVersion:VERSION
+    });
+    const hasSnapshot=/^202611(?:24|25)-/.test(String(source.deliveryRuleVersion||''))&&source.leadTimeMinBusinessDays===policy.minBusinessDays&&source.leadTimeMaxBusinessDays===policy.maxBusinessDays&&/^\d{4}-\d{2}-\d{2}$/.test(String(source.estimatedShipDate||''));
+    const savedAt=new Date(item.createdAt||item.savedAt||'');
+    if(!hasSnapshot&&!isNaN(savedAt.getTime()))quote.estimatedShipDate=calculate(spec,savedAt).estimatedShipDate;
+    if(typeof quote.summary==='string')quote.summary=quote.summary.replace(/^(件別|急件|製作時間)：.*$/gm,'$1：'+policy.optionText);
+    return JSON.stringify(quote)===JSON.stringify(source)?item:Object.assign({},item,{quote:quote});
+  }
+  function patchCheckoutReaders(){
+    ['loadCartItemsForCheckout','loadCurrentProductSavedDesignsForCheckout','loadSavedDesignsForCheckout'].forEach(function(name){
+      const original=window[name];
+      if(typeof original!=='function'||original.__lunyLabelCheckoutDeliveryV2)return;
+      function wrapped(){
+        const items=original.apply(this,arguments);
+        if(!Array.isArray(items))return items;
+        const normalized=items.map(normalizeSavedItem);
+        if((name==='loadSavedDesignsForCheckout'||name==='loadCartItemsForCheckout')&&normalized.some(function(item,index){return item!==items[index];})&&typeof window.saveCartItemsForCheckout==='function'){
+          window.saveCartItemsForCheckout(normalized);
+        }
+        return normalized;
+      }
+      copyWrapperMarkers(wrapped,original);
+      wrapped.__lunyLabelCheckoutDeliveryV2=true;
+      window[name]=wrapped;
+    });
+  }
+
   function patchPayload(){
+    patchDeliveryText();
+    patchSaveBoundary();
+    patchCheckoutReaders();
     const original = window.buildOrderPayload;
     if(typeof original !== 'function' || original.__lunySharedDeliveryV1) return;
     function buildWithDelivery(){
@@ -128,7 +214,7 @@
     }
     // Preserve other wrappers' installation markers so existing compatibility
     // timers do not continually re-wrap this function.
-    Object.assign(buildWithDelivery,original);
+    copyWrapperMarkers(buildWithDelivery,original);
     buildWithDelivery.__lunySharedDeliveryV1 = true;
     buildWithDelivery.__lunyDeliveryOriginal = original;
     window.buildOrderPayload = buildWithDelivery;
@@ -152,6 +238,7 @@
     if(typeof originalRender === 'function') window.LUNY_renderShipDate = function(){originalRender.apply(this,arguments);return sync();};
     window.LUNY_calculateShipDate = function(_speed,now){const parts=calculate(undefined,now).estimatedShipDate.split('-').map(Number);return new Date(parts[0],parts[1]-1,parts[2]);};
     sync();
+    if(typeof window.renderCheckoutSummary === 'function') window.renderCheckoutSummary();
     let attempts = 0;
     const timer = setInterval(function(){patchPayload();sync();if(++attempts >= 50) clearInterval(timer);},200);
   }
@@ -159,7 +246,6 @@
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded',bind);
   else bind();
 })(window,document);
-
 
 (function installLunySpecialProcessingV3(){
   "use strict";
