@@ -1,3 +1,4 @@
+/* LUNY v16.8.6: use dominant original-edge color, including white/light colors. */
 /* LUNY preview 20260917-v1: opaque-white coverage, explicit edge choices, bounded display. */
 
 /* LUNY v16.8.5-background-safe-ring: 背景色鎖定安全範圍外，邊緣色優先。 */
@@ -2834,42 +2835,72 @@ function lunyImageBorderWhiteRatio(){
 
 function lunySuggestedEdgeColor(){
   const info=getPhotoPixelInfo();
-  if(!info||!info.w||!info.h)return'#666666';
-  const resolution=lunyResolutionSnapshot();
-  const sourceW=Math.max(1,Number(resolution&&resolution.pixelWidth||info.w));
-  const sourceH=Math.max(1,Number(resolution&&resolution.pixelHeight||info.h));
-  const box=resolution&&resolution.contentBox&&resolution.contentBox.found
-    ? resolution.contentBox
-    : {x:0,y:0,width:sourceW,height:sourceH};
-  const x0=Math.max(0,Math.min(info.w-1,Number(box.x||0)*info.w/sourceW));
-  const y0=Math.max(0,Math.min(info.h-1,Number(box.y||0)*info.h/sourceH));
-  const x1=Math.max(x0,Math.min(info.w-1,(Number(box.x||0)+Number(box.width||sourceW))*info.w/sourceW-1));
-  const y1=Math.max(y0,Math.min(info.h-1,(Number(box.y||0)+Number(box.height||sourceH))*info.h/sourceH-1));
-  const bins=new Map();
+  if(!info||!info.w||!info.h)return '#ffffff';
+  // Use the original image outline, independent of white-margin/content detection.
+  // Transparent padding is skipped; hidden RGB and antialiased fringe do not vote.
+  const samples=[],seen=new Set(),bins=new Map();
+  const step=Math.max(1,Math.ceil(Math.max(info.w,info.h)/1000));
   function add(x,y){
-    const rgba=getPhotoPixelRGBA(info,x,y);
-    if(!rgba||rgba[3]<96)return;
-    const r=rgba[0],g=rgba[1],b=rgba[2];
-    if(r>=240&&g>=240&&b>=240)return;
-    const key=`${r>>5}|${g>>5}|${b>>5}`;
-    const old=bins.get(key)||{count:0,r:0,g:0,b:0};
-    old.count+=1;old.r+=r;old.g+=g;old.b+=b;bins.set(key,old);
+    const index=y*info.w+x;
+    if(seen.has(index))return;
+    seen.add(index);
+    const offset=index*4,data=info.data;
+    if(data[offset+3]<192)return;
+    const sample={r:data[offset],g:data[offset+1],b:data[offset+2]};
+    samples.push(sample);
+    const key=((sample.r>>4)<<8)|((sample.g>>4)<<4)|(sample.b>>4);
+    let bin=bins.get(key);
+    if(!bin){bin={key,count:0,r:0,g:0,b:0};bins.set(key,bin);}
+    bin.count++;bin.r+=sample.r;bin.g+=sample.g;bin.b+=sample.b;
   }
-  const steps=220;
-  const insetMax=Math.max(2,Math.min(12,Math.round(Math.min(x1-x0,y1-y0)*0.008)));
-  for(let inset=0;inset<=insetMax;inset+=Math.max(1,Math.round(insetMax/3))){
-    for(let i=0;i<=steps;i++){
-      const t=i/steps;
-      const x=x0+(x1-x0)*t,y=y0+(y1-y0)*t;
-      add(x,y0+inset);add(x,y1-inset);add(x0+inset,y);add(x1-inset,y);
-    }
+  function opaque(x,y){return info.data[(y*info.w+x)*4+3]>=192;}
+  function row(y){
+    let left=0,right=info.w-1;
+    while(left<=right&&!opaque(left,y))left++;
+    if(left>right)return;
+    while(right>left&&!opaque(right,y))right--;
+    add(left,y);add(right,y);
   }
+  function column(x){
+    let top=0,bottom=info.h-1;
+    while(top<=bottom&&!opaque(x,top))top++;
+    if(top>bottom)return;
+    while(bottom>top&&!opaque(x,bottom))bottom--;
+    add(x,top);add(x,bottom);
+  }
+  // Equal pixel spacing gives long edges their actual share of the perimeter.
+  for(let y=0;y<info.h;y+=step)row(y);
+  if((info.h-1)%step)row(info.h-1);
+  for(let x=0;x<info.w;x+=step)column(x);
+  if((info.w-1)%step)column(info.w-1);
+  if(!samples.length)return '#ffffff';
+  // Merge nearby shades across bin boundaries so JPEG noise cannot split a
+  // dominant background. White and light colors remain legitimate candidates.
   let best=null;
-  bins.forEach(value=>{if(!best||value.count>best.count)best=value;});
-  if(!best||best.count<4)return'#666666';
-  const color=lunyRgbToHex(best.r/best.count,best.g/best.count,best.b/best.count);
-  const avg=[best.r/best.count,best.g/best.count,best.b/best.count];
-  return rgbaLuma(avg)>232?'#d0c8bc':color;
+  bins.forEach(seed=>{
+    const sr=seed.r/seed.count,sg=seed.g/seed.count,sb=seed.b/seed.count;
+    const qr=seed.key>>8,qg=(seed.key>>4)&15,qb=seed.key&15;
+    const group={count:0,r:0,g:0,b:0,seedCount:seed.count};
+    for(let dr=-2;dr<=2;dr++)for(let dg=-2;dg<=2;dg++)for(let db=-2;db<=2;db++){
+      const rr=qr+dr,gg=qg+dg,bb=qb+db;
+      if(rr<0||rr>15||gg<0||gg>15||bb<0||bb>15)continue;
+      const bin=bins.get((rr<<8)|(gg<<4)|bb);
+      if(!bin)continue;
+      const distance=(bin.r/bin.count-sr)**2+(bin.g/bin.count-sg)**2+(bin.b/bin.count-sb)**2;
+      if(distance>24*24)continue;
+      group.count+=bin.count;group.r+=bin.r;group.g+=bin.g;group.b+=bin.b;
+    }
+    if(!best||group.count>best.count||(group.count===best.count&&group.seedCount>best.seedCount))best=group;
+  });
+  // Return an actual edge pixel nearest the winning group's center, never a
+  // brightness-based replacement or a blend of unrelated edge colors.
+  const r=best.r/best.count,g=best.g/best.count,b=best.b/best.count;
+  let chosen=samples[0],distance=Infinity;
+  samples.forEach(sample=>{
+    const d=(sample.r-r)**2+(sample.g-g)**2+(sample.b-b)**2;
+    if(d<distance){distance=d;chosen=sample;}
+  });
+  return lunyRgbToHex(chosen.r,chosen.g,chosen.b);
 }
 
 function lunyUseSuggestedEdgeColor(explicitColor){
@@ -4469,3 +4500,4 @@ window.getPrintAndCutBlobs=async function(){
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();
+
